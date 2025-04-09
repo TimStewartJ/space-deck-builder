@@ -1,5 +1,3 @@
-# Contents of /space-deck-builder/space-deck-builder/src/ui/cli.py
-
 import sys
 from src.engine.game import Game
 from src.ui.game_state import GameState

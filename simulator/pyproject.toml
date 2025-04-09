@@ -1,14 +1,7 @@
-[tool.poetry]
-name = "space-deck-builder"
+[project]
+name = "space-deck-builder-simulator"
 version = "0.1.0"
-description = "A simulator for a space-based deck building card game."
-authors = ["Your Name <youremail@example.com>"]
-license = "MIT"
-
-[tool.poetry.dependencies]
-python = "^3.8"
-uv = "^0.1.0"
-
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
