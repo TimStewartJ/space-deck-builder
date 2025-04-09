@@ -3,10 +3,6 @@ from src.ai.agent import Agent
 from src.engine.actions import get_available_actions
 
 class HumanAgent(Agent):
-    def __init__(self, name="Human", cli_interface=None):
-        super().__init__(name)
-        self.cli_interface = cli_interface
-    
     def make_decision(self, game_state: Game):
         """Let a human player choose an action through CLI"""
         available_actions = get_available_actions(game_state, game_state.current_player)
