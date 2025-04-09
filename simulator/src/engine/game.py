@@ -5,7 +5,6 @@ class Game:
         self.is_game_over = False
         self.trade_deck = cards if cards else []
         self.trade_row = []
-        self.trade_discard = []
         self.is_running = False
 
     def start_game(self):
@@ -25,9 +24,6 @@ class Game:
 
     def shuffle_trade_deck(self):
         import random
-        if self.trade_discard:
-            self.trade_deck.extend(self.trade_discard)
-            self.trade_discard = []
         random.shuffle(self.trade_deck)
 
     def setup_players(self):
@@ -55,12 +51,6 @@ class Game:
     def next_turn(self):
         if not self.is_game_over:
             current_player = self.players[self.current_turn]
-            # Refill trade row if needed
-            while len(self.trade_row) < 5 and (self.trade_deck or self.trade_discard):
-                if not self.trade_deck:
-                    self.shuffle_trade_deck()
-                if self.trade_deck:
-                    self.trade_row.append(self.trade_deck.pop())
             # Logic for the current player's turn
             self.current_turn = (self.current_turn + 1) % len(self.players)
 
