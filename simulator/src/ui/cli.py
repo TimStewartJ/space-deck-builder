@@ -1,6 +1,5 @@
 from src.engine.game import Game
 from src.cards.loader import load_trade_deck_cards
-from src.ai.human_agent import HumanAgent
 import os
 import importlib
 import inspect
@@ -48,8 +47,7 @@ class CLI:
     
     def display_help(self):
         print("Available commands:")
-        print("  start - Start a new game")
-        print("  start ai - Start a game against AI")
+        print("  start (or s) - Start a new game and select agents")
         print("  agents - List available AI agents")
         print("  verbose - Toggle verbose mode")
         print("  exit - Exit the game")
@@ -100,58 +98,41 @@ class CLI:
         while True:
             command = input("> ").strip().lower()
             
-            if command == "start":
-                cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
-                self.game = Game(cards, verbose=self.verbose)
-                
-                # Add human player
-                player1 = self.game.add_player()
-                player1.agent = HumanAgent(name="Human", cli_interface=self)
-                
-                # Add human player 2
-                player2 = self.game.add_player()
-                player2.agent = HumanAgent(name="Human 2", cli_interface=self)
-                
-                self.game.start_game()
-                print("Game started!")
-                
-                # Main game loop
-                while not self.game.is_game_over:
-                    self.display_game_state()
-                    self.game.next_turn()
-            
-            elif command == "start ai":
-                # Show available agents
-                print("\nChoose an AI opponent:")
+            if command in ["start", "s"]:
                 agents = list(self.available_agents.items())
-                for i, (name, _) in enumerate(agents):
-                    print(f"{i+1}. {name}")
                 
-                # Get player choice
-                while True:
-                    try:
-                        choice = int(input("Enter your choice (number): ")) - 1
-                        if 0 <= choice < len(agents):
-                            agent_name, agent_class = agents[choice]
-                            break
-                        else:
-                            print("Invalid choice. Try again.")
-                    except ValueError:
-                        print("Please enter a number.")
+                def select_agent(player_num):
+                    print(f"\nChoose agent for Player {player_num}:")
+                    for i, (name, _) in enumerate(agents):
+                        print(f"{i+1}. {name}")
+                    
+                    while True:
+                        try:
+                            choice = int(input("Enter your choice (number): ")) - 1
+                            if 0 <= choice < len(agents):
+                                agent_name, agent_class = agents[choice]
+                                return agent_name, agent_class(name=agent_name, cli_interface=self)
+                            else:
+                                print("Invalid choice. Try again.")
+                        except ValueError:
+                            print("Please enter a number.")
+                
+                # Select agents for both players
+                name1, agent1 = select_agent(1)
+                name2, agent2 = select_agent(2)
                 
                 cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
                 self.game = Game(cards, verbose=self.verbose)
                 
-                # Add human player
+                # Add both players with their selected agents
                 player1 = self.game.add_player()
-                player1.agent = HumanAgent(name="Human", cli_interface=self)
+                player1.agent = agent1
                 
-                # Add chosen AI player
                 player2 = self.game.add_player()
-                player2.agent = agent_class(name=f"AI ({agent_name})")
+                player2.agent = agent2
                 
                 self.game.start_game()
-                print(f"Game started against {agent_name}!")
+                print(f"Game started: {name1} vs {name2}!")
                 
                 # Main game loop
                 while not self.game.is_game_over:
