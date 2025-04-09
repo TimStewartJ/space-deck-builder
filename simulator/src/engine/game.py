@@ -1,4 +1,5 @@
 from typing import List
+from src.cards.card import Card
 from src.engine.player import Player
 from src.engine.actions import ActionType, Action, get_available_actions
 
@@ -110,7 +111,7 @@ class Game:
         
         return False  # Turn continues
     
-    def apply_card_effects(self, card, scrap=False):
+    def apply_card_effects(self, card: Card, scrap=False):
         """
         Apply the effects of a played card
         
@@ -119,27 +120,21 @@ class Game:
             scrap: Boolean indicating if this is a scrap effect being activated
         """
         import re
-        
-        # Convert effects list to string if needed
-        effect_text = "\n".join(card.effects) if isinstance(card.effects, list) else card.effects
-        
-        # Split by horizontal rules into different effect sections
-        sections = effect_text.split("<hr>")
-        
-        for section in sections:
-            section = section.strip()
-            if not section:
+
+        for effect in card.effects:
+            effect = effect.strip()
+            if not effect:
                 continue
                 
             # Handle scrap abilities - only apply if card is being scrapped
-            if section.startswith("{Scrap}:"):
+            if effect.startswith("{Scrap}:"):
                 if scrap:
-                    effect = section.replace("{Scrap}:", "").strip()
+                    effect = effect.replace("{Scrap}:", "").strip()
                     self._parse_and_apply_effect(effect, card)
                 continue
                 
             # Handle faction ally abilities
-            ally_match = re.search(r"\{(\w+) Ally\}:\s*(.*)", section)
+            ally_match = re.search(r"\{(\w+) Ally\}:\s*(.*)", effect)
             if ally_match:
                 faction = ally_match.group(1)
                 ally_effect = ally_match.group(2)
@@ -150,14 +145,14 @@ class Game:
                 continue
             
             # Handle OR choices
-            if "OR" in section:
+            if "OR" in effect:
                 # For now just apply the first choice, later implement player choice
-                choices = section.split("OR")
+                choices = effect.split("OR")
                 self._parse_and_apply_effect(choices[0].strip(), card)
                 continue
                 
             # Handle standard effects
-            self._parse_and_apply_effect(section, card)
+            self._parse_and_apply_effect(effect, card)
     
     def _has_faction_ally(self, faction, current_card):
         """Check if player has played another card of the specified faction this turn"""

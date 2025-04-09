@@ -19,6 +19,7 @@ class CLI:
     
     def get_player_action(self, available_actions):
         """Display available actions and get player choice"""
+
         print("\nAvailable actions:")
         for i, action in enumerate(available_actions):
             print(f"{i+1}. {action}")
