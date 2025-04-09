@@ -106,17 +106,129 @@ class Game:
         
         return False  # Turn continues
     
-    def apply_card_effects(self, card):
-        """Apply the effects of a played card"""
-        for effect in card.effects:
-            # Parse effect string and apply it
-            if "Gain 1 Trade" in effect:
-                self.current_player.trade += 1
-            elif "Gain 2 Trade" in effect:
-                self.current_player.trade += 2
-            elif "Gain 1 Combat" in effect:
-                self.current_player.combat += 1
-            # Add more effect parsing as needed
+    def apply_card_effects(self, card, scrap=False):
+        """
+        Apply the effects of a played card
+        
+        Args:
+            card: The card being played
+            scrap: Boolean indicating if this is a scrap effect being activated
+        """
+        import re
+        
+        # Convert effects list to string if needed
+        effect_text = "\n".join(card.effects) if isinstance(card.effects, list) else card.effects
+        
+        # Split by horizontal rules into different effect sections
+        sections = effect_text.split("<hr>")
+        
+        for section in sections:
+            section = section.strip()
+            if not section:
+                continue
+                
+            # Handle scrap abilities - only apply if card is being scrapped
+            if section.startswith("{Scrap}:"):
+                if scrap:
+                    effect = section.replace("{Scrap}:", "").strip()
+                    self._parse_and_apply_effect(effect, card)
+                continue
+                
+            # Handle faction ally abilities
+            ally_match = re.search(r"\{(\w+) Ally\}:\s*(.*)", section)
+            if ally_match:
+                faction = ally_match.group(1)
+                ally_effect = ally_match.group(2)
+                
+                # Check if the player has played another card of this faction
+                if self._has_faction_ally(faction, card):
+                    self._parse_and_apply_effect(ally_effect, card)
+                continue
+            
+            # Handle OR choices
+            if "OR" in section:
+                # For now just apply the first choice, later implement player choice
+                choices = section.split("OR")
+                self._parse_and_apply_effect(choices[0].strip(), card)
+                continue
+                
+            # Handle standard effects
+            self._parse_and_apply_effect(section, card)
+    
+    def _has_faction_ally(self, faction, current_card):
+        """Check if player has played another card of the specified faction this turn"""
+        for card in self.current_player.played_cards:
+            if card.faction.lower() == faction.lower() and card != current_card:
+                return True
+        return False
+        
+    def _parse_and_apply_effect(self, effect_text, card):
+        """Parse and apply a specific card effect"""
+        import re
+        
+        # Handle resource gains enclosed in curly braces
+        trade_match = re.search(r"\{Gain (\d+) Trade\}", effect_text)
+        if trade_match:
+            self.current_player.trade += int(trade_match.group(1))
+            
+        combat_match = re.search(r"\{Gain (\d+) Combat\}", effect_text)
+        if combat_match:
+            self.current_player.combat += int(combat_match.group(1))
+            
+        # Handle card draw
+        if "Draw a card" in effect_text:
+            self.current_player.draw_card()
+            
+        # Handle conditional card draw
+        draw_match = re.search(r"Draw a card for each (\w+) card", effect_text)
+        if draw_match:
+            faction = draw_match.group(1).lower()
+            count = sum(1 for c in self.current_player.played_cards if c.faction.lower() == faction)
+            for _ in range(count):
+                self.current_player.draw_card()
+                
+        # Handle complex effects that require player choice
+        if any(x in effect_text for x in [
+                "Acquire any ship for free", 
+                "destroy target base", 
+                "scrap a card in the trade row",
+                "scrap a card in your hand or discard pile"
+            ]):
+            self._create_player_choice_action(effect_text, card)
+
+    def _create_player_choice_action(self, effect_text, card):
+        """Create appropriate actions for effects requiring player decisions"""
+        from src.engine.actions import Action, ActionType
+        
+        # Example implementation - will need to be integrated with your action system
+        if "Acquire any ship for free" in effect_text:
+            ships = [c for c in self.trade_row if getattr(c, 'type', '') == 'ship']
+            if ships:
+                # Create action for player to choose a ship
+                action = Action(
+                    ActionType.CHOOSE_CARD,
+                    card_id=card.name,
+                    valid_targets=[c.name for c in ships],
+                    effect_text=effect_text
+                )
+                # Store this pending action or return it
+                self.current_player.pending_actions.append(action)
+                
+        elif "destroy target base" in effect_text:
+            # Find opponent bases
+            bases = []
+            for player in self.players:
+                if player != self.current_player:
+                    bases.extend(player.bases)
+                    
+            if bases:
+                action = Action(
+                    ActionType.DESTROY_BASE,
+                    card_id=card.name,
+                    valid_targets=[b.name for b in bases],
+                    effect_text=effect_text
+                )
+                self.current_player.pending_actions.append(action)    
 
     def end_game(self):
         self.is_game_over = True

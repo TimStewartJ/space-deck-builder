@@ -15,6 +15,7 @@ class Player:
         self.trade = 0
         self.combat = 0
         self.authority_gained = 0
+        self.pending_actions = []  # Track actions awaiting player decisions
         
     def draw_card(self):
         if not self.deck:
@@ -33,9 +34,13 @@ class Player:
         return None
     
     def play_card(self, card):
+        """Play a card from hand"""
         if card in self.hand:
             self.hand.remove(card)
             self.played_cards.append(card)
+            if card.type == "base":
+                self.bases.append(card)
+            # Note: card effects are applied in Game.execute_action
             return True
         return False
     
@@ -52,10 +57,17 @@ class Player:
         self.authority_gained = 0
     
     def end_turn(self):
-        # Move played cards and hand to discard pile
-        self.discard_pile.extend(self.played_cards)
-        self.discard_pile.extend(self.hand)
+        """End the current turn"""
+        # Move played cards to discard pile (except bases)
+        for card in self.played_cards:
+            if card not in self.bases:
+                self.discard_pile.append(card)
+                
         self.played_cards = []
+        self.pending_actions = []
+        
+        # Move hand to discard pile
+        self.discard_pile.extend(self.hand)
         self.hand = []
         
         # Draw a new hand
