@@ -1,0 +1,19 @@
+name,cost,type,effect,faction
+Viper,1,ship,deal 1 damage,Star Empire
+Fighter,2,ship,deal 2 damage,Trade Federation
+Trade Pod,3,ship,draw a card,Trade Federation
+Space Station,4,base,generate 2 trade,Trade Federation
+Battlecruiser,5,ship,deal 5 damage and draw a card,Star Empire
+Dreadnought,6,ship,deal 6 damage,Trade Federation
+Trade Federation Base,3,base,generate 3 trade,Trade Federation
+Starbase,7,base,generate 4 trade and deal 3 damage,Star Empire
+Blob Fighter,2,ship,deal 3 damage,Blob
+Blob Wheel,3,ship,draw a card and deal 2 damage,Blob
+Blob Base,4,base,generate 3 trade,Blob
+Blob Destroyer,5,ship,deal 5 damage and draw a card,Blob
+Mothership,8,ship,generate 5 trade and deal 4 damage,Blob
+Freighter,4,ship,generate 3 trade,Trade Federation
+Scout,1,ship,draw a card,Star Empire
+Corvette,2,ship,deal 2 damage,Blob
+Battle Ship,6,ship,deal 6 damage,Blob
+Trade Cruiser,5,ship,generate 4 trade,Trade Federation
