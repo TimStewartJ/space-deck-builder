@@ -1,0 +1,1358 @@
+Set,Qty,Name,Text,Type,Faction / Color,Cost,Defense,Role,Notes
+High Alert: First Strike,1,Arcadia,"Scrap a card in your hand.
+<hr>
+{Machine Cult Ally}: Scrap a card in your discard pile.
+<hr>
+{Double Machine Cult Ally}: {Gain 6 Combat}",Base,Machine Cult,6,5,Trade Deck,
+High Alert: First Strike,1,Battle Star,"{3 Combat}
+<hr>
+{Star Empire Ally} {3 Combat}
+<hr>
+{Double Star Empire Ally}: Target opponent discards a card.",Base,Star Empire,6,5,Trade Deck,
+High Alert: First Strike,1,Blob Builder,"{Gain 5 Trade} You may scrap any number of cards currently in the trade row.
+<hr>
+{Blob Ally}: Acquire a base for free and put it directly on top of your deck.
+<hr>
+Pay {1 Combat} less to acquire this card for each {Blob} card you have in play.",Ship,Blob,7,,Trade Deck,The top ability is a primary ability that gives you 5 Trade and an effect. You do not pay 5 trade in order to activate the abiltiy.
+High Alert: First Strike,2,Cargo Barge,"{Gain 3 Trade}
+<hr>
+{Star Empire Ally}: Target opponent discards a card.
+<hr>
+{Scrap} Draw a card.
+<hr>
+Pay {1 Trade} less to acquire this card for each {Star Empire} card you have in play.",Ship,Star Empire,3,,Trade Deck,
+High Alert: First Strike,1,Command Cruiser,"{Gain 8 Combat}
+<hr>
+{Star Empire Ally}: Draw a card.
+<hr>
+{Double Star Empire Ally}: Draw a card.",Ship,Star Empire,6,,Trade Deck,
+High Alert: First Strike,2,Fighter Pod,"{Gain 3 Combat}
+<hr>
+{Blob Ally}: {Gain 2 Trade}
+<hr>
+{Double Blob Ally}: {Gain 3 Combat}",Ship,Blob,1,,Trade Deck,
+High Alert: First Strike,1,Freight Hauler,"{Gain 4 Trade}
+<hr>
+{Trade Federation Ally}: {Gain 4 Combat}
+<hr>
+{Double Trade Federation Ally}: Put the next card you acquire this turn directly into your hand.",Ship,Trade Federation,5,,Trade Deck,
+High Alert: First Strike,1,Industrial Upgrade,Pay {3 Trade}: Draw a card.,Tech,,5,,Trade Deck,
+High Alert: First Strike,1,Missile Launcher,Pay {3 Trade}: Gain {3 Combat},Tech,,4,,Trade Deck,
+High Alert: First Strike,1,Operations Center,"{Gain 2 Trade}
+<hr>
+{Trade Federation Ally}: {Gain 2 Authority}
+<hr>
+{Double Trade Federation Ally}: Draw a card.",Base,Trade Federation,4,4,Trade Deck,
+High Alert: First Strike,1,Parks Station,"{Gain 2 Trade}
+<hr>
+{Star Empire Ally}: {Gain 3 Combat}
+<hr>
+Pay {1 Trade} less to acquire this card for each {Star Empire} card you have in play.",Base,Star Empire,4,4,Trade Deck,
+High Alert: First Strike,2,Port Cutter,"{Gain 2 Trade} {Gain 2 Combat}
+<hr>
+{Trade Federation Ally}: {Gain 3 Authority}
+<hr>
+Pay {1 Trade} less to acquire this card for each {Trade Federation} card you have in play.",Ship,Trade Federation,2,,Trade Deck,
+High Alert: First Strike,1,Sapphire City Base,"{Gain 2 Combat} {Gain 2 Authority}
+<hr>
+Pay {1 Trade} less to acquire this card for each {Trade Federation} card you have in play.",Base,Trade Federation,5,,Trade Deck,
+High Alert: First Strike,2,Scavenger Bot,"{1 Trade} You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: {Gain 3 Combat}
+<hr>
+{Double Machine Cult Ally}: Draw a card.",Ship,Machine Cult,2,,Trade Deck,The top ability is a primary ability that gives you 1 Trade and an effect. You do not pay 1 trade in order to activate the abiltiy.
+High Alert: First Strike,1,Scrap Factory,"Scrap a card in your hand or discard pile.
+<hr>
+Pay {1 Trade} less to acquire this card for each {Machine Cult} card you have in play.",Base,Machine Cult,7,7,Trade Deck,
+High Alert: First Strike,1,Spike Colony,"{Gain 4 Combat}
+<hr>
+Pay {1 Trade} less to acquire this card for each {Blob} card you have in play.",Base,Blob,5,5,Trade Deck,
+High Alert: First Strike,1,Trading Colony,"{Gain 2 Trade}
+<hr>
+{Blob Ally}: {Gain 4 Combat}
+<hr>
+{Double Blob Ally}: Acquire a ship for free and put it directly on top of your deck.",Base,Blob,6,5,Trade Deck,
+High Alert: First Strike,1,War Mech,"{10 combat} Put up to two bsaes from your discard pile on top of your deck.
+<hr>
+{Combat}: Draw a card.
+<hr>
+Pay {1 Trade} less to acquire this card for each {Machine Cult} card you have in play.",Ship,Machine Cult,8,,Trade Deck,The top ability is a primary ability that gives you 10 Combat and an effect. You do not pay 10 Combat in order to activate the abiltiy.
+High Alert: Tech,2,Guidance,Pay {1 Trade}: Scrap a card in the trade row.,Tech,,1,,Trade Deck,
+High Alert: Tech,2,Laser,Pay {1 Trade}: Gain {1 Combat},Tech,,2,,Trade Deck,
+High Alert: Tech,1,Processing,Pay {2 Trade}: Put the next card you acquire this turn directly on top of your deck.,Tech,,4,,Trade Deck,
+High Alert: Tech,2,Shield,Pay {1 Trade}: Gain {1 Authority},Tech,,1,,Trade Deck,
+High Alert: Tech,1,Stealth,Pay {2 Trade}: Choose a faction. You ocunt as having an additional card of that faction in play this turn.,Tech,,3,,Trade Deck,
+High Alert: Tech,2,Stellar Link,Pay {2 Trade}: Look at the top two cards of your deck. Put one into your discard pile and the other back on top of your deck.,Tech,,3,,Trade Deck,
+High Alert: Tech,1,Tractor Beam,Pay {2 Trade}: Return target base to its owner's hand.,Tech,,4,,Trade Deck,
+High Alert: Tech,1,Warp,"Pay {2 Trade}: Draw a card, then discard a card.",Tech,,4,,Trade Deck,
+High Alert: Requisition,2,Corsair,"{Gain 3 Trade}
+<hr>
+{Trade Federation Ally}: {Gain 4 Combat}
+<hr>
+Pay {1 Trade} less to acquire this card for each {Trade Federation} card you have in play.",Ship,Trade Federation,3,,Trade Deck,
+High Alert: Requisition,2,Hellfire,"{5 Combat}: Target opponent discards a card.
+<hr>
+{Star Empire Ally}: Draw a card, then discard a card.
+<hr>
+Pay {1 Trade} less to acquire this card for each {Star Empire} card you have in play.",Ship,Star Empire,4,,Trade Deck,
+High Alert: Requisition,1,Lunar Landing,"For each {Trade Federation} card you have in play, gain {1 Authority} and draw a card.
+<hr>
+Pay {1 Trade} less to acquire this card for each {Trade Federation} card you have in play.",Base,Trade Federation,9,5,Trade Deck,
+High Alert: Requisition,2,Operations Platform,"{Gain 1 Trade} or {Gain 1 Combat}
+<hr>
+Pay {1 Trade} less to acquire this card for each {Machine Cult} card you have in play.",Base,Machine Cult,3,4,Trade Deck,
+High Alert: Requisition,1,Swarm Colony,"Discard a card.
+<hr>
+{Blob Ally}: {Gain 4 Combat}
+<hr>
+Pay {1 Trade} less to acquire this card for each {blob} card you have in play.",Base,Blob,6,5,Trade Deck,
+High Alert: Requisition,1,Tanker Mech,"{Gain 4 Trade}
+<hr>
+{Machine Cult} Scrap a card in your hand or discard pile.
+<hr>
+{Scrap}: Draw a card.
+<hr>
+Pay {1 Trade} less to acquire this card for each {Machine Cult} card you have in play.",Ship,Machine Cult,5,,Trade Deck,
+High Alert: Requisition,1,The Armory,"{3 Trade}: Target opponent discards a card.
+<hr>
+Pay {1 Trade} less to acquire this card for each {Star Empire} card you have in play.",Base,Star Empire,7,6,Trade Deck,
+High Alert: Requisition,2,Warrior Pod,"{Gain 4 Combat}
+<hr>
+{Blob Ally}: {Gain 3 Combat}
+<hr>
+Pay {1 Trade} less to acquire this card for each {Blob} card you have in play.",Ship,Blob,2,,Trade Deck,
+High Alert: Invasion,1,Alpha Max,"{Gain 5 Combat} Draw a card.
+<hr>
+{Blob Ally}: Draw a card.
+<hr>
+{Double Blob Ally}: Draw a card.",Ship,Blob,7,,Trade Deck,
+High Alert: Invasion,1,Arsenal,"{Gain 2 Combat}
+Draw a card, then discard a card.",Base,Star Empire,5,5,Trade Deck,
+High Alert: Invasion,2,Cargo Raptor,"{Gain 3 Trade}
+<hr>
+{Star Empire Ally}: {Gain 2 Combat}
+<hr>
+{Double Star Empire Ally}: Target opponent discards a card.",Ship,Star Empire,2,,Trade Deck,
+High Alert: Invasion,2,Fusion Bot,"{Gain 5 Combat}
+<hr>
+{Machine Cult Ally}: Scrap a card in your hand or discard pile.
+<hr>
+{Double Machine Cult Ally}: Draw a card.",Ship,Machine Cult,3,,Trade Deck,
+High Alert: Invasion,1,Mech Fortress,"Draw a card.
+You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: {Gain 5 Combat}",Base,Machine Cult,8,6,Trade Deck,
+High Alert: Invasion,1,Naval Yard,{Gain 3 Trade} or {Gain 4 Authority},Base,Trade Federation,6,6,Trade Deck,
+High Alert: Invasion,2,Swarm Cell,"{Gain 2 Combat}
+<hr>
+{Blob Ally}: {Gain 2 Combat}",Base,Blob,2,3,Trade Deck,
+High Alert: Invasion,2,Voyager,"{Gain 2 Trade}
+<hr>
+{Trade Federation Ally}: {Gain 2 Combat}
+<hr>
+{Double Trade Federation Ally}: {Gain 4 Authority}",Ship,Trade Federation,1,,Trade Deck,
+High Alert: Heroes,1,Administrator Tung,"{Gain an Alignment Ally}
+<hr>
+{Scrap}: {Gain an Alignment Ally}",Hero,Machine Cult / Star Empire,1,,Trade Deck,
+High Alert: Heroes,1,Bio-Captain Kalle,"Gain a Union Ally}
+<hr>
+{Scrap}:
+{Gain a Union Ally}
+Choose One:
+• {2 Combat} Target oppenent discards a card.
+• {3 Combat} Scrap a card in the trade row.",Hero,Blob / Star Empire,3,,Trade Deck,
+High Alert: Heroes,1,Bio-Warrior Storm,"Gain a Union Ally}
+<hr>
+{Scrap}: {Gain a Union Ally}",Hero,Blob / Star Empire,1,,Trade Deck,
+High Alert: Heroes,1,Biodroid Otto,"{Gain a Unity Ally}
+<hr>
+{Scrap}:
+{Gain a Unity Ally}
+Choose One:
+• {3 Combat} Scrap a card in the trade row.
+• Scrap a card in your hand or discard pile.",Hero,Blob / Machine Cult,4,,Trade Deck,
+High Alert: Heroes,1,Bioform Freeman,"{Gain a Unity Ally}
+<hr>
+{Scrap}: {Gain a Unity Ally}",Hero,Blob / Machine Cult,1,,Trade Deck,
+High Alert: Heroes,1,Data Priest Kaufman,"{Gain a Coalition Ally}
+<hr>
+{Scrap}: {Gain a Coalition Ally}",Hero,Trade Federation / Machine Cult,1,,Trade Deck,
+High Alert: Heroes,1,Doctor Clark,"{Gain an Alliance Ally}
+<hr>
+{Scrap}: {Gain an Alliance Ally}",Hero,Trade Federation / Star Empire,1,,Trade Deck,
+High Alert: Heroes,1,High Admiral Shaner,"{Gain an Alliance Ally}
+<hr>
+{Scrap}:
+{Gain an Alliance Ally}
+Choose One:
+• {2 Combat} Target opponent discards a card.
+• Gain {6 Authority}.",Hero,Trade Federation / Star Empire,3,,Trade Deck,
+High Alert: Heroes,1,Pact Manager Scott,"{Gain a Pact Ally}
+<hr>
+{Scrap}:
+{Gain a Pact Ally}
+Choose One:
+• {3 Combat} Scrap a card in the trade row.
+• Gain {6 Authority}.",Hero,Blob / Trade Federation,3,,Trade Deck,
+High Alert: Heroes,1,Pact Searcher Sheldon,"{Gain a Pact Ally}
+<hr>
+{Scrap}: {Gain a Pact Ally}",Hero,Blob / Trade Federation,1,,Trade Deck,
+High Alert: Heroes,1,Strategist Thompson,"{Gain a Coalition Ally}
+<hr>
+{Scrap}:
+{Gain a Coalition Ally}
+Choose One:
+• Scrap a card in your hand or discard pile.
+• Gain {6 Authority}.",Hero,Trade Federation / Machine Cult,3,,Trade Deck,
+High Alert: Heroes,1,Templar Brehmer,"{Gain an Alignment Ally}
+<hr>
+{Scrap}:
+{Gain a Alignment Ally}
+Choose One:
+• {2 Combat}: Target opponent discards a card.
+• Scrap a card in your hand or discard pile.",Hero,Star Empire / Machine Cult,3,,Trade Deck,
+Universal Storage Box,2,Brooder,"{Gain 6 Combat}
+Put a random Pod Token into play.
+<hr>
+{Blob Ally}: Hatch a Pod Token.",Ship,Blob,4,,Trade Deck,
+Universal Storage Box,2,Embassy Transport,"{Gain 3 Trade} {Gain 3 Authority}
+<hr>
+{Scrap}: Draw a card for each base you have in play.",Ship,Trade Federation,4,,Trade Deck,
+Universal Storage Box,2,Orbital Crane,"{Gain 2 Trade}
+You may return target base to its owner’s hand.
+<hr>
+{Star Empire Ally}: Draw a card.",Ship,Star Empire,3,,Trade Deck,
+Universal Storage Box,2,Recovery Mech,"{Gain 5 Combat}
+You may put a card from your discard pile on top of your deck.",Ship,Machine Cult,4,,Trade Deck,
+Universal Storage Box,1,Mutant Drone | Pod Token,"Acquire a card of cost two or less for free and put it into your hand.
+When this card leaves play, return it to the Pod Token pile.
+|
+When this card leaves play, return it to the Pod Token pile.
+<hr>
+{Blob Ally}: If this Pod Token didn’t come into play this turn, it hatches (flip it over).",Ship | Base,Blob,,| 2,Token,
+Universal Storage Box,3,Warrior Drone | Pod Token,"{Gain 3 Combat}
+When this card leaves play, return it to the Pod Token pile.
+|
+When this card leaves play, return it to the Pod Token pile.
+<hr>
+{Blob Ally}: If this Pod Token didn’t come into play this turn, it hatches (flip it over).",Ship | Base,Blob,,| 2,Token,
+Universal Storage Box,2,Worker Drone | Pod Token,"{Gain 2 Trade}
+When this card leaves play, return it to the Pod Token pile.
+|
+When this card leaves play, return it to the Pod Token pile.
+<hr>
+{Blob Ally}: If this Pod Token didn’t come into play this turn, it hatches (flip it over).",Ship | Base,Blob,,| 2,Token,
+Universal Storage Box,1,Young Queen | Pod Token,"Draw two cards.
+When this card leaves play, return it to the Pod Token pile.
+|
+When this card leaves play, return it to the Pod Token pile.
+<hr>
+{Blob Ally}: If this Pod Token didn’t come into play this turn, it hatches (flip it over).",Ship | Base,Blob,,| 2,Token,
+Stellar Allies,2,Alignment Bot,"{Gain 2 Trade}
+<hr>
+{Scrap}: Scrap a card from your discard pile <u>or</u> Gain {2 Combat} and target opponent discards a card.",Ship,Machine Cult / Star Empire,1,,Trade Deck,
+Stellar Allies,1,Missile Silo,"{Gain 3 Combat}
+<hr>
+{Star Empire Ally}: Target opponent discards a card.
+<hr>
+{Machine Cult Ally}: Destroy target base.",Base,Machine Cult / Star Empire,6,5 Outpost,Trade Deck,
+Stellar Allies,2,Needle Lancer,"{Gain 5 Combat}
+<hr>
+{Alignment Ally (Machine Cult or Star Empire)}: Copy an ally ability that you’ve already used this turn.",Ship,Machine Cult / Star Empire,3,,Trade Deck,
+Stellar Allies,2,Pact Pod,"{Gain 2 Trade}
+<hr>
+{Blob Ally}: {Gain 5 Combat}
+<hr>
+{Trade Federation Ally}: {Gain 1 Trade}",Ship,Blob / Trade Federation,2,,Trade Deck,
+Stellar Allies,2,Pact Warship,"{Gain 5 Combat}
+<hr>
+{Blob Ally}: Destroy target base.
+<hr>
+{Trade Federation Ally}: {Gain 5 Authority}",Ship,Blob / Trade Federation,4,,Trade Deck,
+Stellar Allies,1,Summit Site,Draw two cards.,Base,Blob / Trade Federation,8,6,Trade Deck,
+Stellar Allies,1,The Citadel,Target opponent discards a card. You may scrap a card in your hand or discard pile.,Base,Machine Cult / Star Empire,7,7 Outpost,Trade Deck,
+Stellar Allies,1,Trade Hive,"{Gain 2 Trade}
+<hr>
+{Pact Ally (Blob or Trade Federation)}: Draw a card.",Base,Blob / Trade Federation,5,4,Trade Deck,
+Stellar Allies,1,Rules (Faction Pairs) | Ad (Star Realms United),,Rules,,,,Rules,
+Command Deck: Lost Fleet,1,Lost Dreadnaught,"{Gain 7 Combat}
+Draw two cards. Lost Dreadnaught has all factions.",Ship,Unaligned,8,,Trade Deck,
+Command Deck: Lost Fleet,3,Assault Shard,"{Gain 1 Combat}
+<hr>
+{Splinter}: {Gain 4 Combat}",Ship,Unaligned,,,Trade Deck,
+Command Deck: Lost Fleet,2,Command Shard,"{Gain 1 Trade}
+You may treat this card as having any name when using a {Splinter} ability.",Ship,Unaligned,,,Trade Deck,
+Command Deck: Lost Fleet,3,Recon Shard,"{Gain 1 Trade}
+<hr>
+{Splinter}: {Gain 5 Authority}",Ship,Unaligned,,,Trade Deck,
+Command Deck: Lost Fleet,3,Salvage Shard,"{Gain 1 Trade}
+<hr>
+{Splinter}: Scrap a card in your hand or discard pile.",Ship,Unaligned,,,Trade Deck,
+Command Deck: Lost Fleet,3,Transport Shard,"{Gain 1 Trade}
+<hr>
+{Splinter}: Draw a card, then discard a card.",Ship,Unaligned,,,Trade Deck,
+Command Deck: Lost Fleet,1,Splinter Tech | Rules (Part 1 of 2),"Whenever you use a {Splinter} ability, choose a faction. You count as having a card of that faction in play this turn.",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: Lost Fleet,1,Jochum's Grand Design | Rules (Part 2 of 2),"{Scrap}:
+{Gain a Star Empire Ally} {Gain a Trade Federation Ally} {Gain a Machine Cult Ally} {Gain a Blob Ally}
+Put a card from your discard pile into your hand.",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: Lost Fleet,1,High Admiral Jochum | Rules (Splinter Abilities),"<i>(Hand Size: 7, Starting Authority: 72)</i>",Legendary Commander,,,,Commander | Rules,
+Command Deck: Lost Fleet,1,Scorecard (40-70) | Scorecard (00-30),,,,,,Scorecard,
+Command Deck: Lost Fleet,1,Scorecard (00-09) | Scorecard (80-89),,,,,,Scorecard,
+Command Deck: The Unity,1,Mech Wurm,"You may scrap up to two cards from your hand and/or discard pile. Gain {4 Combat} for each card scrapped in this way.
+<hr>
+{Unity Ally (Blob or Machine Cult)}: Draw a card.",Ship,Blob / Machine Cult,8,,Trade Deck,
+Command Deck: The Unity,1,Cluster Viper,"{Gain 2 Combat}
+<hr>
+{Blob Ally}: {Gain 1 Combat}",Ship,Unaligned,,,Trade Deck,
+Command Deck: The Unity,1,Laser Drone,"{Gain 2 Combat}
+<hr>
+{Machine Cult Ally}: {Gain 1 Combat}
+<hr>
+{Double Machine Cult Ally}: {Gain 2 Combat}",Ship,Machine Cult,,,Trade Deck,
+Command Deck: The Unity,1,Protopod,"{Gain 2 Trade}
+<hr>
+{Blob Ally}: {Gain 1 Combat}",Ship,Blob,,,Trade Deck,
+Command Deck: The Unity,1,Ranger,{Gain 1 Trade} OR {Gain 2 Combat},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Unity,4,Scout,{Gain 1 Trade},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Unity,1,Scout Bot,"{Gain 1 Trade}
+<hr>
+{Machine Cult Ally}: Choose a card of cost two or less in your discard pile. Put it on top of your deck.",Ship,Unaligned,,,Trade Deck,
+Command Deck: The Unity,1,Swarmling,"{Gain 2 Combat}
+<hr>
+{Blob Ally}: {Gain 1 Combat} You may scrap a card in the trade row.",Ship,Blob,,,Trade Deck,
+Command Deck: The Unity,1,Viper,{Gain 1 Combat},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Unity,1,Welder Drone,{Gain 2 Trade} OR {Gain 2 Combat},Ship,Machine Cult,,,Trade Deck,
+Command Deck: The Unity,1,Walsh's Stratagem | Rules (Part 1 of 3),"{Scrap}:
+{Gain 2 Trade} {Gain a Machine Cult Ally} {Gain a Blob Ally}
+Put the next base you acquire this turn directly into play.",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: The Unity,1,Unity Warcraft | Rules (Part 2 of 3),"Your bases get {+1 defense}
+Your opponent’s bases get {-1 defense}
+<i>(This affects both regular bases and Outposts.)</i>",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: The Unity,1,Biolord Walsh | Rules (Part 3 of 3),"<i>(Hand Size: 6, Starting Authority: 70)</i>",Legendary Commander,,,,Commander | Rules,
+Command Deck: The Unity,1,Scorecard (40-70) | Scorecard (00-30),,,,,,Scorecard,
+Command Deck: The Unity,1,Scorecard (00-09) | Scorecard (80-89),,,,,,Scorecard,
+Command Deck: The Union,1,Meganaut,"{Gain 7 Combat} Draw a card.
+<hr>
+{Union Ally (Blob or Star Empire)}: Draw a card.
+<hr>
+{Scrap}: {Gain 6 Combat}",Ship,Blob / Star Empire,8,,Trade Deck,
+Command Deck: The Union,1,Cluster Viper,"{Gain 2 Combat}
+<hr>
+{Blob Ally}: {Gain 1 Combat}",Ship,Unaligned,,,Trade Deck,
+Command Deck: The Union,1,Imperial Scout,"{Gain 1 Trade}
+<hr>
+{Star Empire Ally}: {Gain 2 Combat}",Ship,Unaligned,,,Trade Deck,
+Command Deck: The Union,1,Imperial Talon,"{Gain 2 Combat}
+<hr>
+{Star Empire Ally}: {Gain 2 Combat}",Ship,Star Empire,,,Trade Deck,
+Command Deck: The Union,1,Protopod,"{Gain 2 Trade}
+<hr>
+{Blob Ally}: {Gain 1 Combat}",Ship,Blob,,,Trade Deck,
+Command Deck: The Union,1,Ranger,{Gain 1 Trade} OR {Gain 2 Combat},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Union,1,Ripper,{Gain 3 Combat},Ship,Blob,,,Trade Deck,
+Command Deck: The Union,4,Scout,{Gain 1 Trade},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Union,1,Tribute Transport,"{Gain 2 Trade}
+OR draw a card, then discard a card.",Ship,Star Empire,,,Trade Deck,
+Command Deck: The Union,1,Viper,{Gain 1 Combat},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Union,1,McCready's Maneuver | Rules (Part 1 of 3),"{Scrap}:
+{Gain 5 Combat} {Gain a Blob Ally} {Gain a Star Empire Ally}
+Draw a card.",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: The Union,1,Union Blitz | Rules (Part 2 of 3),"{Blob Ally}: {Gain 1 Combat}
+<hr>
+{Star Empire Ally}: {Gain 1 Combat}",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: The Union,1,Hive Admiral McCready | Rules (Part 3 of 3),"<i>(Hand Size: 6, Starting Authority: 60)</i>",Legendary Commander,,,,Commander | Rules,
+Command Deck: The Union,1,Scorecard (40-70) | Scorecard (00-30),,,,,,Scorecard,
+Command Deck: The Union,1,Scorecard (00-09) | Scorecard (80-89),,,,,,Scorecard,
+Command Deck: The Pact,1,Super Carrier,"You may acquire a ship for free and put it into your hand.
+<hr>
+{Pact Ally (Blob or Trade Federation)}: Draw a card.",Ship,Blob / Trade Federation,8,,Trade Deck,
+Command Deck: The Pact,1,Cluster Scout,"{Gain 1 Trade}
+<hr>
+{Blob Ally}: {Gain 1 Combat} You may scrap a card in the trade row.",Ship,Unaligned,,,Trade Deck,
+Command Deck: The Pact,1,Diplomatic Shuttle,{Gain 1 Trade} OR {Gain 5 Authority},Ship,Trade Federation,,,Trade Deck,
+Command Deck: The Pact,1,Escort Viper,"{Gain 1 Combat}
+<hr>
+{Trade Federation Ally}: {Gain 1 Trade}",Ship,Unaligned,,,Trade Deck,
+Command Deck: The Pact,1,Frontier Tug,"{Gain 2 Trade}
+<hr>
+{Trade Federation Ally}: Shuffle the next base you acquire this turn into your deck.",Ship,Trade Federation,,,Trade Deck,
+Command Deck: The Pact,1,Ranger,{Gain 1 Trade} OR {Gain 2 Combat},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Pact,1,Ripper,{Gain 3 Combat},Ship,Blob,,,Trade Deck,
+Command Deck: The Pact,4,Scout,{Gain 1 Trade},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Pact,1,Swarmling,"{Gain 2 Combat}
+<hr>
+{Blob Ally}: {Gain 1 Combat} You may scrap a card in the trade row.
+",Ship,Blob,,,Trade Deck,
+Command Deck: The Pact,1,Viper,{Gain 1 Combat},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Pact,1,Newburg’s Game | Rules (Part 1 of 3),"{Scrap}:
+{Gain 3 Combat} {Gain 4 Authority} {Gain a Blob Ally} {Gain a Trade Federation Ally}
+Draw a card.",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: The Pact,1,Pact Dominion | Rules (Part 2 of 3),"Each turn, the first time you gain Authority also gain {3 Combat}",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: The Pact,1,Overlord Newburg | Rules (Part 3 of 3),"<i>(Hand Size: 6, Starting Authority: 66)</i>",Legendary Commander,,,,Commander | Rules,
+Command Deck: The Pact,1,Scorecard (40-70) | Scorecard (00-30),,,,,,Scorecard,
+Command Deck: The Pact,1,Scorecard (00-09) | Scorecard (80-89),,,,,,Scorecard,
+Command Deck: The Coalition,1,Mech Command Ship,"You may scrap up to two cards from your hand and/or discard pile. Gain {3 Authority} for each card scrapped this way.
+<hr>
+{Coalition Ally (Machine Cult or Trade Federation)}: Draw a card. You may destroy target base.",Ship,Machine Cult / Trade Federation,8,,Trade Deck,
+Command Deck: The Coalition,1,Cargo Boat,"{Gain 2 Trade}
+<hr>
+{Trade Federation Ally}: {Gain 2 Authority}",Ship,Trade Federation,,,Trade Deck,"<a href=""https://www.starrealms.com/faq/#errata"">Errata</a> - This card's secondary ability is a Trade Federation ally ability."
+Command Deck: The Coalition,1,Federation Scout,"{Gain 1 Trade}
+<hr>
+{Trade Federation Ally}: The next {Trade Federation} card you acquire this turn costs {1 Trade} less.",Ship,Unaligned,,,Trade Deck,
+Command Deck: The Coalition,1,Frontier Tug,"{Gain 2 Trade}
+<hr>
+{Trade Federation Ally}: Shuffle the next base you acquire this turn into your deck.",Ship,Trade Federation,,,Trade Deck,
+Command Deck: The Coalition,1,Laser Drone,"{Gain 2 Combat}
+<hr>
+{Machine Cult Ally}: {Gain 1 Combat}
+<hr>
+{Double Machine Cult Ally}: {Gain 2 Combat}",Ship,Machine Cult,,,Trade Deck,
+Command Deck: The Coalition,1,Ranger,{Gain 1 Trade} OR {Gain 2 Combat},Ship,,,,Trade Deck,
+Command Deck: The Coalition,1,Salvage Drone,"{Gain 1 Trade}
+OR scrap a card in your hand or discard pile.",Ship,Machine Cult,,,Trade Deck,
+Command Deck: The Coalition,4,Scout,{Gain 1 Trade},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Coalition,1,Viper,{Gain 1 Combat},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Coalition,1,Viper Bot,"{Gain 2 Combat}
+<hr>
+{Machine Cult Ally}: If you’ve scrapped a card from your hand or discard pile this turn, gain {3 Combat}",Ship,Unaligned,,,Trade Deck,
+Command Deck: The Coalition,1,Valken’s Enterprise | Coalition Stronghold,"{Scrap}: Flip this gambit over and put it into play as a base.
+|
+{Gain 2 Combat} OR {Gain 2 Authority}
+If this base would leave play, scrap it instead.",Gambit | Base,,,| 6 Outpost,Gambit | Token,
+Command Deck: The Coalition,1,Coalition Efficiency | Rules (Part 1 of 2),"Once per turn, if you would scrap a card in your hand or discard pile, you may choose to gain {5 Authority} instead.",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: The Coalition,1,High Director Valken | Rules (Part 2 of 2),"<i>(Hand Size: 6, Starting Authority: 62)</i>",Legendary Commander,,,,Commander | Rules,
+Command Deck: The Coalition,1,Scorecard (40-70) | Scorecard (00-30),,,,,,Scorecard,
+Command Deck: The Coalition,1,Scorecard (00-09) | Scorecard (80-89),,,,,,Scorecard,
+Command Deck: The Alliance,1,Super Freighter,"{Gain 4 Trade}
+Draw two cards.
+<hr>
+{Alliance Ally (Star Empire or Trade Federation)}: Draw a card.",Ship,Star Empire / Trade Federation,8,,Trade Deck,
+Command Deck: The Alliance,1,Cargo Boat,"{Gain 2 Trade}
+<hr>
+{Trade Federation Ally}: {Gain 2 Authority}",Ship,Trade Federation,,,Trade Deck,"<a href=""https://www.starrealms.com/faq/#errata"">Errata</a> - This card's secondary ability is a Trade Federation ally ability."
+Command Deck: The Alliance,1,Diplomatic Shuttle,{Gain 1 Trade} OR {Gain 5 Authority},Ship,Trade Federation,,,Trade Deck,
+Command Deck: The Alliance,1,Federation Scout,"{Gain 1 Trade}
+<hr>
+{Trade Federation Ally}: The next {Trade Federation} card you acquire this turn costs {1 Trade} less.",Ship,Unaligned,,,Trade Deck,
+Command Deck: The Alliance,1,Imperial Viper,"{Gain 1 Combat}
+<hr>
+{Star Empire Ally}: You may discard a card. If you do, draw a card.",Ship,Unaligned,,,Trade Deck,
+Command Deck: The Alliance,1,Ranger,{Gain 1 Trade} OR {Gain 2 Combat},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Alliance,4,Scout,{Gain 1 Trade},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Alliance,1,Stellar Falcon,"{Gain 2 Combat}
+<hr>
+{Star Empire Ally}: Target opponent discards a card.",Ship,Star Empire,,,Trade Deck,
+Command Deck: The Alliance,1,Tribute Transport,"{Gain 2 Trade}
+OR draw a card, then discard a card.",Ship,Star Empire,,,Trade Deck,
+Command Deck: The Alliance,1,Viper,{Gain 1 Combat},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Alliance,1,Nandi’s Onslaught | Rules (Part 1 of 3),"{Scrap}:
+{Gain a Star Empire Ally} {Gain a Trade Federation Ally}
+Draw two cards, then you and each opponent discard a card.",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: The Alliance,1,Alliance Procurement | Rules (Part 2 of 3),"Once each turn, you may gain {2 Trade} or put the next ship or base you acquire on top of your deck.",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: The Alliance,1,Fleet Director Nandi | Rules (Part 3 of 3),"<i>(Hand Size: 5, Starting Authority: 68)</i>",Legendary Commander,,,,Commander | Rules,
+Command Deck: The Alliance,1,Scorecard (40-70) | Scorecard (00-30),,,,,,Scorecard,
+Command Deck: The Alliance,1,Scorecard (00-09) | Scorecard (80-89),,,,,,Scorecard,
+Command Deck: The Alignment,1,Mech Battleship,"You may scrap up to two cards from your hand and/or discard pile. Draw cards equal to the number of cards scrapped this way, then discard an equal number of cards.
+<hr>
+{Alignment Ally (Machine Cult or Star Empire)}: {Gain 6 Combat}",Ship,Machine Cult / Star Empire,8,,Trade Deck,
+Command Deck: The Alignment,1,Imperial Talon,"{Gain 2 Combat}
+<hr>
+{Star Empire Ally}: {Gain 2 Combat}",Ship,Star Empire,,,Trade Deck,
+Command Deck: The Alignment,1,Imperial Viper,"{Gain 1 Combat}
+<hr>
+{Star Empire Ally}: You may discard a card. If you do, draw a card.",Ship,Unaligned,,,Trade Deck,
+Command Deck: The Alignment,1,Ranger,{Gain 1 Trade} OR {Gain 2 Combat},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Alignment,1,Salvage Drone,"{Gain 1 Trade}
+OR scrap a card in your hand or discard pile.",Ship,Machine Cult,,,Trade Deck,
+Command Deck: The Alignment,4,Scout,{Gain 1 Trade},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Alignment,1,Scout Bot,"{Gain 1 Trade}
+<hr>
+{Machine Cult Ally}: Choose a card of cost two or less in your discard pile. Put it on top of your deck.",Ship,Unaligned,,,Trade Deck,
+Command Deck: The Alignment,1,Stellar Falcon,"{Gain 2 Combat}
+<hr>
+{Star Empire Ally}: Target opponent discards a card.",Ship,Star Empire,,,Trade Deck,
+Command Deck: The Alignment,1,Viper,{Gain 1 Combat},Ship,Unaligned,,,Trade Deck,
+Command Deck: The Alignment,1,Welder Drone,{Gain 2 Trade} OR {Gain 2 Combat},Ship,Machine Cult,,,Trade Deck,
+Command Deck: The Alignment,1,Le's Foray | Rules (Part 1 of 3),"{Scrap}:
+{Gain a Star Empire Ally} {Gain a Machine Cult Ally}
+You may scrap a card in your hand or discard pile. If you do, draw a card.",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: The Alignment,1,Alignment Ingenuity | Rules (Part 2 of 3),"Whenever you use a {Scrap} ability of a ship or base, you may draw a card, then discard a card.",Gambit | Rules,,,,Gambit | Rules,
+Command Deck: The Alignment,1,Divine Admiral Le | Rules (Part 3 of 3),"<i>(Hand Size: 6, Starting Authority: 64)</i>",Legendary Commander | Rules,,,,Commander | Rules,
+Command Deck: The Alignment,1,Scorecard (40-70) | Scorecard (00-30),,Scorecard,,,,Scorecard,
+Command Deck: The Alignment,1,Scorecard (00-09) | Scorecard (80-89),,Scorecard,,,,Scorecard,
+Frontiers Kickstarter Promo Pack,1,Ad (Thank You Backers) | Rules (Kickstarter Promo Pack),,Rules,,,,Rules,
+Frontiers Kickstarter Promo Pack,1,Assimilator,"{Gain 5 Trade} OR {Gain 8 Combat}
+You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: Scrap this card from play. Move a card from an opponent’s discard pile to yours.",Ship,Machine Cult,7,,Trade Deck,
+Frontiers Kickstarter Promo Pack,1,Assur 4,"{Gain 5 Authority}
+<hr>
+{Trade Federation Ally}: {Gain 2 Trade}
+<hr>
+{Double Trade Federation Ally}: Draw a card.",Base,Trade Federation,5,5,Trade Deck,
+Frontiers Kickstarter Promo Pack,2,Blockade Runner,"Discard up to two cards, then draw that many cards.
+<hr>
+{Star Empire Ally}: Scrap this card from play. Draw a card. Target opponent discards a card.",Ship,Star Empire,1,,Trade Deck,
+Frontiers Kickstarter Promo Pack,3,Cargo Rocket,"{Gain 3 Authority} {Gain 2 Combat} {Gain 1 Trade}
+<hr>
+{Trade Federation Ally}: Scrap this card from play. Put the next ship you acquire this turn on top of your deck.",Ship,Trade Federation,1,,Trade Deck,
+Frontiers Kickstarter Promo Pack,1,Converter,"Whenever you scrap a card from your hand or discard pile, gain {2 Combat}
+<hr>
+{Machine Cult Ally}: Scrap a card from your hand.
+<hr>
+{Double Machine Cult Ally}: Scrap a card from your discard pile.",Base,Machine Cult,5,6 Outpost,Trade Deck,
+Frontiers Kickstarter Promo Pack,1,Demolisher,"{Gain 6 Combat}
+Draw a card.
+<hr>
+{Star Empire Ally}: Scrap this card from play. Draw two cards. Target opponent discards two cards.",Ship,Star Empire,7,,Trade Deck,
+Frontiers Kickstarter Promo Pack,2,Freight Raft,"{Gain 2 Trade} {Gain 4 Authority}
+<b>Trade Federation Docking:</b> During the discard phase, if you have a {Trade Federation} base in play, set this card aside. At the end of the draw phase, return it to your hand.",Ship,Trade Federation,3,,Trade Deck,
+Frontiers Kickstarter Promo Pack,2,Imperial Defender,"{Gain 1 Combat} Draw a card.
+<b>Star Empire Docking:</b> During the discard phase, if you have a {Star Empire} base in play, set this card aside. At the end of the draw phase, return it to your hand.",Ship,Star Empire,3,,Trade Deck,
+Frontiers Kickstarter Promo Pack,1,Midgate Station,"Discard any number of cards. Gain {Trade} or {Combat} equal to the number of cards discarded plus 1.
+<hr>
+{Star Empire Ally}: Target opponent discards a card.
+<hr>
+{Double Star Empire Ally}: Draw a card.",Base,Star Empire,5,5 Outpost,Trade Deck,
+Frontiers Kickstarter Promo Pack,3,Plague Pod,"{Gain 2 Trade}
+<hr>
+{Blob Ally}: Scrap this card from play. Gain {6 Combat}",Ship,Blob,1,,Trade Deck,
+Frontiers Kickstarter Promo Pack,3,Recycle Bot,"{Gain 1 Trade}
+You may scrap a card in your hand.
+<hr>
+{Machine Cult Ally}: Scrap this card from play. Scrap a card in your hand or discard pile.",Ship,Machine Cult,1,,Trade Deck,
+Frontiers Kickstarter Promo Pack,2,Sentinel,"{Gain 5 Combat}
+<b>Blob Docking:</b> During the discard phase, if you have a {Blob} base in play, set this card aside. At the end of the draw phase, return it to your hand.",Ship,Blob,3,,Trade Deck,
+Frontiers Kickstarter Promo Pack,1,Spawning Wurm,"{Gain 8 Combat}
+You may destroy target base.
+<hr>
+{Blob Ally}: Scrap this card from play. Gain {8 Combat}",Ship,Blob,7,,Trade Deck,
+Frontiers Kickstarter Promo Pack,1,Swarming Point,"{Gain 3 Combat}
+<hr>
+{Blob Ally}: {Gain 3 Combat}
+<hr>
+{Double Blob Ally}: {Gain 3 Combat}",Base,Blob,5,5,Trade Deck,
+Frontiers Kickstarter Promo Pack,2,Temple Guardian,"{Gain 2 Trade} OR {Gain 4 Combat}
+<b>Machine Cult Docking:</b> During the discard phase, if you have a {Machine Cult} base in play, set this card aside. At the end of the draw phase, return it to your hand.",Ship,Machine Cult,3,,Trade Deck,
+Frontiers Kickstarter Promo Pack,1,The Colossus,"{Gain 10 Combat}
+Choose a faction as you play The Colossus. The Colossus has that faction. Draw a card for each card of that faction you have in play (including The Colossus).",Ship,Unaligned,9,,Trade Deck,
+Frontiers Kickstarter Promo Pack,1,Trade Envoy,"{Gain 3 Trade} {Gain 5 Authority}
+Draw a card.
+<hr>
+{Trade Federation Ally}: Scrap this card from play. Put the next ship or base you acquire this turn into your hand.",Ship,Trade Federation,7,,Trade Deck,
+Frontiers Kickstarter Promo Pack,1,Mobilization,"Each player may look at the top four cards of their deck, put any number of those cards into their discard pile, then put the remaining cards back on top of their deck in any order.",Event,,,,Trade Deck,
+Frontiers Kickstarter Promo Pack,1,Patience Rewarded,"Each player may scrap a card in the trade row, then set it aside. For the rest of the game, players may acquire the card they set aside as if it were in the trade row.",Event,,,,Trade Deck,
+Frontiers Kickstarter Promo Pack,2,Powerful Backing,"The player currently taking their turn gains
+{1 Trade} {Two Machine Cult Allies} {Two Star Empire Allies} {Two Trade Federation Allies} {Two Blob Allies}
+Each other player gains
+{5 Authority}",Event,,,,Trade Deck,
+Frontiers Kickstarter Promo Pack,2,Recon Mission,Each player may acquire an Explorer for free and put it into their hand.,Event,,,,Trade Deck,
+Frontiers Kickstarter Promo Pack,1,Superflare,"Each player shuffles their discard pile into their deck, then draws a card.",Event,,,,Trade Deck,
+Frontiers Kickstarter Promo Pack,2,Supply Run,Each player may either acquire an Explorer for free and put it on top of their deck or put a card from their discard pile on top of their deck.,Event,,,,Trade Deck,
+Frontiers Kickstarter Promo Pack,2,Tactical Maneuver,"The player currently taking their turn chooses to gain either {2 Trade} or {4 Combat}
+Each other player chooses to either gain {6 Authority} or draw a card.",Event,,,,Trade Deck,
+Frontiers Kickstarter Promo Pack,1,Wormhole,Each player may either put a card from their discard pile into their hand or draw a card.,Event,,,,Trade Deck,
+Year 2 Promo Pack,1,Bounty Hunter,"{Gain 7 Combat}
+<hr>
+{Trade Federation Ally}: {Gain 5 Authority}",Ship,Trade Federation,5,,Trade Deck,
+Year 2 Promo Pack,1,Cargo Mech,"{Gain 4 Trade}
+You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: Destroy target base.",Ship,Machine Cult,5,,Trade Deck,
+"Year 2 Promo Pack,
+Organized Play Season 5",2,Federal Transport,"{Gain 1 Trade} {Gain 5 Authority}
+<hr>
+{Trade Federation Ally}: {Gain 2 Trade}",Ship,Trade Federation,2,,Trade Deck,
+Year 2 Promo Pack,2,Imperial Smuggler,"{Gain 3 Combat}
+Draw a card, then discard a card.
+<hr>
+{Scrap}: {Gain 2 Trade}",Ship,Star Empire,2,,Trade Deck,
+Year 2 Promo Pack,1,Knightstar,"{Gain 6 Combat}
+If an opponent has a base in play, gain an additional {3 Combat}
+<hr>
+{Star Empire Ally}: Draw a card.",Ship,Star Empire,5,,Trade Deck,
+Year 2 Promo Pack,2,Probe Bot,"{Gain 1 Trade} You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: Draw a card.
+<hr>
+{Scrap}: {Gain 3 Combat}",Ship,Machine Cult,2,,Trade Deck,
+"Year 2 Promo Pack,
+Organized Play Season 5",1,Stellar Ray,"{Gain 3 Trade}
+Draw a card.
+<hr>
+{Scrap}: {Gain 6 Combat}",Ship,Blob,5,,Trade Deck,
+Year 2 Promo Pack,2,War Kite,"{Gain 5 Combat}
+<hr>
+{Scrap}: Destroy target base.",Ship,Blob,2,,Trade Deck,
+Frontiers,1,Blob Alpha,{Gain 10 Combat},Ship,Blob,6,,Trade Deck,
+Frontiers,3,Blob Miner,"{Gain 3 Trade}
+You may scrap a card in the trade row.
+<hr>
+{Scrap}: {Gain 2 Combat}",Ship,Blob,2,,Trade Deck,
+Frontiers,2,Burrower,"{Gain 5 Combat}
+<hr>
+{Blob Ally}: Draw a card.
+<hr>
+{Scrap}: Acquire a card of cost four or less for free.",Ship,Blob,3,,Trade Deck,
+Frontiers,2,Crusher,"{Gain 6 Combat}
+<hr>
+{Blob Ally}: {Gain 2 Trade}",Ship,Blob,3,,Trade Deck,
+Frontiers,1,Hive Queen,"{Gain 7 Combat} Draw a card.
+<hr>
+{Blob Ally}: {Gain 3 Combat}
+<hr>
+{Double Blob Ally}: {Gain 3 Combat}",Ship,Blob,7,,Trade Deck,
+Frontiers,1,Infested Moon,"{Gain 4 Combat}
+<hr>
+{Blob Ally}: Draw a card.
+<hr>
+{Double Blob Ally}: Draw a card.",Base,Blob,6,5,Trade Deck,
+Frontiers,2,Moonwurm Hatchling,"{Gain 3 Trade} or destroy target base.
+<hr>
+{Blob Ally}: {Gain 3 Combat}
+<hr>
+{Double Blob Ally}: {Gain 3 Combat}",Ship,Blob,4,,Trade Deck,
+Frontiers,1,Nesting Ground,"{Gain 2 Trade}
+<hr>
+{Blob Ally}: {Gain 4 Combat}",Base,Blob,4,5,Trade Deck,
+Frontiers,1,Pulverizer,"Scrap a card in the trade row, and gain {Combat} equal to its cost.
+<hr>
+{Blob Ally}: Draw a card.",Ship,Blob,5,,Trade Deck,
+Frontiers,2,Spike Cluster,"{Gain 2 Combat}
+<hr>
+{Blob Ally}: {Gain 1 Trade}",Base,Blob,2,3,Trade Deck,
+Frontiers,3,Stinger,"{Gain 3 Combat}
+<hr>
+{Blob Ally}: {Gain 3 Combat}
+<hr>
+{Scrap}: {Gain 1 Trade}",Ship,Blob,1,,Trade Deck,
+Frontiers,1,Swarm Cluster,"{Gain 5 Combat}
+<hr>
+{Blob Ally}: {Gain 3 Combat}
+<hr>
+{Double Blob Ally}: {Gain 3 Combat}",Base,Blob,8,8,Trade Deck,
+Frontiers,3,Builder Bot,"{Gain 1 Trade} You may scrap a card in your discard pile.
+<hr>
+{Machine Cult Ally}: {Gain 1 Trade}
+<hr>
+{Scrap}: {Gain 2 Combat}",Ship,Machine Cult,1,,Trade Deck,
+Frontiers,1,Conversion Yard,"You may scrap a card in your hand. If you do, gain {4 Combat}",Base,Machine Cult,5,4 Outpost,Trade Deck,
+Frontiers,2,Defense System,"{Gain 2 Combat}
+<hr>
+{Machine Cult Ally}: {Gain 2 Combat}",Base,Machine Cult,4,5 Outpost,Trade Deck,
+Frontiers,3,Destroyer Bot,"{Gain 5 Combat}
+You may scrap a card in your discard pile.",Ship,Machine Cult,3,,Trade Deck,
+Frontiers,1,Enforcer Mech,"{Gain 5 Combat} You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: Destroy target base.
+<hr>
+{Scrap}: Draw a card.",Ship,Machine Cult,5,,Trade Deck,
+Frontiers,2,Integration Port,{Gain 1 Trade},Base,Machine Cult,3,5 Outpost,Trade Deck,
+Frontiers,1,Nanobot Swarm,"{Gain 5 Combat}
+Draw two cards. You may scrap up to two cards in your hand and/or discard pile.",Ship,Machine Cult,8,,Trade Deck,
+Frontiers,1,Neural Nexus,"Scrap a card in your hand or discard pile and gain {Combat} equal to its cost.
+<hr>
+{Machine Cult Ally}: Draw a card.",Base,Machine Cult,7,6 Outpost,Trade Deck,
+Frontiers,3,Plasma Bot,"{Gain 3 Combat}
+You may scrap a card in your hand.
+<hr>
+{Machine Cult Ally}: {Gain 2 Combat}",Ship,Machine Cult,2,,Trade Deck,
+Frontiers,1,Reclamation Station,"Scrap a card in your discard pile.
+<hr>
+{Scrap}: Gain {3 Combat} for each of your cards that you scrapped this turn (including this one).",Base,Machine Cult,6,6 Outpost,Trade Deck,
+Frontiers,2,Repair Mech,"{Gain 3 Trade} OR
+Put a base from your discard pile on top of your deck.
+<hr>
+{Machine Cult Ally}: You may scrap a card in your hand or discard pile.",Ship,Machine Cult,4,,Trade Deck,
+Frontiers,2,Captured Outpost,"Draw a card, then discard a card.",Base,Star Empire,3,3 Outpost,Trade Deck,
+Frontiers,3,Cargo Craft,"{Gain 2 Trade}
+Target opponent discards a card.
+<hr>
+{Star Empire Ally}: {Gain 4 Combat}",Ship,Star Empire,2,,Trade Deck,
+Frontiers,2,Farm Ship,"{Gain 3 Trade}
+Draw a card, then discard a card.
+<hr>
+{Scrap}: {Gain 4 Combat}",Ship,Star Empire,4,,Trade Deck,
+Frontiers,3,Frontier Hawk,"{Gain 3 Combat}
+Draw a card, then discard a card.",Ship,Star Empire,1,,Trade Deck,
+Frontiers,1,Hammerhead,"{Gain 3 Combat}
+Draw a card. Target opponent discards a card.
+<hr>
+{Star Empire Ally}: Draw a card, then discard a card.",Ship,Star Empire,5,,Trade Deck,
+Frontiers,1,Imperial Flagship,"{Gain 7 Combat}
+Draw two cards.
+<hr>
+{Star Empire Ally}: Target player discards a card.",Ship,Star Empire,8,,Trade Deck,
+Frontiers,1,Jamming Terminal,"{Gain 2 Combat}
+Target opponent discards a card.",Base,Star Empire,5,6,Trade Deck,
+Frontiers,3,Light Cruiser,"{Gain 4 Combat} Target opponent discards a card.
+<hr>
+{Star Empire Ally}: {Gain 2 Combat}
+<hr>
+{Double Star Empire Ally}: Draw a card.",Ship,Star Empire,3,,Trade Deck,
+Frontiers,2,Orbital Gun Platform,"{Gain 3 Combat}
+<hr>
+{Scrap}: {Gain 3 Trade}",Base,Star Empire,4,4 Outpost,Trade Deck,
+Frontiers,1,Siege Fortress,"{Gain 5 Combat}
+<hr>
+{Star Empire Ally}: {Gain 4 Combat}",Base,Star Empire,7,5 Outpost,Trade Deck,
+Frontiers,1,Warpgate Cruiser,"Discard any number of cards and gain {2 Combat} for each. Draw a card.
+<hr>
+{Star Empire Ally}: Draw a card.",Ship,Star Empire,6,,Trade Deck,
+Frontiers,1,Federation Battleship,"{Gain 5 Combat} {Gain 5 Authority} Draw a card.
+<hr>
+{Trade Federation Ally}: Destroy target base.
+<hr>
+{Scrap}: {Gain 10 Authority}",Ship,Trade Federation,7,,Trade Deck,
+Frontiers,1,Federation Cruiser,"{Gain 5 Combat} {Gain 4 Authority}
+<hr>
+{Trade Federation Ally}: {Gain 2 Combat} {Gain 2 Authority}",Ship,Trade Federation,5,,Trade Deck,
+Frontiers,3,Frontier Runner,{Gain 2 Trade} {Gain 2 Authority},Ship,Trade Federation,1,,Trade Deck,
+Frontiers,1,Gateship,"Acquire a ship or base of cost six or less for free, and put it on top of your deck.
+<hr>
+{Trade Federation Ally}: {Gain 5 Authority}",Ship,Trade Federation,6,,Trade Deck,
+Frontiers,1,Ion Station,"{Gain 2 Trade}
+<hr>
+{Trade Federation Ally}: {Gain 1 Trade}
+<hr>
+{Double Trade Federation Ally}: {Gain 4 Combat} {Gain 4 Authority}",Base,Trade Federation,5,5 Outpost,Trade Deck,
+Frontiers,2,Long Hauler,"{Gain 3 Trade}
+<hr>
+{Trade Federation Ally}: {Gain 2 Trade}
+<hr>
+{Scrap}: Put the next base you acquire this turn on top of your deck.",Ship,Trade Federation,4,,Trade Deck,
+Frontiers,2,Mobile Market,"{Gain 2 Trade}
+<hr>
+{Scrap}: Gain {2 Authority} and draw a card. At end of turn, move Mobile Market from the scrap heap to your discard pile.",Base,Trade Federation,4,4 Outpost,Trade Deck,
+Frontiers,3,Orbital Shuttle,"{Gain 3 Trade}
+If you have two or more bases in play, gain {4 Authority} and draw a card.",Ship,Trade Federation,2,,Trade Deck,
+Frontiers,3,Outland Station,"{Gain 1 Trade} OR {Gain 3 Authority}
+<hr>
+{Scrap}: Draw a card.",Base,Trade Federation,3,4,Trade Deck,
+Frontiers,2,Patrol Boat,"{Gain 4 Combat} {Gain 3 Authority}
+<hr>
+{Trade Federation Ally}: {Gain 2 Authority}",Ship,Trade Federation,3,,Trade Deck,
+Frontiers,1,Transit Nexus,{Gain 3 Combat} {Gain 4 Trade} {Gain 5 Authority},Base,Trade Federation,8,6,Trade Deck,
+Frontiers,16,Explorer,"{Gain 2 Trade}
+<hr>
+{Scrap}: {Gain 2 Combat}",Ship,Unaligned,2,,Trade Deck,
+Frontiers,32,Scout,{Gain 1 Trade},Ship,Unaligned,,,Trade Deck,
+Frontiers,8,Viper,{Gain 1 Combat},Ship,Unaligned,,,Trade Deck,
+Frontiers,1,Scorecard (40-70) | Scorecard (00-30),,Scorecard,Green,,,Scorecard,
+Frontiers,1,Scorecard (00-09) | Scorecard (80-89),,Scorecard,Green,,,Scorecard,
+Frontiers,1,Scorecard (40-70) | Scorecard (00-30),,Scorecard,Red,,,Scorecard,
+Frontiers,1,Scorecard (00-09) | Scorecard (80-89),,Scorecard,Red,,,Scorecard,
+Frontiers,1,Scorecard (40-70) | Scorecard (00-30),,Scorecard,Yellow,,,Scorecard,
+Frontiers,1,Scorecard (00-09) | Scorecard (80-89),,Scorecard,Yellow,,,Scorecard,
+Frontiers,1,Scorecard (40-70) | Scorecard (00-30),,Scorecard,Blue,,,Scorecard,
+Frontiers,1,Scorecard (00-09) | Scorecard (80-89),,Scorecard,Blue,,,Scorecard,
+Frontiers,1,Automatons | Rules (Automatons),,Challenge,,,,Challenge,
+Frontiers,1,Blob Assault | Rules (Blob Assault),,Challenge,,,,Challenge,
+Frontiers,1,Defy the Empire | Rules (Defy the Empire),,Challenge,,,,Challenge,
+Frontiers,1,Dimensional Horror | Rules (Dimensional Horror),,Challenge,,,,Challenge,
+Frontiers,1,Madness of the Machine | Rules (Madness of the Machine),,Challenge,,,,Challenge,
+Frontiers,1,Nemesis Beast | Rules (Nemesis Beast),,Challenge,,,50 x Players,Challenge,
+Frontiers,1,Pirates of the Dark Star | Rules (Pirates of the Dark Star),,Challenge,,,25 x Players,Challenge,
+Frontiers,1,The Cost of Freedom | Rules (The Cost of Freedom),,Challenge,,,,Challenge,
+Scenarios,1,Border Skirmish,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Buyer’s Market,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Commitment to the Cause,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Early Recruitment,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Emergency Repairs,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Entrenched Loyalties,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Flare Mining,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Fleeting Opportunities,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Frantic Preparations,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Frontier Expedition,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Maximum Warp,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Picking Sides,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Prolonged Conflict,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Rapid Construction,,Scenario,Unaligned,,,Scenario,"<a href=""https://www.starrealms.com/faq/#errata"">Errata</a> - A card only goes on top of your deck if it would normally go to your discard pile. Heroes enter play as normal."
+Scenarios,1,Ready Reserves,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Recruiting Drive,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Rushed Defenses,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Ruthless Efficiency,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Total War,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Warpgate Nexus,,Scenario,Unaligned,,,Scenario,
+Scenarios,1,Rules (Scenarios) | Ad (Hero Realms),,Rules,,,,Rules,
+United: Missions,1,Ally,,Mission,Unaligned,,,Mission,
+United: Missions,1,Armada,,Mission,Unaligned,,,Mission,
+United: Missions,1,Colonize,,Mission,Unaligned,,,Mission,
+United: Missions,1,Convert,,Mission,Unaligned,,,Mission,
+United: Missions,1,Defend,,Mission,Unaligned,,,Mission,
+United: Missions,1,Diversify,,Mission,Unaligned,,,Mission,
+United: Missions,1,Dominate,,Mission,Unaligned,,,Mission,
+United: Missions,1,Exterminate,,Mission,Unaligned,,,Mission,
+United: Missions,1,Influence,,Mission,Unaligned,,,Mission,
+United: Missions,1,Monopolize,,Mission,Unaligned,,,Mission,
+United: Missions,1,Rule,,Mission,Unaligned,,,Mission,
+United: Missions,1,Unite,,Mission,Unaligned,,,Mission,"<a href=""https://www.starrealms.com/faq/#errata"">Errata</a> - Objective clarified."
+United: Missions,1,Rules (Missions) | Ad (Hero Realms),,Rules,,,,Rules,
+United: Heroes,1,CEO Shaner,"{Gain a Trade Federation Ally}
+You may acquire a ship or base of cost three or less for free and put it on top of your deck.
+<hr>
+{Scrap}: {Gain a Trade Federation Ally} Draw a card.",Hero,Unaligned,5,,Trade Deck,
+United: Heroes,2,Chairman Haygan,"{Gain a Trade Federation Ally} {Gain 4 Authority}
+<hr>
+{Scrap}: {Gain a Trade Federation Ally} {Gain 4 Authority}",Hero,Unaligned,3,,Trade Deck,
+United: Heroes,2,Chancellor Hartman,"{Gain a Machine Cult Ally}
+You may scrap a card in your hand or discard pile.
+<hr>
+{Scrap}: {Gain a Machine Cult Ally} You may scrap a card in your hand or discard pile.",Hero,Unaligned,4,,Trade Deck,
+United: Heroes,2,Commander Klik,"{Gain a Star Empire Ally}
+You may discard a card. If you do, draw a card.
+<hr>
+{Scrap}: {Gain a Star Empire Ally} You may discard a card. If you do, draw a card.",Hero,Unaligned,4,,Trade Deck,
+United: Heroes,1,Commodore Zhang,"{Gain a Star Empire Ally} {Gain 4 Combat}
+Target opponent discards a card.
+<hr>
+{Scrap}: {Gain a Star Empire Ally} Draw a card.",Hero,Unaligned,5,,Trade Deck,
+United: Heroes,1,Confessor Morris,"{Gain a Machine Cult Ally}
+You may scrap up to two cards in your hand and/or discard pile.
+<hr>
+{Scrap}: {Gain a Machine Cult Ally} Draw a card.",Hero,Unaligned,5,,Trade Deck,
+United: Heroes,1,Hive Lord,"{Gain a Blob Ally} {Gain 5 Combat}
+Scrap any number of cards currently in the trade row.
+<hr>
+{Scrap}: {Gain a Blob Ally} Draw a card.",Hero,Unaligned,5,,Trade Deck,
+United: Heroes,2,Screecher,"{Gain a Blob Ally} {Gain 2 Combat}
+You may scrap a card in the trade row.
+<hr>
+{Scrap}: {Gain a Blob Ally} {Gain 2 Combat} You may scrap a card in the trade row.",Hero,Unaligned,3,,Trade Deck,
+United: Heroes,1,Rules (Heroes) | Rules (Hero Faction Abilities),,Rules,,,,Rules,
+United: Command,2,Alliance Frigate,"{Gain 4 Combat}
+<hr>
+{Star Empire Ally}: {Gain 3 Combat}
+<hr>
+{Trade Federation Ally}: {Gain 5 Authority}",Ship,Star Empire / Trade Federation,3,,Trade Deck,
+United: Command,1,Alliance Landing,"{Gain 2 Trade}
+<hr>
+{Alliance Ally (Star Empire or Trade Federation)}: {Gain 2 Combat}",Base,Star Empire / Trade Federation,5,5 Outpost,Trade Deck,
+United: Command,2,Assault Pod,"{Gain 3 Combat}
+<hr>
+{Union Ally (Blob or Star Empire)}: Draw a card.",Ship,Blob / Star Empire,2,,Trade Deck,
+United: Command,1,Coalition Fortress,"{Gain 2 Trade}
+<hr>
+{Coalition Ally (Machine Cult or Trade Federation)}: {Gain 2 Combat} OR {Gain 3 Authority}",Base,Trade Federation / Machine Cult,6,6 Outpost,Trade Deck,
+United: Command,2,Coalition Freighter,"{Gain 3 Trade}
+<hr>
+{Trade Federation Ally}: Put the next ship you acquire this turn on top of your deck.
+<hr>
+{Machine Cult Ally}: Scrap a card in your hand or discard pile.",Ship,Trade Federation / Machine Cult,4,,Trade Deck,
+United: Command,1,Union Cluster,"{Gain 4 Combat}
+<hr>
+{Union Ally (Blob or Star Empire)}: Draw a card.",Base,Blob / Star Empire,8,8,Trade Deck,
+United: Command,2,Unity Fighter,"{Gain 3 Combat}
+You may scrap a card in the trade row.
+<hr>
+{Scrap}: You may scrap a card in your hand or discard pile.",Ship,Blob / Machine Cult,1,,Trade Deck,
+United: Command,1,Unity Station,"Scrap a card in your hand or discard pile. You may scrap a card in the trade row.
+<hr>
+{Unity Ally (Blob or Machine Cult)}: {Gain 4 Combat}",Base,Blob / Machine Cult,7,6 Outpost,Trade Deck,
+United: Command,1,Rules (Faction Pairs) | Ad (Hero Realms),,Rules,,,,Rules,
+United: Assault,2,Alliance Transport,"{Gain 2 Trade}
+<hr>
+{Star Empire Ally}: Target opponent discards a card.
+<hr>
+{Trade Federation Ally}: {Gain 4 Authority}",Ship,Star Empire / Trade Federation,2,,Trade Deck,
+United: Assault,2,Blob Bot,"{Gain 5 Combat}
+<hr>
+{Blob Ally}: {Gain 2 Trade}
+<hr>
+{Machine Cult Ally}: Scrap a card in your hand or discard pile.",Ship,Blob / Machine Cult,3,,Trade Deck,
+United: Assault,2,Coalition Messenger,"{Gain 2 Trade}
+<hr>
+{Coalition Ally (Machine Cult or Trade Federation)}: Choose a card of cost five or less in your discard pile and put it on top of your deck.",Ship,Machine Cult / Trade Federation,3,,Trade Deck,
+United: Assault,1,Embassy Base,"Draw two cards, then discard a card.",Base,Star Empire / Trade Federation,8,6,Trade Deck,
+United: Assault,1,Exchange Point,"{Gain 2 Combat}
+<hr>
+{Unity Ally (Blob or Machine Cult)}: Scrap a card in your hand, your discard pile, or the trade row.",Base,Blob / Machine Cult,6,7,Trade Deck,
+United: Assault,1,Lookout Post,Draw a card.,Base,Machine Cult / Trade Federation,7,6 Outpost,Trade Deck,
+United: Assault,2,Trade Star,"{Gain 2 Trade}
+<hr>
+{Scrap}: {Gain 2 Combat}",Ship,Blob / Star Empire,1,,Trade Deck,
+United: Assault,1,Union Stronghold,"{Gain 3 Combat}
+<hr>
+{Blob Ally}: Scrap a card in the trade row.
+<hr>
+{Star Empire Ally}: Target opponent discards a card.",Base,Blob / Star Empire,5,5,Trade Deck,
+United: Assault,1,Rules (Faction Pairs) | Ad (Hero Realms),,Rules,,,,Rules,
+Colony Wars,2,Bioformer,"{Gain 3 Combat}
+<hr>
+{Scrap}: {Gain 3 Trade}",Base,Blob,4,4,Trade Deck,
+Colony Wars,3,Cargo Pod,"{Gain 3 Trade}
+<hr>
+{Blob Ally}: {Gain 3 Combat}
+<hr>
+{Scrap}: {Gain 3 Combat}",Ship,Blob,3,,Trade Deck,
+Colony Wars,1,Leviathan,"{Gain 9 Combat}
+Draw a card.
+You may destroy target base.
+<hr>
+{Blob Ally}: Acquire a card of cost three or less for free and put it into your hand.",Ship,Blob,8 ,,Trade Deck,
+Colony Wars,1,Moonwurm,"{Gain 8 Combat}
+Draw a card.
+<hr>
+{Blob Ally}: Acquire a card of cost two or less for free and put it into your hand.",Ship,Blob,7,,Trade Deck,
+Colony Wars,1,Parasite,"{Gain 6 Combat} OR
+Acquire a card of cost six or less for free.
+<hr>
+{Blob Ally}: Draw a card.",Ship,Blob,5,,Trade Deck,
+Colony Wars,1,Plasma Vent,"{Gain 4 Combat}
+When you acquire this card, if you've played a Blob card this turn, you may put this card directly into your hand.
+<hr>
+{Scrap}: Destroy target base.",Base,Blob,6,5,Trade Deck,
+Colony Wars,3,Predator,"{Gain 4 Combat}
+<hr>
+{Blob Ally}: Draw a card.",Ship,Blob,2,,Trade Deck,
+Colony Wars,2,Ravager,"{Gain 6 Combat}
+You may scrap up to two cards that are currently in the trade row.",Ship,Blob,3 ,,Trade Deck,
+Colony Wars,3,Stellar Reef,"{Gain 1 Trade}
+<hr>
+{Scrap}: {Gain 3 Combat}",Base,Blob,2,3,Trade Deck,
+Colony Wars,3,Swarmer,"{Gain 3 Combat}
+You may scrap a card in the trade row.
+<hr>
+{Blob Ally}: {Gain 2 Combat}",Ship,Blob,1,,Trade Deck,
+Colony Wars,3,Battle Bot,"{Gain 2 Combat}
+You may scrap a card in your hand.
+<hr>
+{Machine Cult Ally}: {Gain 2 Combat}",Ship,Machine Cult,1,,Trade Deck,
+Colony Wars,3,Convoy Bot,"{Gain 4 Combat}
+You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: {Gain 2 combat}",Ship,Machine Cult,3,,Trade Deck,
+Colony Wars,1,Frontier Station,{Gain 2 Trade} OR {Gain 3 Combat},Base,Machine Cult,6,6 Outpost,Trade Deck,
+Colony Wars,1,Mech Cruiser,"{Gain 6 Combat}
+You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: Destroy target base.",Ship,Machine Cult,5,,Trade Deck,
+Colony Wars,2,Mining Mech,"{Gain 3 Trade}
+You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: {Gain 3 combat}",Ship,Machine Cult,4,,Trade Deck,
+Colony Wars,3,Repair Bot,"{Gain 2 Trade}
+You may scrap a card in your discard pile.
+<hr>
+{Scrap}: {Gain 2 Combat}",Ship,Machine Cult,2,,Trade Deck,
+Colony Wars,1,Stealth Tower,"Until your turn ends, Stealth Tower becomes a copy of any base in play. Stealth Tower has that base's faction in addition to Machine Cult.",Base,Machine Cult,5,5 Outpost,Trade Deck,
+Colony Wars,1,The Incinerator,"Scrap up to two cards in your hand and/or discard pile.
+<hr>
+{Machine Cult Ally}: Gain {2 Combat} for each card scrapped from your hand and/or discard pile this turn.",Base,Machine Cult,8,6 Outpost,Trade Deck,
+Colony Wars,1,The Oracle,"Scrap a card in your hand.
+<hr>
+{Machine Cult Ally}: {Gain 3 combat}",Base,Machine Cult,4,5 Outpost,Trade Deck,
+Colony Wars,1,The Wrecker,"{Gain 6 Combat}
+You may scrap up to two cards in your hand and/or discard pile.
+<hr>
+{Machine Cult Ally}: Draw a card.",Ship,Machine Cult,7,,Trade Deck,
+Colony Wars,3,Warning Beacon,"{Gain 2 Combat}
+When you acquire this card, if you've played a Machine Cult card this turn, you may put this card directly into your hand.",Base,Machine Cult,2,2 Outpost,Trade Deck,
+Colony Wars,1,Aging Battleship,"{Gain 5 Combat}
+<hr>
+{Star Empire Ally}: Draw a card.
+<hr>
+{Scrap}: {Gain 2 Combat} Draw 2 cards.",Ship,Star Empire,5,,Trade Deck,
+Colony Wars,2,Command Center,"{Gain 2 Trade}
+Whenever you play a Star Empire ship, gain {2 Combat}",Base,Star Empire,4,4 Outpost,Trade Deck,
+Colony Wars,1,Emperor's Dreadnaught,"{Gain 8 Combat}
+Draw a card.
+Target opponent discards a card.
+When you acquire this card, if you've played a Star Empire card this turn, you may put this card directly into your hand.",Ship,Star Empire,8,,Trade Deck,
+Colony Wars,2,Falcon,"{Gain 2 Combat}
+Draw a card.
+<hr>
+{Scrap}: Target opponent discards a card.",Ship,Star Empire,3,,Trade Deck,
+Colony Wars,2,Gunship,"{Gain 5 Combat}
+Target opponent discards a card.
+<hr>
+{Scrap}: {Gain 4 Trade}",Ship,Star Empire,4,,Trade Deck,
+Colony Wars,1,Heavy Cruiser,"{Gain 4 Combat}
+Draw a card.
+<hr>
+{Star Empire Ally}: Draw a card.",Ship,Star Empire,5,,Trade Deck,
+Colony Wars,1,Imperial Palace,"Draw a card. Target opponent discards a card.
+<hr>
+{Star Empire Ally}: {Gain 4 Combat}",Base,Star Empire,7,6 Outpost,Trade Deck,
+Colony Wars,3,Lancer,"{Gain 4 Combat}
+If an opponent controls a base, gain an additional {2 Combat}
+<hr>
+{Star Empire Ally}: Target opponent discards a card.",Ship,Star Empire,2,,Trade Deck,
+Colony Wars,3,Orbital Platform,"Discard a card. If you do, draw a card.
+<hr>
+{Star Empire Ally}: {Gain 3 Combat}",Base,Star Empire,3,4,Trade Deck,
+Colony Wars,3,Star Barge,"{Gain 2 Trade}
+<hr>
+{Star Empire Ally}: {Gain 2 Combat} Target opponent discards a card.",Ship,Star Empire,1,,Trade Deck,
+Colony Wars,1,Supply Depot,"Discard up to 2 cards. Gain {2 Trade} or {2 Combat} for each card discarded this way.
+<hr>
+{Star Empire Ally}: Draw a card.",Base,Star Empire,6,5 Outpost,Trade Deck,
+Colony Wars,2,Central Station,"{Gain 2 Trade}
+If you have three or more bases in play (including this one), gain {4 Authority} and draw a card.",Base,Trade Federation,4,5,Trade Deck,
+Colony Wars,1,Colony Seed Ship,"{Gain 3 Trade} {Gain 3 Combat} {Gain 3 Authority}
+When you acquire this card, if you've played a Trade Federation card this turn, you may put this card directly into your hand.",Ship,Trade Federation,5,,Trade Deck,
+Colony Wars,1,Factory World,"{Gain 3 Trade}
+Put the next ship or base you acquire this turn into your hand.",Base,Trade Federation,8,6 Outpost,Trade Deck,
+Colony Wars,1,Federation Shipyard,"{Gain 2 Trade}
+<hr>
+{Trade Federation Ally}: Put the next ship or base you acquire this turn on top of your deck.",Base,Trade Federation,6,6 Outpost,Trade Deck,
+Colony Wars,2,Frontier Ferry,"{Gain 3 Trade} {Gain 4 Authority}
+<hr>
+{Scrap}: Destroy Target Base.",Ship,Trade Federation,4,,Trade Deck,
+Colony Wars,1,Loyal Colony,{Gain 3 Trade} {Gain 3 Combat} {Gain 3 Authority},Base,Trade Federation,7,6,Trade Deck,
+Colony Wars,3,Patrol Cutter ,"{Gain 2 Trade} {Gain 3 Combat}
+<hr>
+{Trade Federation Ally}: {Gain 4 Authority}",Ship,Trade Federation,3,,Trade Deck,
+Colony Wars,1,Peacekeeper,"{Gain 6 Combat} {Gain 6 Authority}
+<hr>
+{Trade Federation Ally}: Draw a card.",Ship,Trade Federation,6,,Trade Deck,
+Colony Wars,3,Solar Skiff,"{Gain 2 Trade}
+<hr>
+{Trade Federation Ally}: Draw a card.",Ship,Trade Federation,1,,Trade Deck,
+Colony Wars,2,Storage Silo,"{Gain 2 Authority}
+<hr>
+{Trade Federation Ally}: {Gain 2 Trade}",Base,Trade Federation,2,3,Trade Deck,
+Colony Wars,3,Trade Hauler,"{Gain 3 Trade}
+<hr>
+{Trade Federation Ally}: {Gain 3 Authority}",Ship,Trade Federation,2,,Trade Deck,
+Colony Wars,10,Explorer,"{Gain 2 Trade}
+<hr>
+{Scrap}: {Gain 2 Combat}",Ship,Unaligned,2,,Explorer Pile,
+Colony Wars,16,Scout,{Gain 1 Trade},Ship,Unaligned,,,Personal Deck,
+Colony Wars,4,Viper,{Gain 1 Combat},Ship,Unaligned,,,Personal Deck,
+Colony Wars (First Edition),6,Scorecard (10) | Scorecard (20),,Scorecard,,,,Scorecard,
+Colony Wars (First Edition),12,Scorecard (1) | Scorecard (5),,Scorecard,,,,Scorecard,
+Colony Wars (Second Edition),1,Scorecard (40-70) | Scorecard (00-30),,Scorecard,Green,,,Scorecard,
+Colony Wars (Second Edition),1,Scorecard (00-09) | Scorecard (80-89),,Scorecard,Green,,,Scorecard,
+Colony Wars (Second Edition),1,Scorecard (40-70) | Scorecard (00-30),,Scorecard,Blue,,,Scorecard,
+Colony Wars (Second Edition),1,Scorecard (00-09) | Scorecard (80-89),,Scorecard,Blue,,,Scorecard,
+Cosmic Gambit,1,Acceptable Losses,,Gambit,Unaligned,,,Gambit,
+Cosmic Gambit,2,Asteroid Mining,,Gambit,Unaligned,,,Gambit,
+Cosmic Gambit,1,Black Market,,Gambit,Unaligned,,,Gambit,
+Cosmic Gambit,2,Exploration,,Gambit,Unaligned,,,Gambit,
+Cosmic Gambit,1,Hidden Base,,Gambit,Unaligned,,,Gambit,
+Cosmic Gambit,1,Secret Outpost,,Base,Unaligned,,4 Outpost,Token,Note: Both sides of this card are the same.
+Cosmic Gambit,2,Rapid Deployment,,Gambit,Unaligned,,,Gambit,
+Cosmic Gambit,1,Triumphant Return,,Gambit,Unaligned,,,Gambit,
+Cosmic Gambit,1,Two-Pronged Attack,,Gambit,Unaligned,,,Gambit,
+Cosmic Gambit,1,Veteran Pilots,,Gambit,Unaligned,,,Gambit,
+Cosmic Gambit,1,Wild Gambit,,Gambit,Unaligned,,,Gambit,
+Cosmic Gambit,1,Rules (Gambits Part 1) | Rules (Gambits Part 2),,Rules,,,,Rules,
+Crisis: Heroes,1,Admiral Rasmusson,"{Scrap}:
+{Gain a Star Empire Ally} <i>(Until end of turn, you may use all of your {Star Empire} abilities.)</i>
+Draw a card.",Hero,Unaligned,2,,Trade Deck,
+Crisis: Heroes,1,Blob Overlord,"{Scrap}: {Gain 4 Combat} {Gain a Blob Ally} <i>(Until end of turn, you may use all of your {Blob} Ally abilities.)</i>",Hero,Unaligned,2,,Trade Deck,
+Crisis: Heroes,1,CEO Torres,"{Scrap}: {Gain 7 Authority} {Gain a Trade Federation Ally} <i>(Until end of turn, you may use all of your {Trade Federation} Ally abilities.)</i>",Hero,Unaligned,2,,Trade Deck,
+Crisis: Heroes,2,Cunning Captain,"{Scrap}:
+{Gain a Star Empire Ally} <i>(Until end of turn, you may use all of your {Star Empire} Ally abilities.)</i>
+Target player discards a card.",Hero,Unaligned,1,,Trade Deck,
+Crisis: Heroes,1,High Priest Lyle,"{Scrap}:
+{Gain a Machine Cult Ally} <i>(Until end of turn, you may use all of your {Machine Cult} Ally abilities.)</i>
+You may scrap a card from your hand or discard pile.",Hero,Unaligned,2,,Trade Deck,
+Crisis: Heroes,2,Ram Pilot,"{Scrap}: {Gain 2 Combat} {Gain a Blob Ally} <i>(Until end of turn, you may use all of your {Blob} Ally abilities.)</i>",Hero,Unaligned,1,,Trade Deck,
+Crisis: Heroes,2,Special Ops Director,"{Scrap}: {Gain 4 Authority} {Gain a Trade Federation Ally} <i>(Until end of turn, you may use all of your {Trade Federation} Ally abilities.)</i>",Hero,Unaligned,1,,Trade Deck,
+Crisis: Heroes,2,War Elder,"{Scrap}:
+{Gain a Machine Cult Ally} <i>(Until end of turn, you may use all of your {Machine Cult} Ally abilities.)</i>
+You may scrap a card from your hand.",Hero,Unaligned,1,,Trade Deck,
+Crisis: Fleets and Fortresses,1,Border Fort,"{Gain 1 Trade} OR {Gain 2 Combat}
+<hr>
+{Machine Cult Ally}: Scrap a card in your hand or discard pile.",Base,Machine Cult,4,5 Outpost,Trade Deck,
+Crisis: Fleets and Fortresses,1,Capitol World,{Gain 6 Authority} Draw a card.,Base,Trade Federation,8,6 Outpost,Trade Deck,
+Crisis: Fleets and Fortresses,2,Cargo Launch,"Draw a card.
+<hr>
+{Scrap}: {Gain 1 Trade}",Ship,Star Empire,1,,Trade Deck,
+Crisis: Fleets and Fortresses,2,Customs Frigate,"You may acquire a ship of cost four or less for free and put it on top of your deck.
+<hr>
+{Trade Federation Ally}: {Gain 4 Combat}
+<hr>
+{Scrap}: Draw a card.",Ship,Trade Federation,4,,Trade Deck,
+Crisis: Fleets and Fortresses,1,Death World,"{Gain 4 Combat}
+You may scrap a Trade Federation, Machine Cult, or Star Empire card from your hand or discard pile. If you do, draw a card.",Base,Blob,7,6,Trade Deck,
+Crisis: Fleets and Fortresses,2,Patrol Bot,"{Gain 2 Trade} OR {Gain 4 Combat}
+<hr>
+{Machine Cult Ally}: Scrap a card in your hand or discard pile.",Ship,Machine Cult,2,,Trade Deck,
+Crisis: Fleets and Fortresses,2,Spike Pod,"{Gain 3 Combat}
+You may scrap up to two cards currently in the Trade Row.
+<hr>
+{Scrap}: {Gain 2 Combat}",Ship,Blob,1,,Trade Deck,
+Crisis: Fleets and Fortresses,1,Star Fortress,"{Gain 3 Combat} Draw a card, then discard a card.
+<hr>
+{Star Empire Ally}: Draw a card, then discard a card.",Base,Star Empire,7,6 Outpost,Trade Deck,
+Crisis: Events,1,Black Hole,"Each player may discard up to two cards. For each card less than two that a player discards, that player loses {4 Authority}",Event,Unaligned,,,Trade Deck,
+Crisis: Events,1,Bombardment,Each player either destroys a base they control or loses {6 Authority},Event,Unaligned,,,Trade Deck,
+Crisis: Events,2,Comet,Each player may scrap up to two cards in their hand or discard pile.,Event,Unaligned,,,Trade Deck,
+Crisis: Events,1,Galactic Summit,Each player gains {7 Authority},Event,Unaligned,,,Trade Deck,
+Crisis: Events,2,Quasar,Each player draws two cards.,Event,Unaligned,,,Trade Deck,
+Crisis: Events,1,Supernova,"Each player loses {5 Authority}
+Scrap all cards in the trade row.",Event,Unaligned,,,Trade Deck,
+Crisis: Events,2,Trade Mission,The player currently taking their turn gains {4 Trade} and may put the next ship they acquire this turn on top of their deck. Each other player draws two cards.,Event,Unaligned,,,Trade Deck,
+Crisis: Events,2,Warp Jump,"Each player draws three cards, then puts two of those cards back on top of their deck in any order.",Event,Unaligned,,,Trade Deck,
+Crisis: Bases & Battleships,1,Construction Hauler,"{Gain 3 Authority} {Gain 2 Trade}
+Draw a card.
+<hr>
+{Trade Federation Ally}: Put the next base you acquire this turn directly into play.",Ship,Trade Federation,6,,Trade Deck,
+Crisis: Bases & Battleships,2,Defense Bot,"{Gain 1 Combat}
+You may scrap a card in your hand or discard pile. If you control two or more bases, gain {8 Combat}",Ship,Machine Cult,2,,Trade Deck,
+Crisis: Bases & Battleships,2,Fighter Base,{Star Empire Ally}: Target opponent discards a card.,Base,Star Empire,3,5 Outpost,Trade Deck,
+Crisis: Bases & Battleships,1,Imperial Trader,"{Gain 3 Trade}
+Draw a card.
+<hr>
+{Star Empire Ally}: {Gain 4 Combat}",Ship,Star Empire,5,,Trade Deck,
+Crisis: Bases & Battleships,1,Mega Mech,"{Gain 6 Combat}
+You may return target base from play to its owner's hand.
+<hr>
+{Star Empire Ally}: Draw a card.",Ship,Machine Cult,5,,Trade Deck,
+Crisis: Bases & Battleships,1,Obliterator,"{Gain 7 Combat}
+If your opponent has two or more bases in play, gain an additional {6 Combat}
+<hr>
+{Blob Ally}: Draw a card.",Ship,Blob,6,,Trade Deck,
+Crisis: Bases & Battleships,2,Trade Raft,"{Gain 1 Trade}
+<hr>
+{Trade Federation Ally}: Draw a card.
+<hr>
+{Scrap}: {Gain 1 Trade}",Ship,Trade Federation,1,,Trade Deck,
+Crisis: Bases & Battleships,2,Trade Wheel,"{Gain 1 Trade}
+<hr>
+{Blob Ally}: {Gain 2 Combat}",Base,Blob,3,5,Trade Deck,
+Gambit,3,Merc Cruiser,,Ship,Unaligned,3,,Trade Deck,
+Gambit,1,Bold Raid,,Gambit,Unaligned,,,Gambit,
+Gambit,2,Energy Shield,,Gambit,Unaligned,,,Gambit,"<a href=""https://www.starrealms.com/faq/#errata"">Optional Errata</a> - This card now has the secondary ability ""{Scrap}: Draw a card."""
+Gambit,2,Frontier Fleet,,Gambit,Unaligned,,,Gambit,
+Gambit,1,Political Maneuver,,Gambit,Unaligned,,,Gambit,
+Gambit,2,Rise to Power,,Gambit,Unaligned,,,Gambit,
+Gambit,1,Salvage Operation,,Gambit,Unaligned,,,Gambit,
+Gambit,1,Smuggling Run,,Gambit,Unaligned,,,Gambit,
+Gambit,1,Surprise Assault,,Gambit,Unaligned,,,Gambit,
+Gambit,1,Unlikely Alliance,,Gambit,Unaligned,,,Gambit,
+Gambit,1,Wild Gambit,,Gambit,Unaligned,,,Gambit,
+Gambit,1,Nemesis Beast | Rules (Nemesis Beast),,Solo Challenge,,,50 x Players,Challenge,
+Gambit,1,Nemesis Beast | Rules (Nemesis Beast),,Co-op Challenge,,,50 x Players,Challenge,
+Gambit,1,Pirates of the Dark Star | Rules (Pirates of the Dark Star),,Solo Challenge,,,25 x Players,Challenge,
+Gambit,1,Pirates of the Dark Star | Rules (Pirates of the Dark Star),,Co-op Challenge,,,25 x Players,Challenge,
+Promo Pack 1,2,Battle Barge,"{Gain 5 Combat}
+Target opponent discards a card.
+If you have two or more bases in play, gain an additional {3 Combat} and you may return target base in play to its owner's hand.",Ship,Star Empire,4,,Trade Deck,
+Promo Pack 1,2,Battle Screecher,"{Gain 5 Combat}
+You may scrap up to five cards currently in the trade row.
+<hr>
+{Blob Ally}: {Gain 2 Trade}",Ship,Blob,4,,Trade Deck,
+Promo Pack 1,1,Breeding Site,"If you played a base this turn (including this one), gain {5 Combat}",Base,Blob,4,7,Trade Deck,
+Promo Pack 1,2,Fortress Oblivion,"If you played a base this turn (including this one), you may scrap a card in your hand or discard pile.",Base,Machine Cult,3,4 Outpost,Trade Deck,"<a href=""https://www.starrealms.com/faq/#errata"">Errata</a> - Added reminder text."
+Promo Pack 1,1,Megahauler,"{Gain 5 Authority}
+You may acquire any ship without paying its cost and put it on top of your deck.
+<hr>
+{Trade Federation Ally}: Draw a card.",Ship,Trade Federation,7,,Trade Deck,"<a href=""https://www.starrealms.com/faq/#errata"">Optional Errata</a> - You don't have to acquire a ship if you don't want to."
+Promo Pack 1,1,Mercenary Garrison,"{Star Empire Ally}: {2 Combat}
+<hr>
+{Machine Cult Ally}: Scrap a card from your hand or discard pile.
+<hr>
+{Trade Federation Ally}: {3 Authority}
+<hr>
+{Blob Ally}: Scrap up to two cards currently in the trade row.",Base,Unaligned,4,5 Outpost,Trade Deck,
+Promo Pack 1,2,Security Craft,"{Gain 4 Combat} {Gain 3 Authority}
+<hr>
+{Trade Federation Ally}: {Gain 3 Trade}",Ship,Trade Federation,4,,Trade Deck,
+Promo Pack 1,1,Starbase Omega,"If you played a base this turn (including this one), draw a card.",Base,Star Empire,4,6,Trade Deck,
+Promo Pack 1,2,Starmarket,"If you played a base this turn (including this one), gain {5 Authority} OR {3 Trade}",Base,Trade Federation,4,6,Trade Deck,"<a href=""https://www.starrealms.com/faq/#errata"">Optional Errata</a> - This card costs 4 to acquire."
+Promo Pack 1,1,The Ark,"{Gain 5 Combat}
+You may scrap up to two cards in your hand and/or discard pile. For each card scrapped this way, draw a card.
+<hr>
+{Scrap}: Destroy target base.",Ship,Machine Cult,7,,Trade Deck,
+1st Kickstarter Promo Pack,1,Merc Cruiser,"{Gain 5 Combat}
+Choose a faction as you play Merc Cruiser. Merc Cruiser has that faction.",Ship,Unaligned,3,,Trade Deck,
+"1st Kickstarter Promo Pack,
+Organized Play Season 4",2,Battle Barge,"{Gain 5 Combat}
+Target opponent discards a card.
+If you have two or more bases in play, gain an additional {3 Combat} and you may return target base in play to its owner's hand.",Ship,Star Empire,4,,Trade Deck,
+"1st Kickstarter Promo Pack,
+Organized Play Season 1",2,Battle Screecher,"{Gain 5 Combat}
+You may scrap up to five cards currently in the trade row.
+<hr>
+{Blob Ally}: {Gain 2 Trade}",Ship,Blob,4,,Trade Deck,
+"1st Kickstarter Promo Pack,
+Organized Play Season 4",1,Breeding Site,"If you played a base this turn (including this one), gain {5 Combat}",Base,Blob,4,7,Trade Deck,
+"1st Kickstarter Promo Pack,
+Organized Play Season 2",2,Fortress Oblivion,"If you played a base this turn (including this one), you may scrap a card in your hand or discard pile.",Base,Machine Cult,3,4 Outpost,Trade Deck,"<a href=""https://www.starrealms.com/faq/#errata"">Errata</a> - Added reminder text."
+"1st Kickstarter Promo Pack,
+Organized Play Season 1",1,Megahauler,"{Gain 5 Authority}
+You may acquire any ship without paying its cost and put it on top of your deck.
+<hr>
+{Trade Federation Ally}: Draw a card.",Ship,Trade Federation,7,,Trade Deck,"<a href=""https://www.starrealms.com/faq/#errata"">Optional Errata</a> - You don't have to acquire a ship if you don't want to."
+"1st Kickstarter Promo Pack,
+Organized Play Season 2",1,Starbase Omega,"If you played a base this turn (including this one), draw a card.",Base,Star Empire,4,6,Trade Deck,
+"1st Kickstarter Promo Pack,
+Organized Play Season 3",2,Starmarket,"If you played a base this turn (including this one), gain {5 Authority} OR {3 Trade}",Base,Trade Federation,4,6,Trade Deck,"<a href=""https://www.starrealms.com/faq/#errata"">Optional Errata</a> - This card costs 4 to acquire."
+"1st Kickstarter Promo Pack,
+Organized Play Season 3",1,The Ark,"{Gain 5 Combat}
+You may scrap up to two cards in your hand and/or discard pile. For each card scrapped this way, draw a card.
+<hr>
+{Scrap}: Destroy target base.",Ship,Machine Cult,7,,Trade Deck,
+Core Set,1,Battle Blob,"{Gain 8 Combat}
+<hr>
+{Blob Ally}: Draw a card.
+<hr>
+{Scrap}: {Gain 4 Combat}",Ship,Blob,6,,Trade Deck,
+Core Set,2,Battle Pod,"{Gain 4 Combat}
+You may scrap a card in the trade row.
+<hr>
+{Blob Ally}: {Gain 2 Combat}",Ship,Blob,2,,Trade Deck,
+Core Set,1,Blob Carrier,"{Gain 7 Combat}
+<hr>
+{Blob Ally}: Acquire any ship for free and put it on top of your deck.",Ship,Blob,6,,Trade Deck,
+Core Set,2,Blob Destroyer,"{Gain 6 Combat}
+<hr>
+{Blob Ally}: You may destroy target base and/or scrap a card in the trade row.",Ship,Blob,4,,Trade Deck,
+Core Set,3,Blob Fighter,"{Gain 3 Combat}
+<hr>
+{Blob Ally}: Draw a card.",Ship,Blob,1,,Trade Deck,
+Core Set,3,Blob Wheel,"{Gain 1 Combat}
+<hr>
+{Scrap}: {Gain 3 Trade}",Base,Blob,3,5,Trade Deck,
+Core Set,1,Blob World,"{Gain 5 Combat}
+OR Draw a card for each Blob card that you've played this turn.",Base,Blob,8,,Trade Deck,
+Core Set,1,Mothership,"{Gain 6 Combat}
+Draw a card.
+<hr>
+{Blob Ally}: Draw a card.",Ship,Blob,7,,Trade Deck,
+Core Set,2,Ram,"{Gain 5 Combat}
+<hr>
+{Blob Ally}: {Gain 2 Combat}
+<hr>
+{Scrap}: {Gain 3 Trade}",Ship,Blob,3,,Trade Deck,
+Core Set,1,The Hive,"{Gain 3 Combat}
+<hr>
+{Blob Ally}: Draw a card.",Base,Blob,5,5,Trade Deck,
+Core Set,3,Trade Pod,"{Gain 3 Trade}
+<hr>
+{Blob Ally}: {Gain 2 Combat}",Ship,Blob,2,,Trade Deck,
+Core Set,1,Battle Mech,"{Gain 4 Combat}
+You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: Draw a card.",Ship,Machine Cult,5,,Trade Deck,
+Core Set,2,Battle Station,{Scrap}: {Gain 5 Combat},Base,Machine Cult,3,5 Outpost,Trade Deck,
+Core Set,1,Brain World,Scrap up to two cards from your hand and/or discard pile. Draw a card for each card scrapped this way.,Base,Machine Cult,8,6 Outpost,Trade Deck,
+Core Set,1,Junkyard,Scrap a card in your hand or discard pile.,Base,Machine Cult,6,5 Outpost,Trade Deck,
+Core Set,1,Machine Base,"Draw a card, then scrap a card from your hand.",Base,Machine Cult,7,6 Outpost,Trade Deck,
+Core Set,1,Mech World,Mech World counts as an ally for all factions.,Base,Machine Cult,5,6 Outpost,Trade Deck,
+Core Set,3,Missile Bot,"{Gain 2 Combat}
+You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: {Gain 2 Combat}",Ship,Machine Cult,2,,Trade Deck,
+Core Set,1,Missile Mech,"{Gain 6 Combat}
+You may destroy target base.
+<hr>
+{Machine Cult Ally}: Draw a card.",Ship,Machine Cult,6,,Trade Deck,
+Core Set,2,Patrol Mech,"{Gain 3 Trade} OR {Gain 5 Combat}
+<hr>
+{Machine Cult Ally}: Scrap a card in your hand or discard pile.",Ship,Machine Cult,4,,Trade Deck,
+Core Set,1,Stealth Needle,Copy another ship you've played this turn. Stealth Needle has that ship's faction in addition to Machine Cult.,Ship,Machine Cult,4,,Trade Deck,
+Core Set,3,Supply Bot,"{Gain 2 Trade}
+You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: {Gain 2 Combat}",Ship,Machine Cult,3,,Trade Deck,
+Core Set,3,Trade Bot,"{Gain 1 Trade}
+You may scrap a card in your hand or discard pile.
+<hr>
+{Machine Cult Ally}: {Gain 2 Combat}",Ship,Machine Cult,1,,Trade Deck,
+Core Set,1,Battlecruiser,"{Gain 5 Combat} Draw a card.
+<hr>
+{Star Empire Ally}: Target opponent discards a card.
+<hr>
+{Scrap}: Draw a card. You may destroy target base.",Ship,Star Empire,6,,Trade Deck,
+Core Set,2,Corvette,"{Gain 1 Combat}
+Draw a card.
+<hr>
+{Star Empire Ally}: {Gain 2 Combat}",Ship,Star Empire,2,,Trade Deck,
+Core Set,1,Dreadnaught,"{Gain 7 Combat}
+Draw a card.
+<hr>
+{Scrap}: {Gain 5 Combat}",Ship,Star Empire,7,,Trade Deck,
+Core Set,1,Fleet HQ,"Whenever you play a ship, gain {1 Combat}",Base,Star Empire,8,8,Trade Deck,"<a href=""https://www.starrealms.com/faq/#errata"">Errata</a> - Only ships played while Fleet HQ is in play gain the 1 combat bonus."
+Core Set,3,Imperial Fighter,"{Gain 2 Combat}
+Target opponent discards a card.
+<hr>
+{Star Empire Ally}: {Gain 2 Combat}",Ship,Star Empire,1,,Trade Deck,
+Core Set,3,Imperial Frigate,"{Gain 4 Combat} Target opponent discards a card.
+<hr>
+{Star Empire Ally}: {Gain 2 Combat}
+<hr>
+{Scrap}: Draw a card.",Ship,Star Empire,3,,Trade Deck,
+Core Set,2,Recycling Station,"{Gain 1 Trade}
+OR discard up to two cards, then draw that many cards.",Base,Star Empire,4,4 Outpost,Trade Deck,
+Core Set,1,Royal Redoubt,"{Gain 3 Combat}
+<hr>
+{Star Empire Ally}: Target opponent discards a card.",Base,Star Empire,6,6 Outpost,Trade Deck,
+Core Set,2,Space Station,"{Gain 2 Combat}
+<hr>
+{Star Empire Ally}: {Gain 2 Combat}
+<hr>
+{Scrap}: {Gain 4 Trade}",Base,Star Empire,4,4 Outpost,Trade Deck,
+Core Set,3,Survey Ship,"{Gain 1 Trade}
+Draw a card.
+<hr>
+{Scrap}: Target opponent discards a card.",Ship,Star Empire,3,,Trade Deck,
+Core Set,1,War World,"{Gain 3 Combat}
+<hr>
+{Star Empire Ally}: {Gain 4 Combat}",Base,Star Empire,5,4 Outpost,Trade Deck,
+Core Set,2,Barter World,"{Gain 2 Authority} OR {Gain 2 Trade}
+<hr>
+{Scrap}: {Gain 5 Combat}",Base,Trade Federation,4,4,Trade Deck,
+Core Set,1,Central Office,"{Gain 2 Trade} You may put the next ship you acquire this turn on top of your deck.
+<hr>
+{Trade Federation Ally}: Draw a card.",Base,Trade Federation,7,6,Trade Deck,
+Core Set,1,Command Ship,"{Gain 4 Authority} {Gain 5 Combat}
+Draw two cards.
+<hr>
+{Trade Federation Ally}: Destroy target base.",Ship,Trade Federation,8,,Trade Deck,
+Core Set,3,Cutter,"{Gain 4 Authority} {Gain 2 Trade}
+<hr>
+{Trade Federation Ally}: {Gain 4 Combat}",Ship,Trade Federation,2,,Trade Deck,
+Core Set,1,Defense Center,"{Gain 3 Authority} OR {Gain 2 Combat}
+<hr>
+{Trade Federation Ally}: {Gain 2 Combat}",Base,Trade Federation,5,5 Outpost,Trade Deck,
+Core Set,2,Embassy Yacht,"{Gain 3 Authority} {Gain 2 Trade}
+If you have two or more bases in play, draw two cards.",Ship,Trade Federation,3,,Trade Deck,
+Core Set,3,Federation Shuttle,"{Gain 2 Trade}
+{Trade Federation Ally}: {Gain 4 Authority}",Ship,Trade Federation,1,,Trade Deck,
+Core Set,1,Flagship,"{Gain 5 Combat}
+Draw a card.
+<hr>
+{Trade Federation Ally}: {Gain 5 Authority}",Ship,Trade Federation,6,,Trade Deck,
+Core Set,2,Freighter,"{Gain 4 Trade}
+<hr>
+{Trade Federation Ally}: You may put the next ship you acquire this turn on top of your deck.",Ship,Trade Federation,4,,Trade Deck,
+Core Set,1,Port of Call,"{Gain 3 Trade}
+<hr>
+{Scrap}: Draw a card. You may destroy target base.",Base,Trade Federation,6,6 Outpost,Trade Deck,
+Core Set,1,Trade Escort,"{Gain 4 Authority} {Gain 4 Combat}
+<hr>
+{Trade Federation Ally}: Draw a card.",Ship,Trade Federation,5,,Trade Deck,
+Core Set,2,Trading Post,"{Gain 1 Authority} OR {Gain 1 Trade}
+<hr>
+{Scrap}: {Gain 3 Combat}",Base,Trade Federation,3,4 Outpost,Trade Deck,
+Core Set,10,Explorer,"{Gain 2 Trade}
+<hr>
+{Scrap}: {Gain 2 Combat}",Ship,Unaligned,2,,Explorer Pile,
+Core Set,16,Scout,{Gain 1 Trade},Ship,Unaligned,,,Personal Deck,
+Core Set,4,Viper,{Gain 1 Combat},Ship,Unaligned,,,Personal Deck,
+Core Set (First Edition),6,Scorecard (10) | Scorecard (20),,Scorecard,,,,Scorecard,
+Core Set (First Edition),12,Scorecard (1) | Scorecard (5),,Scorecard,,,,Scorecard,
+Core Set (Second Edition),1,Scorecard (40-70) | Scorecard (00-30),,Scorecard,Red,,,Scorecard,
+Core Set (Second Edition),1,Scorecard (00-09) | Scorecard (80-89),,Scorecard,Red,,,Scorecard,
+Core Set (Second Edition),1,Scorecard (40-70) | Scorecard (00-30),,Scorecard,Yellow,,,Scorecard,
+Core Set (Second Edition),1,Scorecard (00-09) | Scorecard (80-89),,Scorecard,Yellow,,,Scorecard,
+"Promos (Battlecruiser Storage Box),
+Promos (Imperial Fighter Deck Box)",1,Mercenary Garrison,"{Star Empire Ally}: {Gain 2 Combat}
+<hr>
+{Machine Cult Ally}: Scrap a card from your hand or discard pile.
+<hr>
+{Trade Federation Ally}: {Gain 3 Authority}
+<hr>
+{Blob Ally}: Scrap up to two cards currently in the trade row.",Base,Unaligned,4,5 Outpost,Trade Deck,
+Promos (Dice Tower 2016),1,Security Craft,"{Gain 4 Combat} {Gain 3 Authority}
+<hr>
+{Trade Federation Ally}: {Gain 3 Trade}",Ship,Trade Federation,4,,Trade Deck,
+Promos (Mech Cruiser Storage Box ),1,Merc Battlecruiser,"{Gain 6 Combat}
+Draw a card.
+Choose a faction as you play Merc Battlecruiser. Merc Battlecruiser is that faction.",Ship,Unaligned,6,,Trade Deck,
