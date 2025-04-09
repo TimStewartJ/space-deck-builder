@@ -38,12 +38,13 @@ def load_cards(file_path):
             card = Card(
                 name=row['Name'],
                 cost=cost,
-                effects=row['Text'].split('<hr>') if row['Text'] else [],  # Effects are separated by <hr>
+                effects=[effect.strip() for effect in row['Text'].split('<hr>')] if row['Text'] else [],  # Effects are separated by <hr>
                 card_type=card_type,
                 defense=defense,
                 faction=faction
             )
             # Add multiple copies based on Qty
             qty = int(row.get('Qty', 1))
+            print(f"Adding {qty} copies of {card}")
             cards.extend([card] * qty)
     return cards

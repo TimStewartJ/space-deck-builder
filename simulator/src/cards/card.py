@@ -16,3 +16,16 @@ class Card:
     def apply_effects(self, game_state):
         for effect in self.effects:
             effect.apply(game_state)
+
+    def __str__(self):
+        info = [f"{self.name} ({self.cost} cost)"]
+        if self.faction:
+            faction_str = self.faction if isinstance(self.faction, str) else "/".join(self.faction)
+            info.append(f"Faction: {faction_str}")
+        if self.defense is not None:
+            info.append(f"Defense: {self.defense}")
+        info.append(f"Type: {self.card_type}")
+        effects_str = ", ".join(str(effect) for effect in self.effects)
+        if effects_str:
+            info.append(f"Effects: {effects_str}")
+        return " | ".join(info)
