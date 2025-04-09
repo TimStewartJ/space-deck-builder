@@ -206,7 +206,7 @@ class Game:
     def _has_faction_ally(self, faction, current_card):
         """Check if player has played another card of the specified faction this turn"""
         for card in self.current_player.played_cards:
-            if card.faction.lower() == faction.lower() and card != current_card:
+            if card.faction and card.faction.lower() == faction.lower() and card != current_card:
                 return True
         return False
         
