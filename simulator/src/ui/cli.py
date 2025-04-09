@@ -6,7 +6,7 @@ from src.ai.random_agent import RandomAgent
 class CLI:
     def __init__(self):
         self.game = None
-        self.verbose = False
+        self.verbose = True
     
     def display_welcome(self):
         print("Welcome to the Space Deck Builder!")
