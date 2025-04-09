@@ -4,7 +4,7 @@ from src.engine.player import Player
 from src.engine.actions import ActionType, Action, get_available_actions
 
 class Game:
-    def __init__(self, cards=None):
+    def __init__(self, cards=None, verbose=False):
         self.players: List[Player] = []
         self.current_turn = 0
         self.is_game_over = False
@@ -12,6 +12,11 @@ class Game:
         self.trade_row = []
         self.is_running = False
         self.current_player: Player = None
+        self.verbose = verbose
+
+    def log(self, message):
+        if self.verbose:
+            print(f"[Game] {message}")
 
     def start_game(self):
         if not self.trade_deck:
@@ -26,7 +31,9 @@ class Game:
         self.shuffle_trade_deck()
         # Fill the trade row with 5 cards
         while len(self.trade_row) < 5 and self.trade_deck:
-            self.trade_row.append(self.trade_deck.pop())
+            card = self.trade_deck.pop()
+            self.trade_row.append(card)
+            self.log(f"Added {card.name} to trade row")
 
     def shuffle_trade_deck(self):
         import random
@@ -52,10 +59,10 @@ class Game:
         starting_deck = []
         # Add 8 Scouts
         for _ in range(8):
-            starting_deck.append(Card("Scout", 0, ["Gain 1 Trade"], "ship"))
+            starting_deck.append(Card("Scout", 0, ["{Gain 1 Trade}"], "ship"))
         # Add 2 Vipers
         for _ in range(2):
-            starting_deck.append(Card("Viper", 0, ["Gain 1 Combat"], "ship"))
+            starting_deck.append(Card("Viper", 0, ["{Gain 1 Combat}"], "ship"))
         return starting_deck
 
     def next_turn(self):
@@ -65,11 +72,14 @@ class Game:
         self.current_player = self.players[self.current_turn]
         self.current_player.reset_resources()
         
+        self.log(f"Starting turn for {self.current_player.name}")
+        
         # Process player turn until they choose to end it
         self.process_player_turn()
         
         # End turn and move to next player
         self.current_player.end_turn()
+        self.log(f"Ended turn for {self.current_player.name}")
         self.current_turn = (self.current_turn + 1) % len(self.players)
         
     def process_player_turn(self):
@@ -84,6 +94,8 @@ class Game:
     
     def execute_action(self, action):
         """Execute a player's action and update game state"""
+        self.log(f"{self.current_player.name} executing action: {action}")
+        
         if action.type == ActionType.END_TURN:
             return True  # End the turn
             
@@ -92,6 +104,7 @@ class Game:
             for card in self.current_player.hand:
                 if card.name == action.card_id:
                     self.current_player.play_card(card)
+                    self.log(f"{self.current_player.name} played {card.name}")
                     self.apply_card_effects(card)
                     break
                     
@@ -101,13 +114,15 @@ class Game:
                 if card.name == action.card_id and self.current_player.trade >= card.cost:
                     self.current_player.trade -= card.cost
                     self.current_player.discard_pile.append(card)
+                    self.log(f"{self.current_player.name} bought {card.name} for {card.cost} trade")
                     self.trade_row.pop(i)
                     # Replace card in trade row
                     if self.trade_deck:
-                        self.trade_row.append(self.trade_deck.pop())
+                        new_card = self.trade_deck.pop()
+                        self.trade_row.append(new_card)
+                        self.log(f"Added {new_card.name} to trade row")
                     break
-                    
-        # ... similar logic for other action types ...
+
         
         return False  # Turn continues
     
@@ -119,17 +134,22 @@ class Game:
             card: The card being played
             scrap: Boolean indicating if this is a scrap effect being activated
         """
+        self.log(f"Applying effects for {card.name}")
+        
         import re
 
         for effect in card.effects:
             effect = effect.strip()
             if not effect:
                 continue
+            
+            self.log(f"Processing effect: {effect}")
                 
             # Handle scrap abilities - only apply if card is being scrapped
             if effect.startswith("{Scrap}:"):
                 if scrap:
                     effect = effect.replace("{Scrap}:", "").strip()
+                    self.log(f"Applying scrap effect: {effect}")
                     self._parse_and_apply_effect(effect, card)
                 continue
                 
@@ -141,6 +161,7 @@ class Game:
                 
                 # Check if the player has played another card of this faction
                 if self._has_faction_ally(faction, card):
+                    self.log(f"Applying faction ally effect for {faction}: {ally_effect}")
                     self._parse_and_apply_effect(ally_effect, card)
                 continue
             
@@ -148,6 +169,7 @@ class Game:
             if "OR" in effect:
                 # For now just apply the first choice, later implement player choice
                 choices = effect.split("OR")
+                self.log(f"Applying first choice of: {effect}")
                 self._parse_and_apply_effect(choices[0].strip(), card)
                 continue
                 

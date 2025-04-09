@@ -6,6 +6,7 @@ from src.ai.random_agent import RandomAgent
 class CLI:
     def __init__(self):
         self.game = None
+        self.verbose = False
     
     def display_welcome(self):
         print("Welcome to the Space Deck Builder!")
@@ -15,6 +16,7 @@ class CLI:
         print("Available commands:")
         print("  start - Start a new game")
         print("  start ai - Start a game against AI")
+        print("  verbose - Toggle verbose mode")
         print("  exit - Exit the game")
     
     def get_player_action(self, available_actions):
@@ -65,7 +67,7 @@ class CLI:
             
             if command == "start":
                 cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
-                self.game = Game(cards)
+                self.game = Game(cards, verbose=self.verbose)
                 
                 # Add human player
                 player1 = self.game.add_player()
@@ -85,7 +87,7 @@ class CLI:
             
             elif command == "start ai":
                 cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
-                self.game = Game(cards)
+                self.game = Game(cards, verbose=self.verbose)
                 
                 # Add human player
                 player1 = self.game.add_player()
@@ -102,6 +104,12 @@ class CLI:
                 while not self.game.is_game_over:
                     self.display_game_state()
                     self.game.next_turn()
+            
+            elif command == "verbose":
+                self.verbose = not self.verbose
+                if self.game:
+                    self.game.verbose = self.verbose
+                print(f"Verbose mode {'enabled' if self.verbose else 'disabled'}")
             
             elif command == "help":
                 self.display_help()
