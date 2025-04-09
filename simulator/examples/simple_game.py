@@ -1,9 +1,9 @@
 from src.engine.game import Game
-from src.cards.loader import load_cards
+from src.cards.loader import load_trade_deck_cards
 
 def main():
     # Load cards from CSV
-    cards = load_cards('data/cards.csv')
+    cards = load_trade_deck_cards('data/cards.csv')
 
     # Create a new game instance
     game = Game(cards)

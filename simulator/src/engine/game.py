@@ -19,7 +19,7 @@ class Game:
         self.setup_trade_row()
         self.is_game_over = False
         self.is_running = True
-        self.next_turn()
+        self.current_player = self.players[self.current_turn]
 
     def setup_trade_row(self):
         self.shuffle_trade_deck()
@@ -32,6 +32,10 @@ class Game:
         random.shuffle(self.trade_deck)
 
     def setup_players(self):
+        # Shuffle players to randomize turn order
+        import random
+        random.shuffle(self.players)
+
         for player in self.players:
             # Initialize each player's starting deck with 8 Scouts and 2 Vipers
             starting_deck = self.create_starting_deck()

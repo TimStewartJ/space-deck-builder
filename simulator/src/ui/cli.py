@@ -1,5 +1,5 @@
 from src.engine.game import Game
-from src.cards.loader import load_cards
+from src.cards.loader import load_trade_deck_cards
 from src.ai.human_agent import HumanAgent
 from src.ai.random_agent import RandomAgent
 
@@ -63,7 +63,7 @@ class CLI:
             command = input("> ").strip().lower()
             
             if command == "start":
-                cards = load_cards('data/cards.csv')
+                cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
                 self.game = Game(cards)
                 
                 # Add human player
@@ -83,7 +83,7 @@ class CLI:
                     self.game.next_turn()
             
             elif command == "start ai":
-                cards = load_cards('data/cards.csv')
+                cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
                 self.game = Game(cards)
                 
                 # Add human player

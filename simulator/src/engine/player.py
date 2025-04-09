@@ -1,14 +1,16 @@
+from typing import List
+from src.cards.card import Card
 from src.ai.agent import Agent
 from src.engine.actions import Action, ActionType
 
 class Player:
     def __init__(self, name, agent=None):
         self.name = name
-        self.hand = []
-        self.deck = []
-        self.discard_pile = []
-        self.bases = []
-        self.played_cards = []
+        self.hand: List[Card] = []
+        self.deck: List[Card] = []
+        self.discard_pile: List[Card] = []
+        self.bases: List[Card] = []
+        self.played_cards: List[Card] = []
         self.health = 50  # Starting authority
         self.agent: Agent = agent  # Could be human or AI
         
@@ -39,7 +41,7 @@ class Player:
         if card in self.hand:
             self.hand.remove(card)
             self.played_cards.append(card)
-            if card.type == "base":
+            if card.card_type == "base":
                 self.bases.append(card)
             # Note: card effects are applied in Game.execute_action
             return True
