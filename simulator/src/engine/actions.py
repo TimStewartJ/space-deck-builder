@@ -46,22 +46,36 @@ def get_available_actions(game_state, player):
     for card in game_state.trade_row:
         if player.trade >= card.cost:
             actions.append(Action(type=ActionType.BUY_CARD, card_id=card.name))
-    
-    # Add attack actions if player has combat available
+      # Add attack actions if player has combat available
     if player.combat > 0:
         for opponent in game_state.players:
             if opponent != player:
-                # First target outposts
-                for base in [b for b in opponent.bases if b.is_outpost()]:
-                    if player.combat >= base.defense:
-                        actions.append(Action(type=ActionType.ATTACK_BASE, target_id=base.name))
-                
-                # If no outposts, can attack other bases or player directly
-                if not any(b.is_outpost() for b in opponent.bases):
+                # First check for outposts - must be destroyed before attacking other bases or player
+                outposts = [b for b in opponent.bases if b.is_outpost()]
+                if outposts:
+                    # Can only attack outposts
+                    for outpost in outposts:
+                        if player.combat >= outpost.defense:
+                            actions.append(Action(
+                                type=ActionType.ATTACK_BASE,
+                                target_id=outpost.name,
+                                additional_params={"defense": outpost.defense}
+                            ))
+                else:
+                    # If no outposts, can attack other bases or player directly
                     for base in [b for b in opponent.bases if not b.is_outpost()]:
                         if player.combat >= base.defense:
-                            actions.append(Action(type=ActionType.ATTACK_BASE, target_id=base.name))
-                    actions.append(Action(type=ActionType.ATTACK_PLAYER, target_id=opponent.name))
+                            actions.append(Action(
+                                type=ActionType.ATTACK_BASE,
+                                target_id=base.name,
+                                additional_params={"defense": base.defense}
+                            ))
+                    # Can attack player directly only if no outposts
+                    actions.append(Action(
+                        type=ActionType.ATTACK_PLAYER,
+                        target_id=opponent.name,
+                        additional_params={"damage": player.combat}
+                    ))
     
     # Always allow ending turn
     actions.append(Action(type=ActionType.END_TURN))

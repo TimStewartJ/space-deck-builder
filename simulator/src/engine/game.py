@@ -122,7 +122,34 @@ class Game:
                         self.trade_row.append(new_card)
                         self.log(f"Added {new_card.name} to trade row")
                     break
+        
+        elif action.type == ActionType.ATTACK_BASE:
+            # Find target base
+            for player in self.players:
+                if player != self.current_player:
+                    for base in player.bases:
+                        if base.name == action.target_id and self.current_player.combat >= base.defense:
+                            self.current_player.combat -= base.defense
+                            player.bases.remove(base)
+                            player.discard_pile.append(base)
+                            self.log(f"{self.current_player.name} destroyed {player.name}'s {base.name}")
+                            break
 
+        elif action.type == ActionType.ATTACK_PLAYER:
+            # Attack player directly
+            for player in self.players:
+                if player != self.current_player and player.name == action.target_id:
+                    # Only allow attacking if no outposts present
+                    if not any(b.is_outpost() for b in player.bases):
+                        damage = self.current_player.combat
+                        player.health -= damage
+                        self.current_player.combat = 0
+                        self.log(f"{self.current_player.name} attacked {player.name} for {damage} damage")
+                        # Check for game over
+                        if player.health <= 0:
+                            self.log(f"{player.name} has been defeated!")
+                            self.is_game_over = True
+                        break
         
         return False  # Turn continues
     
