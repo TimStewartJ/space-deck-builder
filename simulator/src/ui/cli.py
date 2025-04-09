@@ -22,6 +22,8 @@ def main():
         if command == "start":
             cards = load_cards('data/cards.csv')
             game = Game(cards)
+            game.add_player()
+            game.add_player()
             game.start_game()
             print("Game started!")
             # Additional game loop logic would go here

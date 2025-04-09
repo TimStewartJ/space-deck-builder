@@ -60,8 +60,12 @@ class Game:
         # Logic to determine the winner and end the game
         pass
 
-    def add_player(self, player):
+    def add_player(self):
         if len(self.players) < 4:  # Maximum 4 players
+            from src.engine.player import Player
+            player_number = len(self.players) + 1
+            player = Player(f"Player {player_number}")
             self.players.append(player)
+            return player
         else:
             raise ValueError("Maximum number of players reached")
