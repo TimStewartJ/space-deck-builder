@@ -1,3 +1,4 @@
+from src.ai.agent import Agent
 from src.engine.actions import Action, ActionType
 
 class Player:
@@ -9,7 +10,7 @@ class Player:
         self.bases = []
         self.played_cards = []
         self.health = 50  # Starting authority
-        self.agent = agent  # Could be human or AI
+        self.agent: Agent = agent  # Could be human or AI
         
         # Resources that reset each turn
         self.trade = 0
