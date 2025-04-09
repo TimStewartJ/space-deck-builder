@@ -1,11 +1,16 @@
+from typing import List
+from src.engine.player import Player
+from src.engine.actions import ActionType, Action, get_available_actions
+
 class Game:
     def __init__(self, cards=None):
-        self.players = []
+        self.players: List[Player] = []
         self.current_turn = 0
         self.is_game_over = False
         self.trade_deck = cards if cards else []
         self.trade_row = []
         self.is_running = False
+        self.current_player: Player = None
 
     def start_game(self):
         if not self.trade_deck:
@@ -49,10 +54,69 @@ class Game:
         return starting_deck
 
     def next_turn(self):
-        if not self.is_game_over:
-            current_player = self.players[self.current_turn]
-            # Logic for the current player's turn
-            self.current_turn = (self.current_turn + 1) % len(self.players)
+        if self.is_game_over:
+            return
+        
+        self.current_player = self.players[self.current_turn]
+        self.current_player.reset_resources()
+        
+        # Process player turn until they choose to end it
+        self.process_player_turn()
+        
+        # End turn and move to next player
+        self.current_player.end_turn()
+        self.current_turn = (self.current_turn + 1) % len(self.players)
+        
+    def process_player_turn(self):
+        turn_ended = False
+        
+        while not turn_ended:
+            # Get player decision (through UI or AI)
+            action = self.current_player.make_decision(self)
+            
+            if action:
+                turn_ended = self.execute_action(action)
+    
+    def execute_action(self, action):
+        """Execute a player's action and update game state"""
+        if action.type == ActionType.END_TURN:
+            return True  # End the turn
+            
+        elif action.type == ActionType.PLAY_CARD:
+            # Find the card in player's hand
+            for card in self.current_player.hand:
+                if card.name == action.card_id:
+                    self.current_player.play_card(card)
+                    self.apply_card_effects(card)
+                    break
+                    
+        elif action.type == ActionType.BUY_CARD:
+            # Find the card in trade row
+            for i, card in enumerate(self.trade_row):
+                if card.name == action.card_id and self.current_player.trade >= card.cost:
+                    self.current_player.trade -= card.cost
+                    self.current_player.discard_pile.append(card)
+                    self.trade_row.pop(i)
+                    # Replace card in trade row
+                    if self.trade_deck:
+                        self.trade_row.append(self.trade_deck.pop())
+                    break
+                    
+        # ... similar logic for other action types ...
+        
+        return False  # Turn continues
+    
+    def apply_card_effects(self, card):
+        """Apply the effects of a played card"""
+        for effect in card.effects:
+            # Parse effect string and apply it
+            if "Gain 1 Trade" in effect:
+                self.current_player.trade += 1
+            elif "Gain 2 Trade" in effect:
+                self.current_player.trade += 2
+            elif "Gain 1 Combat" in effect:
+                self.current_player.combat += 1
+            # Add more effect parsing as needed
 
     def end_game(self):
         self.is_game_over = True
