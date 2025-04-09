@@ -43,5 +43,7 @@ def load_cards(file_path):
                 defense=defense,
                 faction=faction
             )
-            cards.append(card)
+            # Add multiple copies based on Qty
+            qty = int(row.get('Qty', 1))
+            cards.extend([card] * qty)
     return cards
