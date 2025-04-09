@@ -1,13 +1,47 @@
 from src.engine.game import Game
 from src.cards.loader import load_trade_deck_cards
 from src.ai.human_agent import HumanAgent
-from src.ai.random_agent import RandomAgent
+import os
+import importlib
+import inspect
+from src.ai.agent import Agent
 
 class CLI:
     def __init__(self):
         self.game = None
         self.verbose = True
+        self.available_agents = self._discover_agents()
     
+    def _discover_agents(self):
+        """Find all available agent classes in the ai directory"""
+        agents = {}
+        ai_dir = os.path.join(os.path.dirname(__file__), '..', 'ai')
+        
+        # List all python files in the ai directory
+        for file in os.listdir(ai_dir):
+            if file.endswith('.py') and not file.startswith('__'):
+                module_name = file[:-3]  # Remove .py extension
+                try:
+                    # Import the module
+                    module = importlib.import_module(f'src.ai.{module_name}')
+                    
+                    # Find all classes that inherit from Agent
+                    for name, obj in inspect.getmembers(module):
+                        if (inspect.isclass(obj) and 
+                            issubclass(obj, Agent) and 
+                            obj != Agent):
+                            agents[name] = obj
+                except Exception as e:
+                    print(f"Warning: Could not load agent from {file}: {e}")
+        
+        return agents
+    
+    def list_agents(self):
+        """Display list of available agents"""
+        print("\nAvailable Agents:")
+        for name, agent_class in self.available_agents.items():
+            print(f"  {name}")
+            
     def display_welcome(self):
         print("Welcome to the Space Deck Builder!")
         print("Type 'help' for a list of commands.")
@@ -16,6 +50,7 @@ class CLI:
         print("Available commands:")
         print("  start - Start a new game")
         print("  start ai - Start a game against AI")
+        print("  agents - List available AI agents")
         print("  verbose - Toggle verbose mode")
         print("  exit - Exit the game")
     
@@ -86,6 +121,24 @@ class CLI:
                     self.game.next_turn()
             
             elif command == "start ai":
+                # Show available agents
+                print("\nChoose an AI opponent:")
+                agents = list(self.available_agents.items())
+                for i, (name, _) in enumerate(agents):
+                    print(f"{i+1}. {name}")
+                
+                # Get player choice
+                while True:
+                    try:
+                        choice = int(input("Enter your choice (number): ")) - 1
+                        if 0 <= choice < len(agents):
+                            agent_name, agent_class = agents[choice]
+                            break
+                        else:
+                            print("Invalid choice. Try again.")
+                    except ValueError:
+                        print("Please enter a number.")
+                
                 cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
                 self.game = Game(cards, verbose=self.verbose)
                 
@@ -93,12 +146,12 @@ class CLI:
                 player1 = self.game.add_player()
                 player1.agent = HumanAgent(name="Human", cli_interface=self)
                 
-                # Add AI player
+                # Add chosen AI player
                 player2 = self.game.add_player()
-                player2.agent = RandomAgent(name="AI")
+                player2.agent = agent_class(name=f"AI ({agent_name})")
                 
                 self.game.start_game()
-                print("Game started against AI!")
+                print(f"Game started against {agent_name}!")
                 
                 # Main game loop
                 while not self.game.is_game_over:
@@ -113,6 +166,9 @@ class CLI:
             
             elif command == "help":
                 self.display_help()
+                
+            elif command == "agents":
+                self.list_agents()
                 
             elif command == "exit":
                 print("Exiting the game.")
