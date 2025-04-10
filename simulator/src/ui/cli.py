@@ -119,10 +119,9 @@ class CLI:
                 agents = list(self.available_agents.items())
                 
                 def select_agent(player_num):
-                    print(f"\nChoose agent for Player {player_num}:")
+                    print(f"\nSelect agent for Player {player_num}:")
                     for i, (name, _) in enumerate(agents):
-                        print(f"{i+1}. {name}")
-                    
+                        print(f"{i + 1}. {name}")
                     while True:
                         try:
                             choice = int(input("Enter your choice (number): ")) - 1
@@ -132,8 +131,9 @@ class CLI:
                             else:
                                 print("Invalid choice. Try again.")
                         except ValueError:
-                            print("Please enter a number.")
-                
+                            pass
+                        print(f"Please enter a number between 1 and {len(agents)}")
+
                 # Select agents for both players
                 name1, agent1 = select_agent(1)
                 name2, agent2 = select_agent(2)
@@ -186,13 +186,18 @@ class CLI:
                     elif winner == "Player 2":
                         self.win_stats[name2] += 1
 
+                    # Display game statistics
+                    print("\n" + "="*50)
+                    print(self.game.stats.get_summary())
+                    print("="*50)
+
                     # Clean up pygame
                     if self.pygame_ui:
                         self.pygame_ui.close()
                         self.pygame_ui = None
                 
                 # Print final statistics
-                print("\nFinal Results:")
+                print("\nOverall Results:")
                 print(f"{name1}: {self.win_stats[name1]} wins")
                 print(f"{name2}: {self.win_stats[name2]} wins")
             
@@ -201,23 +206,19 @@ class CLI:
                 if self.game:
                     self.game.verbose = self.verbose
                 print(f"Verbose mode {'enabled' if self.verbose else 'disabled'}")
-
+            
             elif command == "pygame":
                 self.use_pygame = not self.use_pygame
-                print(f"Pygame visualization {'enabled' if self.use_pygame else 'disabled'}")
+                print(f"Pygame UI {'enabled' if self.use_pygame else 'disabled'}")
             
-            elif command == "help":
+            elif command in ["help", "h", "?"]:
                 self.display_help()
-                
-            elif command == "agents":
-                self.list_agents()
-                
-            elif command == "exit":
-                print("Exiting the game.")
+            
+            elif command in ["quit", "q", "exit"]:
                 break
-                
-            else:
-                print("Unknown command. Type 'help' for a list of commands.")
+            
+            elif command:
+                print("Unknown command. Type 'help' for available commands.")
 
 if __name__ == "__main__":
     CLI().main()

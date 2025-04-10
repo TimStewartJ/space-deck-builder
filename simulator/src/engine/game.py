@@ -5,6 +5,7 @@ from src.engine.card_effects import CardEffects
 from src.cards.card import Card
 from src.engine.player import Player
 from src.engine.actions import ActionType, Action, get_available_actions
+from src.engine.game_stats import GameStats
 
 class Game:
     def __init__(self, cards=None, verbose=False):
@@ -17,6 +18,7 @@ class Game:
         self.current_player: Player = None
         self.verbose = verbose
         self.card_effects = CardEffects()
+        self.stats = GameStats()
 
     def start_game(self):
         if not self.trade_deck:
@@ -45,6 +47,8 @@ class Game:
         random.shuffle(self.players)
 
         for player in self.players:
+            # Initialize statistics for this player
+            self.stats.add_player(player.name)
             # Initialize each player's starting deck with 8 Scouts and 2 Vipers
             starting_deck = self.create_starting_deck()
             player.deck.extend(starting_deck)
@@ -52,6 +56,7 @@ class Game:
             # Draw initial hand
             for _ in range(5):
                 player.draw_card()
+                self.stats.record_card_draw(player.name)
 
     def create_starting_deck(self):
         from src.cards.effects import Effect
@@ -71,6 +76,7 @@ class Game:
         if self.is_game_over:
             return
         
+        self.stats.total_turns += 1
         self.current_player = self.players[self.current_turn]
         self.current_player.reset_resources()
         
@@ -109,6 +115,7 @@ class Game:
             for card in self.current_player.hand:
                 if card.name == action.card_id:
                     self.current_player.play_card(card)
+                    self.stats.record_card_play(self.current_player.name)
                     log(f"{self.current_player.name} played {card.name}")
                     self.card_effects.apply_card_effects(self, current_player=self.current_player, card=card)
                     break
@@ -119,12 +126,14 @@ class Game:
                 if card.name == action.card_id and self.current_player.trade >= card.cost:
                     self.current_player.trade -= card.cost
                     self.current_player.discard_pile.append(card)
+                    self.stats.record_card_buy(self.current_player.name)
                     log(f"{self.current_player.name} bought {card.name} for {card.cost} trade")
                     self.trade_row.pop(i)
                     # Replace card in trade row
                     if self.trade_deck:
                         new_card = self.trade_deck.pop()
                         self.trade_row.append(new_card)
+                        self.stats.trade_row_refreshes += 1
                         log(f"Added {new_card.name} to trade row")
                     break
         
@@ -137,6 +146,7 @@ class Game:
                             self.current_player.combat -= base.defense
                             player.bases.remove(base)
                             player.discard_pile.append(base)
+                            self.stats.record_base_destroy(self.current_player.name)
                             log(f"{self.current_player.name} destroyed {player.name}'s {base.name}")
                             break
 
@@ -149,14 +159,17 @@ class Game:
                         damage = self.current_player.combat
                         player.health -= damage
                         self.current_player.combat = 0
+                        self.stats.record_damage(self.current_player.name, damage)
                         log(f"{self.current_player.name} attacked {player.name} for {damage} damage")
                         # Check for game over
                         if player.health <= 0:
                             log(f"{player.name} has been defeated!")
                             self.is_game_over = True
+                            self.stats.end_game(self.current_player.name)
                         break
         
         elif action.type == ActionType.SCRAP_CARD:
+            self.stats.record_card_scrap(self.current_player.name)
             if action.source and 'hand' in action.source:
                 # Scrap card from hand
                 for card in self.current_player.hand:

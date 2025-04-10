@@ -19,6 +19,7 @@ class Player:
         self.combat = 0
         self.authority_gained = 0
         self.pending_actions: List[Action] = []  # Track actions awaiting player decisions
+        self.cards_drawn = 0  # Track the number of cards drawn
         
     def draw_card(self):
         if not self.deck:
@@ -33,6 +34,7 @@ class Player:
         if self.deck:
             card = self.deck.pop()
             self.hand.append(card)
+            self.cards_drawn += 1  # Increment the card draw count
             return card
         return None
     

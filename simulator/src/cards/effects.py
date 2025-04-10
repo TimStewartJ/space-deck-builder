@@ -56,11 +56,14 @@ class Effect:
             player.combat += self.value
         elif self.effect_type == CardEffectType.TRADE:
             player.trade += self.value
+            game.stats.record_trade(player.name, self.value)
         elif self.effect_type == CardEffectType.DRAW:
             for _ in range(self.value):
                 player.draw_card()
+                game.stats.record_card_draw(player.name)
         elif self.effect_type == CardEffectType.HEAL:
             player.health += self.value
+            game.stats.record_authority_gain(player.name, self.value)
         elif self.effect_type == CardEffectType.SCRAP:
             from src.engine.actions import Action, ActionType
             # Create an action for every card in discard pile
