@@ -71,7 +71,7 @@ def get_available_actions(game_state, player):
                 else:
                     # If no outposts, can attack other bases or player directly
                     for base in [b for b in opponent.bases if not b.is_outpost()]:
-                        if player.combat >= base.defense:
+                        if base.defense and player.combat >= base.defense:
                             actions.append(Action(
                                 type=ActionType.ATTACK_BASE,
                                 target_id=base.name,

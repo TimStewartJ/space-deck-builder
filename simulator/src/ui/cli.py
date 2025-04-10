@@ -12,7 +12,9 @@ class CLI:
         self.use_pygame = False
         self.pygame_ui = None
         self.available_agents = self._discover_agents()
-    
+        self.games_count = 1
+        self.win_stats = {}
+
     def _discover_agents(self):
         """Find all available agent classes in the ai directory"""
         agents = {}
@@ -53,6 +55,7 @@ class CLI:
         print("  agents - List available AI agents")
         print("  verbose - Toggle verbose mode")
         print("  pygame - Toggle pygame visualization")
+        print("  games N - Set number of games to simulate (default: 1)")
         print("  exit - Exit the game")
     
     def get_player_action(self, available_actions):
@@ -101,7 +104,18 @@ class CLI:
         while True:
             command = input("> ").strip().lower()
             
-            if command in ["start", "s"]:
+            if command.startswith("games "):
+                try:
+                    num = int(command.split()[1])
+                    if num > 0:
+                        self.games_count = num
+                        print(f"Number of games set to {num}")
+                    else:
+                        print("Number of games must be positive")
+                except (IndexError, ValueError):
+                    print("Usage: games N (where N is a positive number)")
+            
+            elif command in ["start", "s"]:
                 agents = list(self.available_agents.items())
                 
                 def select_agent(player_num):
@@ -123,38 +137,64 @@ class CLI:
                 # Select agents for both players
                 name1, agent1 = select_agent(1)
                 name2, agent2 = select_agent(2)
-                
-                cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
-                self.game = Game(cards, verbose=self.verbose)
-                
-                # Add both players with their selected agents
-                player1 = self.game.add_player()
-                player1.agent = agent1
-                
-                player2 = self.game.add_player()
-                player2.agent = agent2
-                
-                # Initialize pygame UI if enabled
-                if self.use_pygame:
-                    from src.ui.pygame_ui import PygameUI
-                    self.pygame_ui = PygameUI()
 
-                self.game.start_game()
-                print(f"Game started: {name1} vs {name2}!")
+                # add numbers to the names
+                name1 += " (Player 1)"
+                name2 += " (Player 2)"
                 
-                # Main game loop
-                running = True
-                while running and not self.game.is_game_over:
-                    self.display_game_state()
+                # Initialize win statistics
+                self.win_stats = {name1: 0, name2: 0}
+                
+                # Run multiple games
+                for game_num in range(self.games_count):
+                    if self.games_count > 1:
+                        print(f"\nStarting game {game_num + 1} of {self.games_count}")
+                    
+                    cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
+                    self.game = Game(cards, verbose=self.verbose)
+                    
+                    # Add both players with their selected agents
+                    player1 = self.game.add_player()
+                    player1.agent = agent1
+                    
+                    player2 = self.game.add_player()
+                    player2.agent = agent2
+                    
+                    # Initialize pygame UI if enabled (only for single game mode)
+                    if self.use_pygame and self.games_count == 1:
+                        from src.ui.pygame_ui import PygameUI
+                        self.pygame_ui = PygameUI()
+
+                    self.game.start_game()
+                    if self.games_count == 1:
+                        print(f"Game started: {name1} vs {name2}!")
+                    
+                    # Main game loop
+                    running = True
+                    while running and not self.game.is_game_over:
+                        if self.games_count == 1:
+                            self.display_game_state()
+                        if self.pygame_ui:
+                            running = self.pygame_ui.handle_events()
+                            self.pygame_ui.draw_game_state(self.game)
+                        self.game.next_turn()
+
+                    # Record winner
+                    winner = self.game.get_winner()
+                    if winner == "Player 1":
+                        self.win_stats[name1] += 1
+                    elif winner == "Player 2":
+                        self.win_stats[name2] += 1
+
+                    # Clean up pygame
                     if self.pygame_ui:
-                        running = self.pygame_ui.handle_events()
-                        self.pygame_ui.draw_game_state(self.game)
-                    self.game.next_turn()
-
-                # Clean up pygame
-                if self.pygame_ui:
-                    self.pygame_ui.close()
-                    self.pygame_ui = None
+                        self.pygame_ui.close()
+                        self.pygame_ui = None
+                
+                # Print final statistics
+                print("\nFinal Results:")
+                print(f"{name1}: {self.win_stats[name1]} wins")
+                print(f"{name2}: {self.win_stats[name2]} wins")
             
             elif command == "verbose":
                 self.verbose = not self.verbose
