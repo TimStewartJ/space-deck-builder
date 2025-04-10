@@ -3,6 +3,13 @@ from .effects import CardEffectType, Effect
 
 def parse_effect_text(text: str) -> Effect:
     """Parse a single effect text and return an Effect object"""
+    # if this effect has multiple effects, we will parse them separately and add them as child effects
+    if len(text.split("\n")) > 1:
+        child_effects = []
+        for effect_text in text.split("\n"):
+            child_effects.append(parse_effect_text(effect_text.strip()))
+        return Effect(CardEffectType.COMPLEX, 0, text, child_effects=child_effects)
+
     # Check for scrap effects
     is_scrap = False
     if text.startswith("{Scrap}:"):

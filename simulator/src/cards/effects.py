@@ -1,6 +1,6 @@
 from enum import Enum
 import re
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 from dataclasses import dataclass
 
 if TYPE_CHECKING:
@@ -22,10 +22,11 @@ class Effect:
     is_scrap_effect: bool = False
     is_ally_effect: bool = False
     faction_requirement_count: int = 0
+    child_effects: Optional[List['Effect']] = None
     
     def __init__(self, effect_type: CardEffectType, value: int = 0, text: str = "", 
                  faction_requirement: Optional[str] = None, is_scrap_effect: bool = False,
-                 is_ally_effect: bool = False, faction_requirement_count: int = 0):
+                 is_ally_effect: bool = False, faction_requirement_count: int = 0, child_effects: Optional[List['Effect']] = None):
         self.effect_type = effect_type
         self.value = value
         self.text = text
@@ -34,6 +35,7 @@ class Effect:
         self.is_ally_effect = is_ally_effect
         self.faction_requirement_count = faction_requirement_count if faction_requirement_count > 0 else (1 if faction_requirement else 0)
         self.applied = False
+        self.child_effects = child_effects
     
     def apply(self, player: 'Player', card=None):
         if self.applied:
@@ -54,6 +56,11 @@ class Effect:
         self.applied = True
 
     def handle_complex_effect(self, player: 'Player', card):
+        if self.child_effects:
+            for effect in self.child_effects:
+                effect.apply(player, card)
+            return
+
         # Handle conditional card draw
         draw_match = re.search(r"Draw a card for each (\w+) card", self.text)
         if draw_match:
@@ -91,6 +98,9 @@ class Effect:
         
     def __str__(self):
         base = f"{self.effect_type.name.capitalize()}: "
+        if self.child_effects:
+            base += " | Child Effects: " + ", ".join(str(effect) for effect in self.child_effects)
+            return base
         base += f"{self.value}" if self.value else self.text
         if self.is_scrap_effect:
             base = f"Scrap: {base}"
