@@ -1,7 +1,7 @@
 from typing import List
 from src.cards.card import Card
 from src.ai.agent import Agent
-from src.engine.actions import Action, ActionType
+from src.engine.actions import Action
 
 class Player:
     def __init__(self, name, agent=None):
@@ -18,7 +18,7 @@ class Player:
         self.trade = 0
         self.combat = 0
         self.authority_gained = 0
-        self.pending_actions = []  # Track actions awaiting player decisions
+        self.pending_actions: List[Action] = []  # Track actions awaiting player decisions
         
     def draw_card(self):
         if not self.deck:
@@ -43,7 +43,6 @@ class Player:
             self.played_cards.append(card)
             if card.card_type == "base":
                 self.bases.append(card)
-            # Note: card effects are applied in Game.execute_action
             return True
         return False
     
@@ -82,3 +81,11 @@ class Player:
     def shuffle_deck(self):
         import random
         random.shuffle(self.deck)
+        
+    def _has_faction_ally(self, faction, current_card):
+        """Check if player has played another card of the specified faction this turn"""
+        for card in self.played_cards:
+            if card.faction and card.faction.lower() == faction.lower() and card != current_card:
+                return True
+        return False
+        

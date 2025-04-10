@@ -1,4 +1,5 @@
 from typing import List
+from src.engine.card_effects import CardEffects
 from src.cards.card import Card
 from src.engine.player import Player
 from src.engine.actions import ActionType, Action, get_available_actions
@@ -13,6 +14,7 @@ class Game:
         self.is_running = False
         self.current_player: Player = None
         self.verbose = verbose
+        self.card_effects = CardEffects()
 
     def log(self, message):
         if self.verbose:
@@ -92,9 +94,12 @@ class Game:
             if action:
                 turn_ended = self.execute_action(action)
     
-    def execute_action(self, action):
+    def execute_action(self, action: Action):
         """Execute a player's action and update game state"""
         self.log(f"{self.current_player.name} executing action: {action}")
+
+        # if there are any pending actions left, clear them since we just did one
+        self.current_player.pending_actions.clear()
         
         if action.type == ActionType.END_TURN:
             return True  # End the turn
@@ -105,7 +110,7 @@ class Game:
                 if card.name == action.card_id:
                     self.current_player.play_card(card)
                     self.log(f"{self.current_player.name} played {card.name}")
-                    self.apply_card_effects(card)
+                    self.card_effects.apply_card_effects(current_player=self.current_player, card=card)
                     break
                     
         elif action.type == ActionType.BUY_CARD:
@@ -151,132 +156,23 @@ class Game:
                             self.is_game_over = True
                         break
         
+        elif action.type == ActionType.SCRAP_CARD:
+            if action.source and 'hand' in action.source:
+                # Scrap card from hand
+                for card in self.current_player.hand:
+                    if card.name == action.card_id:
+                        self.current_player.hand.remove(card)
+                        self.log(f"{self.current_player.name} scrapped {card.name} from hand")
+                        break
+            elif action.source and 'discard' in action.source:
+                # Scrap card from discard pile
+                for card in self.current_player.discard_pile:
+                    if card.name == action.card_id:
+                        self.current_player.discard_pile.remove(card)
+                        self.log(f"{self.current_player.name} scrapped {card.name} from discard pile")
+                        break
+        
         return False  # Turn continues
-    
-    def apply_card_effects(self, card: Card, scrap=False):
-        """
-        Apply the effects of a played card
-        
-        Args:
-            card: The card being played
-            scrap: Boolean indicating if this is a scrap effect being activated
-        """
-        self.log(f"Applying effects for {card.name}")
-        
-        import re
-
-        for effect in card.effects:
-            effect = effect.strip()
-            if not effect:
-                continue
-            
-            self.log(f"Processing effect: {effect}")
-                
-            # Handle scrap abilities - only apply if card is being scrapped
-            if effect.startswith("{Scrap}:"):
-                if scrap:
-                    effect = effect.replace("{Scrap}:", "").strip()
-                    self.log(f"Applying scrap effect: {effect}")
-                    self._parse_and_apply_effect(effect, card)
-                continue
-                
-            # Handle faction ally abilities
-            ally_match = re.search(r"\{(\w+) Ally\}:\s*(.*)", effect)
-            if ally_match:
-                faction = ally_match.group(1)
-                ally_effect = ally_match.group(2)
-                
-                # Check if the player has played another card of this faction
-                if self._has_faction_ally(faction, card):
-                    self.log(f"Applying faction ally effect for {faction}: {ally_effect}")
-                    self._parse_and_apply_effect(ally_effect, card)
-                continue
-            
-            # Handle OR choices
-            if "OR" in effect:
-                # For now just apply the first choice, later implement player choice
-                choices = effect.split("OR")
-                self.log(f"Applying first choice of: {effect}")
-                self._parse_and_apply_effect(choices[0].strip(), card)
-                continue
-                
-            # Handle standard effects
-            self._parse_and_apply_effect(effect, card)
-    
-    def _has_faction_ally(self, faction, current_card):
-        """Check if player has played another card of the specified faction this turn"""
-        for card in self.current_player.played_cards:
-            if card.faction and card.faction.lower() == faction.lower() and card != current_card:
-                return True
-        return False
-        
-    def _parse_and_apply_effect(self, effect_text, card):
-        """Parse and apply a specific card effect"""
-        import re
-        
-        # Handle resource gains enclosed in curly braces
-        trade_match = re.search(r"\{Gain (\d+) Trade\}", effect_text)
-        if trade_match:
-            self.current_player.trade += int(trade_match.group(1))
-            
-        combat_match = re.search(r"\{Gain (\d+) Combat\}", effect_text)
-        if combat_match:
-            self.current_player.combat += int(combat_match.group(1))
-            
-        # Handle card draw
-        if "Draw a card" in effect_text:
-            self.current_player.draw_card()
-            
-        # Handle conditional card draw
-        draw_match = re.search(r"Draw a card for each (\w+) card", effect_text)
-        if draw_match:
-            faction = draw_match.group(1).lower()
-            count = sum(1 for c in self.current_player.played_cards if c.faction.lower() == faction)
-            for _ in range(count):
-                self.current_player.draw_card()
-                
-        # Handle complex effects that require player choice
-        if any(x in effect_text for x in [
-                "Acquire any ship for free", 
-                "destroy target base", 
-                "scrap a card in the trade row",
-                "scrap a card in your hand or discard pile"
-            ]):
-            self._create_player_choice_action(effect_text, card)
-
-    def _create_player_choice_action(self, effect_text, card):
-        """Create appropriate actions for effects requiring player decisions"""
-        from src.engine.actions import Action, ActionType
-        
-        # Example implementation - will need to be integrated with your action system
-        if "Acquire any ship for free" in effect_text:
-            ships = [c for c in self.trade_row if getattr(c, 'type', '') == 'ship']
-            if ships:
-                # Create action for player to choose a ship
-                action = Action(
-                    ActionType.CHOOSE_CARD,
-                    card_id=card.name,
-                    valid_targets=[c.name for c in ships],
-                    effect_text=effect_text
-                )
-                # Store this pending action or return it
-                self.current_player.pending_actions.append(action)
-                
-        elif "destroy target base" in effect_text:
-            # Find opponent bases
-            bases = []
-            for player in self.players:
-                if player != self.current_player:
-                    bases.extend(player.bases)
-                    
-            if bases:
-                action = Action(
-                    ActionType.DESTROY_BASE,
-                    card_id=card.name,
-                    valid_targets=[b.name for b in bases],
-                    effect_text=effect_text
-                )
-                self.current_player.pending_actions.append(action)    
 
     def end_game(self):
         self.is_game_over = True

@@ -9,6 +9,7 @@ class ActionType(Enum):
     ATTACK_PLAYER = "attack_player"
     SCRAP_CARD = "scrap_card"
     END_TURN = "end_turn"
+    DISCARD_CARDS = "discard_card"
 
 @dataclass
 class Action:
@@ -37,7 +38,13 @@ class Action:
 def get_available_actions(game_state, player):
     """Return list of available actions for a player given the current game state"""
     actions = []
-    
+
+    # If there are any pending actions, those are the only actions that a player can do right now
+    if len(player.pending_actions) > 0:
+        for action in player.pending_actions:
+            actions.append(action)
+        return actions
+
     # Add play card actions for each card in hand
     for card in player.hand:
         actions.append(Action(type=ActionType.PLAY_CARD, card_id=card.name))

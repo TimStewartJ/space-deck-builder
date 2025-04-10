@@ -1,12 +1,15 @@
+from typing import List
+
+
 class Card:
     def __init__(self, name, cost, effects, card_type="ship", defense=None, faction=None, set=None):
-        self.name = name
-        self.cost = cost
-        self.effects = effects
+        self.name: str = name
+        self.cost: int = cost
+        self.effects: List[str] = effects
         self.card_type = card_type  # "ship", "base", or "outpost"
         self.defense = defense  # Only used for bases and outposts
         self.faction = faction  # Can be None (unaligned), a string, or a list of factions
-        self.set = set  # The set the card comes from (e.g. "Core Set", "Colony Wars", etc.)
+        self.set: str = set  # The set the card comes from (e.g. "Core Set", "Colony Wars", etc.)
         
     def is_base(self):
         return self.card_type in ["base", "outpost"]
