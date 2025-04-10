@@ -1,6 +1,10 @@
 from dataclasses import dataclass
-from typing import Optional, List, Any
+from typing import TYPE_CHECKING, Optional, List, Any
 from enum import Enum
+
+if TYPE_CHECKING:
+    from src.engine.player import Player
+    from src.engine.game import Game
 
 class ActionType(Enum):
     PLAY_CARD = "play_card"
@@ -30,12 +34,12 @@ class Action:
         elif self.type == ActionType.ATTACK_PLAYER:
             return f"Attack player: {self.target_id}"
         elif self.type == ActionType.SCRAP_CARD:
-            return f"Scrap card: {self.card_id}"
+            return f"Scrap card: {self.card_id} from {self.source}"
         elif self.type == ActionType.END_TURN:
             return "End turn"
         return f"{self.type}"
 
-def get_available_actions(game_state, player):
+def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
     """Return list of available actions for a player given the current game state"""
     actions = []
 
@@ -53,7 +57,7 @@ def get_available_actions(game_state, player):
     for card in game_state.trade_row:
         if player.trade >= card.cost:
             actions.append(Action(type=ActionType.BUY_CARD, card_id=card.name))
-      # Add attack actions if player has combat available
+    # Add attack actions if player has combat available
     if player.combat > 0:
         for opponent in game_state.players:
             if opponent != player:
@@ -84,6 +88,12 @@ def get_available_actions(game_state, player):
                         additional_params={"damage": player.combat}
                     ))
     
+    # Add scrap card actions for played cards
+    for card in player.played_cards:
+        if card.effects and any("\{Scrap\}" in effect for effect in card.effects):
+            # Only allow scrapping cards that have a scrap effect
+            actions.append(Action(type=ActionType.SCRAP_CARD, card_id=card.name, source="played"))
+
     # Always allow ending turn
     actions.append(Action(type=ActionType.END_TURN))
     

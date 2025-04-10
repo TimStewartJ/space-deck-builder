@@ -24,7 +24,7 @@ class CardEffects:
             if not effect:
                 continue
             
-            log(f"Processing effect: {effect}")
+            log(f"\tProcessing effect: {effect}")
                 
             # Handle scrap abilities - only apply if card is being scrapped
             if effect.startswith("{Scrap}:"):
