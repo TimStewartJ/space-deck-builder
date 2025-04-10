@@ -23,7 +23,7 @@ class Effect:
     is_ally_effect: bool = False
     faction_requirement_count: int = 0
     
-    def __init__(self, effect_type: str, value: int = 0, text: str = "", 
+    def __init__(self, effect_type: CardEffectType, value: int = 0, text: str = "", 
                  faction_requirement: Optional[str] = None, is_scrap_effect: bool = False,
                  is_ally_effect: bool = False, faction_requirement_count: int = 0):
         self.effect_type = effect_type

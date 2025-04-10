@@ -66,9 +66,9 @@ def load_trade_deck_cards(file_path, filter_names=None, filter_sets=None):
             # Parse effects text into Effect objects
             effects: List[Effect] = []
             if row['Text']:
-                effect_texts = [effect.strip() for effect in row['Text'].split('<hr>')]
+                effect_texts = [effect.strip() for effect in row['Text'].split('\n')]
                 for effect_text in effect_texts:
-                    if effect_text:  # Skip empty effects
+                    if effect_text and effect_text != "<hr>":  # Skip empty effects
                         effects.append(parse_effect_text(effect_text))
 
             card = Card(

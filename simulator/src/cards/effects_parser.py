@@ -40,6 +40,8 @@ def parse_effect_text(text: str) -> Effect:
     # Parse draw effects
     if text == "Draw a card.":
         return Effect(CardEffectType.DRAW, 1, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)
+    if text == "Draw two cards.":
+        return Effect(CardEffectType.DRAW, 2, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)
     
     draw_match = re.search(r"Draw (\d+) cards?", text)
     if draw_match:
