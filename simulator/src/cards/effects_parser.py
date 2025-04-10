@@ -44,6 +44,11 @@ def parse_effect_text(text: str) -> Effect:
         return Effect(CardEffectType.HEAL, int(healing_match.group(1)), text,
                      faction_requirement, is_scrap, is_ally, faction_requirement_count)
     
+    # Parse scrap effects
+    if text == "You may scrap a card in your hand or discard pile.":
+        return Effect(CardEffectType.SCRAP, 1, text, faction_requirement, is_scrap, 
+                      is_ally, faction_requirement_count, card_targets=["hand", "discard"])
+    
     # Parse draw effects
     if text == "Draw a card.":
         return Effect(CardEffectType.DRAW, 1, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)

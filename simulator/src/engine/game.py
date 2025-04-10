@@ -171,6 +171,13 @@ class Game:
                         self.current_player.discard_pile.remove(card)
                         log(f"{self.current_player.name} scrapped {card.name} from discard pile")
                         break
+            elif action.source and 'trade' in action.source:
+                # Scrap card from trade row
+                for i, card in enumerate(self.trade_row):
+                    if card.name == action.card_id:
+                        self.trade_row.pop(i)
+                        log(f"{self.current_player.name} scrapped {card.name} from trade row")
+                        break
             else:
                 # find the card in player's played cards
                 card = None

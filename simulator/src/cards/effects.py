@@ -11,6 +11,7 @@ class CardEffectType(Enum):
     TRADE = "trade"
     DRAW = "draw"
     HEAL = "heal"
+    SCRAP = "scrap"  # For effects that allow scrapping other cards
     COMPLEX = "complex"  # For complex effects that require special handling
 
 @dataclass
@@ -23,10 +24,12 @@ class Effect:
     is_ally_effect: bool = False
     faction_requirement_count: int = 0
     child_effects: Optional[List['Effect']] = None
+    card_targets: Optional[List[str]] = None
     
     def __init__(self, effect_type: CardEffectType, value: int = 0, text: str = "", 
                  faction_requirement: Optional[str] = None, is_scrap_effect: bool = False,
-                 is_ally_effect: bool = False, faction_requirement_count: int = 0, child_effects: Optional[List['Effect']] = None):
+                 is_ally_effect: bool = False, faction_requirement_count: int = 0, child_effects: Optional[List['Effect']] = None,
+                 card_targets: Optional[List[str]] = None):
         self.effect_type = effect_type
         self.value = value
         self.text = text
@@ -36,6 +39,7 @@ class Effect:
         self.faction_requirement_count = faction_requirement_count if faction_requirement_count > 0 else (1 if faction_requirement else 0)
         self.applied = False
         self.child_effects = child_effects
+        self.card_targets = card_targets
     
     def apply(self, player: 'Player', card=None):
         if self.applied:
@@ -50,6 +54,38 @@ class Effect:
                 player.draw_card()
         elif self.effect_type == CardEffectType.HEAL:
             player.health += self.value
+        elif self.effect_type == CardEffectType.SCRAP:
+            from src.engine.actions import Action, ActionType
+            # Create an action for every card in discard pile
+            if self.card_targets and "discard" in self.card_targets:
+                discard_targets = player.discard_pile
+                for target in discard_targets:
+                    action = Action(
+                        ActionType.SCRAP_CARD,
+                        card_id=target,
+                        source=["discard"]
+                    )
+                    player.pending_actions.append(action)
+            # Create an action for every card in hand
+            if self.card_targets and "hand" in self.card_targets:
+                hand_targets = player.hand
+                for target in hand_targets:
+                    action = Action(
+                        ActionType.SCRAP_CARD,
+                        card_id=target,
+                        source=["hand"]
+                    )
+                    player.pending_actions.append(action)
+            # Create an action for every card in trade row
+            if self.card_targets and "trade" in self.card_targets:
+                trade_targets = player.trade_row
+                for target in trade_targets:
+                    action = Action(
+                        ActionType.SCRAP_CARD,
+                        card_id=target,
+                        source=["trade"]
+                    )
+                    player.pending_actions.append(action)
         elif self.effect_type == CardEffectType.COMPLEX:
             self.handle_complex_effect(player, card)
         
@@ -68,30 +104,7 @@ class Effect:
             count = sum(1 for c in player.played_cards if c.faction.lower() == faction)
             for _ in range(count):
                 player.draw_card()
-        
-        """Create appropriate actions for effects requiring player decisions"""
-        from src.engine.actions import Action, ActionType
-        
-        if "scrap a card in your hand or discard pile":
-            discard_targets = [c.name for c in player.discard_pile]
-            hand_targets = [c.name for c in player.hand]
 
-            for target in discard_targets:
-                action = Action(
-                    ActionType.SCRAP_CARD,
-                    card_id=target,
-                    source=["discard"]
-                )
-                player.pending_actions.append(action)
-
-            for target in hand_targets:
-                action = Action(
-                    ActionType.SCRAP_CARD,
-                    card_id=target,
-                    source=["hand"]
-                )
-                player.pending_actions.append(action)
-    
     def reset(self):
         """Reset the effect's applied status at the end of turn"""
         self.applied = False
