@@ -62,6 +62,7 @@ class Player:
         """End the current turn"""
         # Move played cards to discard pile (except bases)
         for card in self.played_cards:
+            card.reset_effects()  # Reset card effects
             if card not in self.bases:
                 self.discard_pile.append(card)
                 

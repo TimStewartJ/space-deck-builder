@@ -1,3 +1,49 @@
+import re
+import csv
+from typing import List
+from .card import Card
+from .effects import Effect
+
+def parse_effect_text(text: str) -> Effect:
+    """Parse a single effect text and return an Effect object"""
+    # Check for scrap effects
+    is_scrap = False
+    if text.startswith("{Scrap}:"):
+        is_scrap = True
+        text = text.replace("{Scrap}:", "").strip()
+    
+    # Check for ally effects
+    is_ally = False
+    faction_requirement = None
+    ally_match = re.search(r"\{(\w+) Ally\}:\s*(.*)", text)
+    if ally_match:
+        is_ally = True
+        faction_requirement = ally_match.group(1)
+        text = ally_match.group(2).strip()
+    
+    # Parse common resource gains
+    trade_match = re.search(r"\{Gain (\d+) Trade\}", text)
+    if trade_match:
+        return Effect("trade", int(trade_match.group(1)), text, 
+                     faction_requirement, is_scrap, is_ally)
+        
+    combat_match = re.search(r"\{Gain (\d+) Combat\}", text)
+    if combat_match:
+        return Effect("combat", int(combat_match.group(1)), text,
+                     faction_requirement, is_scrap, is_ally)
+    
+    # Parse draw effects
+    if text == "Draw a card":
+        return Effect("draw", 1, text, faction_requirement, is_scrap, is_ally)
+    
+    draw_match = re.search(r"Draw (\d+) cards?", text)
+    if draw_match:
+        return Effect("draw", int(draw_match.group(1)), text,
+                     faction_requirement, is_scrap, is_ally)
+    
+    # Default case - store as text for complex effects
+    return Effect("complex", 0, text, faction_requirement, is_scrap, is_ally)
+
 def load_trade_deck_cards(file_path, filter_names=None, filter_sets=None):
     """
     Load cards from a CSV file with optional filtering by name and set.
@@ -10,8 +56,6 @@ def load_trade_deck_cards(file_path, filter_names=None, filter_sets=None):
     Returns:
         list[Card]: List of card objects that match the filters
     """
-    import csv
-    from .card import Card
 
     cards = []
     with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
@@ -56,10 +100,18 @@ def load_trade_deck_cards(file_path, filter_names=None, filter_sets=None):
                 if len(faction) == 1:
                     faction = faction[0]  # Single faction as string
 
+            # Parse effects text into Effect objects
+            effects: List[Effect] = []
+            if row['Text']:
+                effect_texts = [effect.strip() for effect in row['Text'].split('<hr>')]
+                for effect_text in effect_texts:
+                    if effect_text:  # Skip empty effects
+                        effects.append(parse_effect_text(effect_text))
+
             card = Card(
                 name=row['Name'],
                 cost=cost,
-                effects=[effect.strip() for effect in row['Text'].split('<hr>')] if row['Text'] else [],
+                effects=effects,
                 card_type=card_type,
                 defense=defense,
                 faction=faction,

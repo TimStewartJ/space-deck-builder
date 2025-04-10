@@ -1,11 +1,12 @@
 from typing import List
+from src.cards.effects import Effect
 
 
 class Card:
-    def __init__(self, name, cost, effects, card_type="ship", defense=None, faction=None, set=None):
+    def __init__(self, name, cost, effects: List[Effect], card_type="ship", defense=None, faction=None, set=None):
         self.name: str = name
         self.cost: int = cost
-        self.effects: List[str] = effects
+        self.effects: List[Effect] = effects
         self.card_type = card_type  # "ship", "base", or "outpost"
         self.defense = defense  # Only used for bases and outposts
         self.faction = faction  # Can be None (unaligned), a string, or a list of factions
@@ -17,9 +18,15 @@ class Card:
     def is_outpost(self):
         return self.card_type == "outpost"
 
-    def apply_effects(self, game_state):
+    def apply_effects(self, player, game_state=None):
+        """Apply all effects of the card to the player"""
         for effect in self.effects:
-            effect.apply(game_state)
+            effect.apply(player, self)
+            
+    def reset_effects(self):
+        """Reset all effects at end of turn"""
+        for effect in self.effects:
+            effect.reset()
 
     def __str__(self):
         info = [f"{self.set} {self.name} ({self.cost} cost)"]

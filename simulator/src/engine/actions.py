@@ -90,7 +90,7 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
     
     # Add scrap card actions for played cards
     for card in player.played_cards:
-        if card.effects and any("\{Scrap\}" in effect for effect in card.effects):
+        if any(effect.is_scrap_effect for effect in card.effects):
             # Only allow scrapping cards that have a scrap effect
             actions.append(Action(type=ActionType.SCRAP_CARD, card_id=card.name, source="played"))
 

@@ -56,15 +56,17 @@ class Game:
                 player.draw_card()
 
     def create_starting_deck(self):
+        from src.cards.effects import Effect
+
         # Create a deck of 8 Scouts and 2 Vipers
         from src.cards.card import Card
         starting_deck = []
         # Add 8 Scouts
         for _ in range(8):
-            starting_deck.append(Card("Scout", 0, ["{Gain 1 Trade}"], "ship"))
+            starting_deck.append(Card("Scout", 0, [Effect('trade', 1)], "ship"))
         # Add 2 Vipers
         for _ in range(2):
-            starting_deck.append(Card("Viper", 0, ["{Gain 1 Combat}"], "ship"))
+            starting_deck.append(Card("Viper", 0, [Effect('combat', 1)], "ship"))
         return starting_deck
 
     def next_turn(self):
