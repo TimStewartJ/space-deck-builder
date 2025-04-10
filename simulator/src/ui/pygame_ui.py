@@ -70,13 +70,16 @@ class PygameUI:
         for i, card in enumerate(game.trade_row):
             self.draw_card(card, 10 + i * (self.CARD_WIDTH + self.CARD_MARGIN), 40)
 
+        # Draw both players' authority
+        self.draw_text(f"Player 1 Authority: {game.players[0].health}", 10, 250)
+        self.draw_text(f"Player 2 Authority: {game.players[1].health}", 10, 280)
+
         # Draw current player info
         if game.current_player:
             player = game.current_player
-            self.draw_text(f"Player: {player.name}", 10, 300)
-            self.draw_text(f"Authority: {player.health}", 10, 330)
-            self.draw_text(f"Trade: {player.trade}", 10, 360)
-            self.draw_text(f"Combat: {player.combat}", 10, 390)
+            self.draw_text(f"Current Player: {player.name}", 10, 310)
+            self.draw_text(f"Trade: {player.trade}", 10, 340)
+            self.draw_text(f"Combat: {player.combat}", 10, 370)
 
             # Draw player's hand
             self.draw_text("Hand:", 10, 420)

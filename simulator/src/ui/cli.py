@@ -9,6 +9,8 @@ class CLI:
     def __init__(self):
         self.game = None
         self.verbose = True
+        self.use_pygame = False
+        self.pygame_ui = None
         self.available_agents = self._discover_agents()
     
     def _discover_agents(self):
@@ -50,6 +52,7 @@ class CLI:
         print("  start (or s) - Start a new game and select agents")
         print("  agents - List available AI agents")
         print("  verbose - Toggle verbose mode")
+        print("  pygame - Toggle pygame visualization")
         print("  exit - Exit the game")
     
     def get_player_action(self, available_actions):
@@ -131,19 +134,37 @@ class CLI:
                 player2 = self.game.add_player()
                 player2.agent = agent2
                 
+                # Initialize pygame UI if enabled
+                if self.use_pygame:
+                    from src.ui.pygame_ui import PygameUI
+                    self.pygame_ui = PygameUI()
+
                 self.game.start_game()
                 print(f"Game started: {name1} vs {name2}!")
                 
                 # Main game loop
-                while not self.game.is_game_over:
+                running = True
+                while running and not self.game.is_game_over:
                     self.display_game_state()
+                    if self.pygame_ui:
+                        running = self.pygame_ui.handle_events()
+                        self.pygame_ui.draw_game_state(self.game)
                     self.game.next_turn()
+
+                # Clean up pygame
+                if self.pygame_ui:
+                    self.pygame_ui.close()
+                    self.pygame_ui = None
             
             elif command == "verbose":
                 self.verbose = not self.verbose
                 if self.game:
                     self.game.verbose = self.verbose
                 print(f"Verbose mode {'enabled' if self.verbose else 'disabled'}")
+
+            elif command == "pygame":
+                self.use_pygame = not self.use_pygame
+                print(f"Pygame visualization {'enabled' if self.use_pygame else 'disabled'}")
             
             elif command == "help":
                 self.display_help()
