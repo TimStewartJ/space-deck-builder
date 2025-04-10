@@ -7,6 +7,13 @@ class RandomAgent(Agent):
     def make_decision(self, game_state: Game):
         # Randomly choose an action from the available options
         available_actions = get_available_actions(game_state, game_state.current_player)
+
+        if len(available_actions) == 1:
+            return available_actions[0]
+        
+        # Remove the last action from the list
+        available_actions.pop()
+
         if available_actions:
             return choice(available_actions)
         return None
