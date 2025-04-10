@@ -1,4 +1,5 @@
 from typing import List
+from src.cards.effects import CardEffectType
 from src.utils.logger import log
 from src.engine.card_effects import CardEffects
 from src.cards.card import Card
@@ -60,10 +61,10 @@ class Game:
         starting_deck = []
         # Add 8 Scouts
         for _ in range(8):
-            starting_deck.append(Card("Scout", 0, [Effect('trade', 1)], "ship"))
+            starting_deck.append(Card("Scout", 0, [Effect(CardEffectType.TRADE, 1)], "ship"))
         # Add 2 Vipers
         for _ in range(2):
-            starting_deck.append(Card("Viper", 0, [Effect('combat', 1)], "ship"))
+            starting_deck.append(Card("Viper", 0, [Effect(CardEffectType.COMBAT, 1)], "ship"))
         return starting_deck
 
     def next_turn(self):

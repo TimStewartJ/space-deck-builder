@@ -1,3 +1,4 @@
+from enum import Enum
 import re
 from typing import TYPE_CHECKING, Optional
 from dataclasses import dataclass
@@ -5,9 +6,18 @@ from dataclasses import dataclass
 if TYPE_CHECKING:
     from src.engine.player import Player
 
+class CardEffectType(Enum):
+    COMBAT = "combat"
+    TRADE = "trade"
+    DRAW = "draw"
+    HEAL = "heal"
+    COMPLEX = "complex"  # For complex effects that require special handling
+    SCRAP = "scrap"  # For scrap effects
+    ALLY = "ally"  # For ally effects
+
 @dataclass
 class Effect:
-    effect_type: str
+    effect_type: CardEffectType
     value: int = 0
     text: str = ""
     faction_requirement: Optional[str] = None
@@ -31,16 +41,16 @@ class Effect:
         if self.applied:
             return
             
-        if self.effect_type == "combat":
+        if self.effect_type == CardEffectType.COMBAT:
             player.combat += self.value
-        elif self.effect_type == "trade":
+        elif self.effect_type == CardEffectType.TRADE:
             player.trade += self.value
-        elif self.effect_type == "draw":
+        elif self.effect_type == CardEffectType.DRAW:
             for _ in range(self.value):
                 player.draw_card()
-        elif self.effect_type == "heal":
+        elif self.effect_type == CardEffectType.HEAL:
             player.health += self.value
-        elif self.effect_type == "complex":
+        elif self.effect_type == CardEffectType.COMPLEX:
             self.handle_complex_effect(player, card)
         
         self.applied = True
@@ -82,7 +92,7 @@ class Effect:
         self.applied = False
         
     def __str__(self):
-        base = f"{self.effect_type.capitalize()}: "
+        base = f"{str(self.effect_type).capitalize()}: "
         base += f"{self.value}" if self.value else self.text
         if self.is_scrap_effect:
             base = f"Scrap: {base}"
