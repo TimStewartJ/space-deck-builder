@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 if TYPE_CHECKING:
     from src.engine.player import Player
+    from src.engine.game import Game
 
 class CardEffectType(Enum):
     COMBAT = "combat"
@@ -12,7 +13,13 @@ class CardEffectType(Enum):
     DRAW = "draw"
     HEAL = "heal"
     SCRAP = "scrap"  # For effects that allow scrapping other cards
+    PARENT = "parent"  # For effects that are parent effects
     COMPLEX = "complex"  # For complex effects that require special handling
+
+class CardTargetType(Enum):
+    HAND = "hand"
+    DISCARD = "discard"
+    TRADE = "trade"
 
 @dataclass
 class Effect:
@@ -41,7 +48,7 @@ class Effect:
         self.child_effects = child_effects
         self.card_targets = card_targets
     
-    def apply(self, player: 'Player', card=None):
+    def apply(self, game: 'Game', player: 'Player', card=None):
         if self.applied:
             return
             
@@ -78,7 +85,7 @@ class Effect:
                     player.pending_actions.append(action)
             # Create an action for every card in trade row
             if self.card_targets and "trade" in self.card_targets:
-                trade_targets = player.trade_row
+                trade_targets = game.trade_row
                 for target in trade_targets:
                     action = Action(
                         ActionType.SCRAP_CARD,
@@ -87,14 +94,14 @@ class Effect:
                     )
                     player.pending_actions.append(action)
         elif self.effect_type == CardEffectType.COMPLEX:
-            self.handle_complex_effect(player, card)
+            self.handle_complex_effect(game, player, card)
         
         self.applied = True
 
-    def handle_complex_effect(self, player: 'Player', card):
+    def handle_complex_effect(self, game: 'Game', player: 'Player', card):
         if self.child_effects:
             for effect in self.child_effects:
-                effect.apply(player, card)
+                effect.apply(game, player, card)
             return
 
         # Handle conditional card draw
@@ -115,6 +122,7 @@ class Effect:
             base += " | Child Effects: " + ", ".join(str(effect) for effect in self.child_effects)
             return base
         base += f"{self.value}" if self.value else self.text
+        base += f" from {self.card_targets}" if self.card_targets else ""
         if self.is_scrap_effect:
             base = f"Scrap: {base}"
         if self.is_ally_effect and self.faction_requirement:

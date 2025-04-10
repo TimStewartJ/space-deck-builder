@@ -1,13 +1,18 @@
+from typing import TYPE_CHECKING
 from src.utils.logger import log
 from src.engine.player import Player
 from src.cards.card import Card
+
+if TYPE_CHECKING:
+    from src.engine.player import Player
+    from src.engine.game import Game
 
 class CardEffects:
     def __init__(self):
         # this is blank
         pass
 
-    def apply_card_effects(self, current_player: Player, card: Card, scrap=False):
+    def apply_card_effects(self, game: 'Game', current_player: Player, card: Card, scrap=False):
         """
         Apply the effects of a played card
         
@@ -24,7 +29,7 @@ class CardEffects:
             if effect.is_scrap_effect:
                 if scrap:
                     log(f"Applying scrap effect: {effect}")
-                    effect.apply(current_player, card)
+                    effect.apply(game, current_player, card)
                     current_player.played_cards.remove(card)  # Remove card from played cards
                 continue
                 
@@ -35,8 +40,8 @@ class CardEffects:
                 # Check if the player has sufficient faction allies
                 if current_player.get_faction_ally_count(faction) > effect.faction_requirement_count:
                     log(f"Applying faction ally effect for {faction}: {effect}")
-                    effect.apply(current_player, card)
+                    effect.apply(game, current_player, card)
                 continue
                 
             # Handle standard effects
-            effect.apply(current_player, card)
+            effect.apply(game, current_player, card)

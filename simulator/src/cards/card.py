@@ -17,11 +17,6 @@ class Card:
         
     def is_outpost(self):
         return self.card_type == "outpost"
-
-    def apply_effects(self, player, game_state=None):
-        """Apply all effects of the card to the player"""
-        for effect in self.effects:
-            effect.apply(player, self)
             
     def reset_effects(self):
         """Reset all effects at end of turn"""

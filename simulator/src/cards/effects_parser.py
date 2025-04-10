@@ -8,7 +8,7 @@ def parse_effect_text(text: str) -> Effect:
         child_effects = []
         for effect_text in text.split("\n"):
             child_effects.append(parse_effect_text(effect_text.strip()))
-        return Effect(CardEffectType.COMPLEX, 0, text, child_effects=child_effects)
+        return Effect(CardEffectType.PARENT, 0, text, child_effects=child_effects)
 
     # Check for scrap effects
     is_scrap = False
@@ -49,6 +49,10 @@ def parse_effect_text(text: str) -> Effect:
         return Effect(CardEffectType.SCRAP, 1, text, faction_requirement, is_scrap, 
                       is_ally, faction_requirement_count, card_targets=["hand", "discard"])
     
+    if text == "You may scrap a card in the trade row.":
+        return Effect(CardEffectType.SCRAP, 1, text, faction_requirement, is_scrap,
+                      is_ally, faction_requirement_count, card_targets=["trade"])
+
     # Parse draw effects
     if text == "Draw a card.":
         return Effect(CardEffectType.DRAW, 1, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)

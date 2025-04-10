@@ -12,7 +12,7 @@ class Game:
         self.current_turn = 0
         self.is_game_over = False
         self.trade_deck = cards if cards else []
-        self.trade_row = []
+        self.trade_row: List[Card] = []
         self.is_running = False
         self.current_player: Player = None
         self.verbose = verbose
@@ -110,7 +110,7 @@ class Game:
                 if card.name == action.card_id:
                     self.current_player.play_card(card)
                     log(f"{self.current_player.name} played {card.name}")
-                    self.card_effects.apply_card_effects(current_player=self.current_player, card=card)
+                    self.card_effects.apply_card_effects(self, current_player=self.current_player, card=card)
                     break
                     
         elif action.type == ActionType.BUY_CARD:
@@ -187,7 +187,7 @@ class Game:
                         break
                 # Scrap the card
                 if card:
-                    self.card_effects.apply_card_effects(current_player=self.current_player, card=card, scrap=True)
+                    self.card_effects.apply_card_effects(self, current_player=self.current_player, card=card, scrap=True)
                     log(f"{self.current_player.name} scrapped {card.name} from played cards")
 
         return False  # Turn continues
