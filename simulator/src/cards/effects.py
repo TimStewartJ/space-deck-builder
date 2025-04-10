@@ -12,8 +12,6 @@ class CardEffectType(Enum):
     DRAW = "draw"
     HEAL = "heal"
     COMPLEX = "complex"  # For complex effects that require special handling
-    SCRAP = "scrap"  # For scrap effects
-    ALLY = "ally"  # For ally effects
 
 @dataclass
 class Effect:
@@ -92,7 +90,7 @@ class Effect:
         self.applied = False
         
     def __str__(self):
-        base = f"{str(self.effect_type).capitalize()}: "
+        base = f"{self.effect_type.name.capitalize()}: "
         base += f"{self.value}" if self.value else self.text
         if self.is_scrap_effect:
             base = f"Scrap: {base}"
