@@ -14,6 +14,12 @@ class CLI:
         self.available_agents = self._discover_agents()
         self.games_count = 1
         self.win_stats = {}
+        # Add aggregate statistics dictionaries
+        self.aggregate_stats = {
+            'total_turns': [],
+            'game_durations': [],
+            'player_stats': {}
+        }
 
     def _discover_agents(self):
         """Find all available agent classes in the ai directory"""
@@ -38,6 +44,63 @@ class CLI:
                     print(f"Warning: Could not load agent from {file}: {e}")
         
         return agents
+    
+    def _reset_aggregate_stats(self, player1_name, player2_name):
+        """Reset aggregate statistics for a new set of games"""
+        self.win_stats = {player1_name: 0, player2_name: 0}
+        self.aggregate_stats = {
+            'total_turns': [],
+            'game_durations': [],
+            'player_stats': {
+                player1_name: {
+                    'cards_played': [],
+                    'cards_scrapped': [],
+                    'cards_bought': [],
+                    'damage_dealt': [],
+                    'trade_generated': [],
+                    'cards_drawn': [],
+                    'bases_destroyed': [],
+                    'authority_gained': []
+                },
+                player2_name: {
+                    'cards_played': [],
+                    'cards_scrapped': [],
+                    'cards_bought': [],
+                    'damage_dealt': [],
+                    'trade_generated': [],
+                    'cards_drawn': [],
+                    'bases_destroyed': [],
+                    'authority_gained': []
+                }
+            }
+        }
+
+    def _update_aggregate_stats(self):
+        """Update aggregate statistics after each game"""
+        if not self.game or not self.game.stats:
+            return
+
+        # Record game-level stats
+        self.aggregate_stats['total_turns'].append(self.game.stats.total_turns)
+        self.aggregate_stats['game_durations'].append(self.game.stats.get_game_duration())
+
+        # Record per-player stats
+        for player_name, stats in self.game.stats.player_stats.items():
+            player_stats = self.aggregate_stats['player_stats'][player_name]
+            player_stats['cards_played'].append(stats.cards_played)
+            player_stats['cards_scrapped'].append(stats.cards_scrapped)
+            player_stats['cards_bought'].append(stats.cards_bought)
+            player_stats['damage_dealt'].append(stats.damage_dealt)
+            player_stats['trade_generated'].append(stats.trade_generated)
+            player_stats['cards_drawn'].append(stats.cards_drawn)
+            player_stats['bases_destroyed'].append(stats.bases_destroyed)
+            player_stats['authority_gained'].append(stats.authority_gained)
+        
+    def _display_aggregate_stats(self):
+                        
+        # Print final statistics
+        print("\nOverall Results:")
+        print(f"{self.aggregate_stats}")
     
     def list_agents(self):
         """Display list of available agents"""
@@ -143,7 +206,7 @@ class CLI:
                 name2 += " (Player 2)"
                 
                 # Initialize win statistics
-                self.win_stats = {name1: 0, name2: 0}
+                self._reset_aggregate_stats(name1, name2)
                 
                 # Run multiple games
                 for game_num in range(self.games_count):
@@ -154,10 +217,10 @@ class CLI:
                     self.game = Game(cards, verbose=self.verbose)
                     
                     # Add both players with their selected agents
-                    player1 = self.game.add_player()
+                    player1 = self.game.add_player(name1)
                     player1.agent = agent1
                     
-                    player2 = self.game.add_player()
+                    player2 = self.game.add_player(name2)
                     player2.agent = agent2
                     
                     # Initialize pygame UI if enabled (only for single game mode)
@@ -186,6 +249,9 @@ class CLI:
                     elif winner == "Player 2":
                         self.win_stats[name2] += 1
 
+                    # Update aggregate statistics
+                    self._update_aggregate_stats()
+
                     # Display game statistics
                     print("\n" + "="*50)
                     print(self.game.stats.get_summary())
@@ -195,11 +261,9 @@ class CLI:
                     if self.pygame_ui:
                         self.pygame_ui.close()
                         self.pygame_ui = None
-                
-                # Print final statistics
-                print("\nOverall Results:")
-                print(f"{name1}: {self.win_stats[name1]} wins")
-                print(f"{name2}: {self.win_stats[name2]} wins")
+
+                # Display aggregate statistics
+                self._display_aggregate_stats()
             
             elif command == "verbose":
                 self.verbose = not self.verbose
