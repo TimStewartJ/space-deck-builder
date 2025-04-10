@@ -15,7 +15,7 @@ class CardEffects:
             card: The card being played
             scrap: Boolean indicating if this is a scrap effect being activated
         """
-        log(f"Applying effects for {card.name} {card.effects}")
+        log(f"Applying effects for {card.name}")
 
         for effect in card.effects:
             log(f"\tProcessing effect: {effect}")

@@ -1,6 +1,8 @@
 import re
 import csv
 from typing import List
+
+from src.utils.logger import log
 from .card import Card
 from .effects import Effect
 
@@ -16,7 +18,7 @@ def parse_effect_text(text: str) -> Effect:
     is_ally = False
     faction_requirement = None
     faction_requirement_count = 0
-    ally_match = re.search(r"\{(?:(Double)\s+)?(\w+)\s+Ally\}:\s*(.*)", text)
+    ally_match = re.search(r"\{(?:(Double)\s+)?([^}]+?)\s+Ally\}:\s*(.*)", text)
     if ally_match:
         is_ally = True
         is_double = ally_match.group(1) == "Double"
@@ -35,8 +37,13 @@ def parse_effect_text(text: str) -> Effect:
         return Effect("combat", int(combat_match.group(1)), text,
                      faction_requirement, is_scrap, is_ally, faction_requirement_count)
     
+    healing_match = re.search(r"\{Gain (\d+) Authority\}", text)
+    if healing_match:
+        return Effect("heal", int(healing_match.group(1)), text,
+                     faction_requirement, is_scrap, is_ally, faction_requirement_count)
+    
     # Parse draw effects
-    if text == "Draw a card":
+    if text == "Draw a card.":
         return Effect("draw", 1, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)
     
     draw_match = re.search(r"Draw (\d+) cards?", text)
@@ -123,6 +130,6 @@ def load_trade_deck_cards(file_path, filter_names=None, filter_sets=None):
                 
             # Add multiple copies based on Qty
             qty = int(row.get('Qty', 1))
-            print(f"Adding {qty} copies of {card}")
+            log(f"[LOADER]: Adding {qty} copies of {card}")
             cards.extend([card] * qty)
     return cards
