@@ -1,4 +1,7 @@
+from datetime import datetime
+
 verbose = True  # Global flag to control logging
+log_file_name = f"game_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"  # Global log file name
 
 def set_verbose(value):
     """
@@ -35,7 +38,7 @@ def log_to_console(message):
     if verbose:
         print(message)
 
-def log_to_file(message, filename='game_log.txt'):
+def log_to_file(message, filename=log_file_name):
     if verbose:
         with open(filename, 'a') as log_file:
             log_file.write(message + '\n')
