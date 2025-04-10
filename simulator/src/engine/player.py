@@ -83,10 +83,7 @@ class Player:
         import random
         random.shuffle(self.deck)
         
-    def _has_faction_ally(self, faction, current_card):
-        """Check if player has played another card of the specified faction this turn"""
-        for card in self.played_cards:
-            if card.faction and card.faction.lower() == faction.lower() and card != current_card:
-                return True
-        return False
-        
+    
+    def get_faction_ally_count(self, faction):
+        """Count the number of cards of the specified faction in play"""
+        return sum(1 for card in self.played_cards if card.faction and card.faction.lower() == faction.lower())

@@ -13,16 +13,18 @@ class Effect:
     faction_requirement: Optional[str] = None
     is_scrap_effect: bool = False
     is_ally_effect: bool = False
+    faction_requirement_count: int = 0
     
     def __init__(self, effect_type: str, value: int = 0, text: str = "", 
                  faction_requirement: Optional[str] = None, is_scrap_effect: bool = False,
-                 is_ally_effect: bool = False):
+                 is_ally_effect: bool = False, faction_requirement_count: int = 0):
         self.effect_type = effect_type
         self.value = value
         self.text = text
         self.faction_requirement = faction_requirement
         self.is_scrap_effect = is_scrap_effect
         self.is_ally_effect = is_ally_effect
+        self.faction_requirement_count = faction_requirement_count if faction_requirement_count > 0 else (1 if faction_requirement else 0)
         self.applied = False
     
     def apply(self, player: 'Player', card=None):

@@ -32,8 +32,8 @@ class CardEffects:
             if effect.is_ally_effect:
                 faction = effect.faction_requirement
                 
-                # Check if the player has played another card of this faction
-                if current_player._has_faction_ally(faction, card):
+                # Check if the player has sufficient faction allies
+                if current_player.get_faction_ally_count(faction) > effect.faction_requirement_count:
                     log(f"Applying faction ally effect for {faction}: {effect}")
                     effect.apply(current_player, card)
                 continue

@@ -15,34 +15,37 @@ def parse_effect_text(text: str) -> Effect:
     # Check for ally effects
     is_ally = False
     faction_requirement = None
-    ally_match = re.search(r"\{(\w+) Ally\}:\s*(.*)", text)
+    faction_requirement_count = 0
+    ally_match = re.search(r"\{(?:(Double)\s+)?(\w+)\s+Ally\}:\s*(.*)", text)
     if ally_match:
         is_ally = True
-        faction_requirement = ally_match.group(1)
-        text = ally_match.group(2).strip()
+        is_double = ally_match.group(1) == "Double"
+        faction_requirement = ally_match.group(2)
+        faction_requirement_count = 2 if is_double else 1
+        text = ally_match.group(3).strip()
     
     # Parse common resource gains
     trade_match = re.search(r"\{Gain (\d+) Trade\}", text)
     if trade_match:
         return Effect("trade", int(trade_match.group(1)), text, 
-                     faction_requirement, is_scrap, is_ally)
+                     faction_requirement, is_scrap, is_ally, faction_requirement_count)
         
     combat_match = re.search(r"\{Gain (\d+) Combat\}", text)
     if combat_match:
         return Effect("combat", int(combat_match.group(1)), text,
-                     faction_requirement, is_scrap, is_ally)
+                     faction_requirement, is_scrap, is_ally, faction_requirement_count)
     
     # Parse draw effects
     if text == "Draw a card":
-        return Effect("draw", 1, text, faction_requirement, is_scrap, is_ally)
+        return Effect("draw", 1, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)
     
     draw_match = re.search(r"Draw (\d+) cards?", text)
     if draw_match:
         return Effect("draw", int(draw_match.group(1)), text,
-                     faction_requirement, is_scrap, is_ally)
+                     faction_requirement, is_scrap, is_ally, faction_requirement_count)
     
     # Default case - store as text for complex effects
-    return Effect("complex", 0, text, faction_requirement, is_scrap, is_ally)
+    return Effect("complex", 0, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)
 
 def load_trade_deck_cards(file_path, filter_names=None, filter_sets=None):
     """
