@@ -189,3 +189,10 @@ class Game:
             return player
         else:
             raise ValueError("Maximum number of players reached")
+        
+    def get_winner(self):
+        if self.is_game_over:
+            # Determine winner based on remaining health
+            winner = max(self.players, key=lambda p: p.health)
+            return winner.name
+        return None
