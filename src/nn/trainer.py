@@ -84,6 +84,12 @@ class Trainer:
             game.start_game()
             
             # Main training loop
+            current_episode_states = []
+            current_episode_actions = []
+            current_episode_rewards = []
+            current_episode_next_states = []
+            current_episode_dones = []
+
             while not game.is_game_over:
                 # Store state before action
                 current_player = game.current_player
@@ -91,6 +97,7 @@ class Trainer:
                 # Check if the current player is the neural agent
                 if current_player.name == player1Name:
                     state = self.neural_agent.encode_state(game)
+                    current_episode_states.append(state)
                 
                 # Agent makes a decision and updates game state
                 action = game.next_step()
@@ -100,7 +107,24 @@ class Trainer:
                 if current_player.name == player1Name:
                     reward = self.calculate_reward(game, current_player)
                     next_state = self.neural_agent.encode_state(game)
-                    self.neural_agent.remember(state, action, reward, next_state, game.is_game_over)
+                    done = game.is_game_over
+                    
+                    # Store experience
+                    current_episode_actions.append(action)
+                    current_episode_rewards.append(reward)
+                    current_episode_next_states.append(next_state)
+                    current_episode_dones.append(done)
+                
+            # When game is over, store the complete episode
+            if len(current_episode_states) > 0:
+                for i in range(len(current_episode_states)):
+                    self.neural_agent.remember(
+                        current_episode_states[i],
+                        current_episode_actions[i],
+                        current_episode_rewards[i],
+                        current_episode_next_states[i],
+                        current_episode_dones[i]
+                    )
                 
             # Train the network
             if episode % (self.episodes/100) == 0:

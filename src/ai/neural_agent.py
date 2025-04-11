@@ -1,3 +1,4 @@
+import random
 from typing import TYPE_CHECKING
 import numpy as np
 import torch
@@ -32,13 +33,17 @@ class NeuralAgent(Agent):
     def __init__(self, name, cli_interface=None, learning_rate=0.001):
         super().__init__(name, cli_interface)
         # Basic parameters
-        self.exploration_rate = 0.2  # Adjust as needed
-        self.CARD_ENCODING_SIZE = 19  # Adjust based on your card encoding
+        self.exploration_rate = 0.2
+        self.CARD_ENCODING_SIZE = 19
         self.state_size = 860
         self.action_size = 50
         self.model = NeuralNetwork(self.state_size, self.action_size)
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
+        
+        # Change memory structure to track episodes
         self.memory = []
+        self.current_episode = []
+        self.gamma = 0.99  # Discount factor
 
     def encode_state(self, game_state: 'Game'):
         """Convert variable-length game state to fixed-length tensor"""
@@ -153,46 +158,72 @@ class NeuralAgent(Agent):
         return decode_action(action_values.argmax().item(), available_actions)
     
     def remember(self, state, action, reward, next_state, done):
-        """Store experience in replay memory"""
-        self.memory.append((state, action, reward, next_state, done))
+        """Store experience in current episode"""
+        self.current_episode.append((state, action, reward, next_state, done))
     
-    def train(self, batch_size=64):
-        """Train model using experience replay"""
-        if len(self.memory) < batch_size:
+        # When episode is done, store it in memory
+        if done:
+            self.memory.append(self.current_episode)
+            self.current_episode = []  # Reset for next episode
+    
+    def train(self, batch_size=64, lambda_param=0.7):
+        """Train model using experience replay with TD(λ) learning"""
+        # Need enough complete episodes
+        if len(self.memory) < 4:
             return
-            
-        # Sample batch from memory
-        batch = np.random.choice(len(self.memory), batch_size, replace=False)
-        states = []
-        actions = []
-        rewards = []
-        next_states = []
-        dones = []
         
-        for i in batch:
-            state, action, reward, next_state, done = self.memory[i]
-            states.append(state)
-            actions.append(encode_action(action))
-            rewards.append(reward)
-            next_states.append(next_state)
-            dones.append(done)
+        # Sample some episodes
+        sampled_episodes = random.sample(self.memory, min(4, len(self.memory)))
+        
+        # Extract transitions from episodes
+        all_states = []
+        all_actions = []
+        all_td_targets = []
+        
+        for episode in sampled_episodes:
+            if len(episode) < 2:  # Skip very short episodes
+                continue
+                
+            # Process each transition in the episode
+            for t in range(len(episode)):
+                state, action, reward, _, _ = episode[t]
+                
+                # Calculate n-step return with TD(λ)
+                n_step_return = 0
+                for n in range(min(len(episode) - t, 10)):  # Look ahead up to 10 steps
+                    # Get future reward n steps ahead
+                    future_reward = episode[t + n][2]  # reward at t+n
+                    
+                    # Apply lambda and gamma discounting
+                    discount = (self.gamma ** n) * (lambda_param ** n)
+                    n_step_return += discount * future_reward
+                
+                # For states close to the end, add bootstrapped value
+                if t + 10 < len(episode):
+                    final_state = episode[t + 10][3]  # next_state at t+10
+                    with torch.no_grad():
+                        final_value = torch.max(self.model(final_state), dim=0)[0].item()
+                        n_step_return += (self.gamma ** 10) * (lambda_param ** 10) * final_value
+                
+                all_states.append(state)
+                all_actions.append(encode_action(action))
+                all_td_targets.append(n_step_return)
+        
+        # Skip training if not enough samples
+        if len(all_states) < batch_size:
+            return
         
         # Convert to tensors
-        states = torch.stack(states)
-        actions = torch.LongTensor(actions)
-        rewards = torch.FloatTensor(rewards)
-        next_states = torch.stack(next_states)
-        dones = torch.FloatTensor(dones)
+        indices = np.random.choice(len(all_states), batch_size, replace=False)
+        states = torch.stack([all_states[i] for i in indices])
+        actions = torch.LongTensor([all_actions[i] for i in indices])
+        td_targets = torch.FloatTensor([all_td_targets[i] for i in indices])
         
         # Compute Q values
         q_values = self.model(states)
-        next_q_values = self.model(next_states).detach()
         
-        # Use Q-learning update rule
-        target_q = rewards + 0.99 * (1 - dones) * torch.max(next_q_values, dim=1)[0]
-        
-        # Update model
+        # Update model using the TD targets
         self.optimizer.zero_grad()
-        loss = nn.MSELoss()(q_values.gather(1, actions.unsqueeze(1)).squeeze(1), target_q)
+        loss = nn.MSELoss()(q_values.gather(1, actions.unsqueeze(1)).squeeze(1), td_targets)
         loss.backward()
         self.optimizer.step()
