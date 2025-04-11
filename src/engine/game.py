@@ -1,3 +1,4 @@
+import copy
 from typing import List
 from src.cards.effects import CardEffectType
 from src.utils.logger import log
@@ -11,7 +12,7 @@ class Game:
         self.players: List[Player] = []
         self.current_turn = 0
         self.is_game_over = False
-        self.trade_deck = cards if cards else []
+        self.trade_deck = copy.deepcopy(cards) if cards else []
         self.trade_row: List[Card] = []
         self.is_running = False
         self.current_player: Player = None
@@ -125,7 +126,7 @@ class Game:
                 if card.name == action.card_id:
                     self.current_player.play_card(card)
                     self.stats.record_card_play(self.current_player.name)
-                    log(f"{self.current_player.name} played {card.name}")
+                    log(f"{self.current_player.name} played {card.name}", v=True)
                     # Apply first card effect if ship
                     if card.card_type == "ship" and card.effects and len(card.effects) > 0:
                         card.effects[0].apply(self, self.current_player, card)
@@ -165,7 +166,7 @@ class Game:
                             player.bases.remove(base)
                             player.discard_pile.append(base)
                             self.stats.record_base_destroy(self.current_player.name)
-                            log(f"{self.current_player.name} destroyed {player.name}'s {base.name}")
+                            log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
                             break
 
         elif action.type == ActionType.ATTACK_PLAYER:
@@ -178,7 +179,7 @@ class Game:
                         player.health -= damage
                         self.current_player.combat = 0
                         self.stats.record_damage(self.current_player.name, damage)
-                        log(f"{self.current_player.name} attacked {player.name} for {damage} damage")
+                        log(f"{self.current_player.name} attacked {player.name} for {damage} damage", v=True)
                         # Check for game over
                         if player.health <= 0:
                             log(f"{player.name} has been defeated!")
@@ -193,21 +194,21 @@ class Game:
                 for card in self.current_player.hand:
                     if card.name == action.card_id:
                         self.current_player.hand.remove(card)
-                        log(f"{self.current_player.name} scrapped {card.name} from hand")
+                        log(f"{self.current_player.name} scrapped {card.name} from hand", v=True)
                         break
             elif action.card_sources and 'discard' in action.card_sources:
                 # Scrap card from discard pile
                 for card in self.current_player.discard_pile:
                     if card.name == action.card_id:
                         self.current_player.discard_pile.remove(card)
-                        log(f"{self.current_player.name} scrapped {card.name} from discard pile")
+                        log(f"{self.current_player.name} scrapped {card.name} from discard pile", v=True)
                         break
             elif action.card_sources and 'trade' in action.card_sources:
                 # Scrap card from trade row
                 for i, card in enumerate(self.trade_row):
                     if card.name == action.card_id:
                         self.trade_row.pop(i)
-                        log(f"{self.current_player.name} scrapped {card.name} from trade row")
+                        log(f"{self.current_player.name} scrapped {card.name} from trade row", v=True)
                         break
                 # If this was the last pending action, refresh the trade row
                 if self.current_player.pending_actions_left <= 0:
@@ -219,7 +220,7 @@ class Game:
                 if card.name == action.card_id:
                     self.current_player.hand.remove(card)
                     self.current_player.discard_pile.append(card)
-                    log(f"{self.current_player.name} discarded {card.name}")
+                    log(f"{self.current_player.name} discarded {card.name}", v=True)
                     break
 
         return False  # Turn continues

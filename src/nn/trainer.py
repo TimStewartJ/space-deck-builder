@@ -35,12 +35,13 @@ class Trainer:
     
     def train(self):
         set_verbose(False)  # Disable verbose logging for training
-        
+
+        cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
+
         for episode in range(self.episodes):
             log(f"Episode {episode+1}/{self.episodes}")
             
             # Setup game
-            cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
             game = Game(cards)
             
             # Add players
