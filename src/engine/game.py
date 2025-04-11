@@ -70,33 +70,30 @@ class Game:
             starting_deck.append(Card("Viper", 0, [Effect(CardEffectType.COMBAT, 1)], "ship"))
         return starting_deck
 
-    def next_turn(self):
+    def next_step(self):
         if self.is_game_over:
             return
         
-        self.stats.total_turns += 1
-        self.current_player = self.players[self.current_turn]
-        self.current_player.reset_resources()
-        
-        log(f"Starting turn for {self.current_player.name}")
-        
-        # Process player turn until they choose to end it
-        self.process_player_turn()
-        
-        # End turn and move to next player
-        self.current_player.end_turn()
-        log(f"Ended turn for {self.current_player.name}")
-        self.current_turn = (self.current_turn + 1) % len(self.players)
-        
-    def process_player_turn(self):
         turn_ended = False
+
+        log(f"Getting action for {self.current_player.name}")
+
+        # Get player decision (through UI or AI)
+        action = self.current_player.make_decision(self)
         
-        while not turn_ended:
-            # Get player decision (through UI or AI)
-            action = self.current_player.make_decision(self)
+        if action:
+            turn_ended = self.execute_action(action)
+        
+        if turn_ended:
+            self.stats.total_turns += 1
+            self.current_player = self.players[self.current_turn]
+            self.current_player.reset_resources()
             
-            if action:
-                turn_ended = self.execute_action(action)
+            # End turn and move to next player
+            self.current_player.end_turn()
+            log(f"Ended turn for {self.current_player.name}")
+            self.current_turn = (self.current_turn + 1) % len(self.players)
+        
     
     def execute_action(self, action: Action):
         """Execute a player's action and update game state"""

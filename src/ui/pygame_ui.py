@@ -55,9 +55,10 @@ class PygameUI:
         # Draw card effects (truncated if needed)
         y_offset = 85
         for effect in card.effects:
-            if len(effect) > 25:
-                effect = effect[:22] + "..."
-            effect_text = self.card_font.render(effect, True, self.BLACK)
+            effect_str = str(effect)
+            if len(effect_str) > 25:
+                effect_str = effect_str[:22] + "..."
+            effect_text = self.card_font.render(effect_str, True, self.BLACK)
             self.screen.blit(effect_text, (x + 5, y + y_offset))
             y_offset += 20
 

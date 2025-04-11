@@ -201,7 +201,8 @@ class CLI:
                         if self.pygame_ui:
                             running = self.pygame_ui.handle_events()
                             self.pygame_ui.draw_game_state(self.game)
-                        self.game.next_turn()
+                            self.pygame_ui.sleep(1)
+                        self.game.next_step()
 
                     # Record winner
                     winner = self.game.get_winner()
