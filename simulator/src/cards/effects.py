@@ -76,7 +76,6 @@ class Effect:
                         source=["discard"]
                     )
                     player.pending_actions.append(action)
-                    game.stats.record_card_scrap(player.name, "discard")
             # Create an action for every card in hand
             if self.card_targets and "hand" in self.card_targets:
                 hand_targets = player.hand
@@ -87,7 +86,6 @@ class Effect:
                         source=["hand"]
                     )
                     player.pending_actions.append(action)
-                    game.stats.record_card_scrap(player.name, "hand")
             # Create an action for every card in trade row
             if self.card_targets and "trade" in self.card_targets:
                 trade_targets = game.trade_row
@@ -98,7 +96,6 @@ class Effect:
                         source=["trade"]
                     )
                     player.pending_actions.append(action)
-                    game.stats.record_card_scrap(player.name, "trade")
         elif self.effect_type == CardEffectType.COMPLEX:
             self.handle_complex_effect(game, player, card)
         
@@ -106,6 +103,7 @@ class Effect:
 
         # if the effect is a scrap effect, remove the card from the game
         if self.is_scrap_effect and card:
+            game.stats.record_card_scrap(player.name, "card")
             # find the card in the player's played cards by name and remove it
             for c in player.played_cards:
                 if c.name == card.name:
