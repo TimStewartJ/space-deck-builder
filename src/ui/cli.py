@@ -1,7 +1,7 @@
 from src.engine.game import Game
 from src.cards.loader import load_trade_deck_cards
 from src.engine.aggregate_stats import AggregateStats
-from src.utils.logger import log, set_disabled
+from src.utils.logger import log, set_disabled, set_verbose
 import os
 import importlib
 import inspect
@@ -188,7 +188,7 @@ class CLI:
                         print(f"\nStarting game {game_num + 1} of {self.games_count}")
                     
                     cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
-                    self.game = Game(cards, verbose=self.verbose)
+                    self.game = Game(cards)
                     
                     # Add both players with their selected agents
                     player1 = self.game.add_player(name1)
@@ -245,8 +245,7 @@ class CLI:
 
             elif command == "verbose":
                 self.verbose = not self.verbose
-                if self.game:
-                    self.game.verbose = self.verbose
+                set_verbose(self.verbose)
                 print(f"Verbose mode {'enabled' if self.verbose else 'disabled'}")
 
             elif command == "pygame":

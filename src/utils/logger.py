@@ -2,7 +2,7 @@ from datetime import datetime
 
 verbose = True  # Global flag to control logging
 disabled = False  # Global flag to completely disable logging
-log_file_name = f"game_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"  # Global log file name
+log_file_name = f"logs/game_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"  # Global log file name
 
 def set_verbose(value):
     """
@@ -24,25 +24,14 @@ def set_disabled(value):
     global disabled
     disabled = value
 
-def log(message):
-    """
-    Log a message to the console and a file.
-    
-    Args:
-        message (str): The message to log.
-    """
-    if not disabled:
-        log_to_console(message)
-        log_to_file(message)
-
-def log_verbose(message):
+def log(message, v=False):
     """
     Log a message if verbose mode is enabled.
     
     Args:
         message (str): The message to log.
     """
-    if not disabled and verbose:
+    if not disabled and (not v or verbose):
         log_to_console(message)
         log_to_file(message)
 

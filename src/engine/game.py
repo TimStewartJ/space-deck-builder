@@ -7,7 +7,7 @@ from src.engine.actions import ActionType, Action, get_available_actions
 from src.engine.game_stats import GameStats
 
 class Game:
-    def __init__(self, cards=None, verbose=False):
+    def __init__(self, cards=None):
         self.players: List[Player] = []
         self.current_turn = 0
         self.is_game_over = False
@@ -15,7 +15,6 @@ class Game:
         self.trade_row: List[Card] = []
         self.is_running = False
         self.current_player: Player = None
-        self.verbose = verbose
         self.stats = GameStats()
 
     def start_game(self):
@@ -79,11 +78,11 @@ class Game:
         
         turn_ended = False
 
-        log(f"Getting action for {self.current_player.name}")
-
         # Get player decision (through UI or AI)
         action = self.current_player.make_decision(self)
-        
+
+        log(f"Getting action for {self.current_player.name}", v=True)
+
         if action:
             turn_ended = self.execute_action(action)
         
@@ -102,20 +101,23 @@ class Game:
     
     def execute_action(self, action: Action):
         """Execute a player's action and update game state"""
-        log(f"{self.current_player.name} executing action: {action}")
+        log(f"{self.current_player.name} executing action: {action}", v=True)
 
         # Check for pending actions. Decrement the pending action count
         if self.current_player.pending_actions:
-            self.current_player.pending_actions.remove(action)
-            self.current_player.pending_actions_left -= 1
-            if self.current_player.pending_actions_left <= 0:
+            # Reset actions if the action is a skip decision
+            if action.type == ActionType.SKIP_DECISION:
                 self.current_player.reset_pending_actions()
+            # Otherwise remove the action from pending actions
+            # and decrement the count
+            else:
+                self.current_player.pending_actions.remove(action)
+                self.current_player.pending_actions_left -= 1
+                if self.current_player.pending_actions_left <= 0:
+                    self.current_player.reset_pending_actions()
         
         if action.type == ActionType.END_TURN:
             return True  # End the turn
-        
-        elif action.type == ActionType.SKIP_DECISION:
-            self.current_player.reset_pending_actions()
             
         elif action.type == ActionType.PLAY_CARD:
             # Find the card in player's hand
@@ -134,7 +136,7 @@ class Game:
             effect = action.additional_params.get('effect')
             if effect:
                 effect.apply(self, self.current_player)
-                log(f"{self.current_player.name} applied effect: {effect}")
+                log(f"{self.current_player.name} applied effect: {effect}", v=True)
                     
         elif action.type == ActionType.BUY_CARD:
             # Find the card in trade row
@@ -143,14 +145,14 @@ class Game:
                     self.current_player.trade -= card.cost
                     self.current_player.discard_pile.append(card)
                     self.stats.record_card_buy(self.current_player.name)
-                    log(f"{self.current_player.name} bought {card.name} for {card.cost} trade")
+                    log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
                     self.trade_row.pop(i)
                     # Replace card in trade row
                     if self.trade_deck:
                         new_card = self.trade_deck.pop()
                         self.trade_row.append(new_card)
                         self.stats.trade_row_refreshes += 1
-                        log(f"Added {new_card.name} to trade row")
+                        log(f"Added {new_card.name} to trade row", v=True)
                     break
         
         elif action.type == ActionType.ATTACK_BASE:
