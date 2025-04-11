@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from src.cards.effects import Effect
 
 
@@ -8,7 +8,7 @@ class Card:
         self.cost: int = cost
         self.effects: List[Effect] = effects
         self.card_type = card_type  # "ship", "base", or "outpost"
-        self.defense = defense  # Only used for bases and outposts
+        self.defense: Optional[int] = defense  # Only used for bases and outposts
         self.faction = faction  # Can be None (unaligned), a string, or a list of factions
         self.set: str = set  # The set the card comes from (e.g. "Core Set", "Colony Wars", etc.)
         

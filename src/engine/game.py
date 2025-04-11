@@ -97,6 +97,8 @@ class Game:
             log(f"Ended turn for {self.current_player.name}")
             self.current_turn = (self.current_turn + 1) % len(self.players)
         
+        return action
+        
     
     def execute_action(self, action: Action):
         """Execute a player's action and update game state"""
