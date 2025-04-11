@@ -5,7 +5,7 @@ from src.engine.actions import Action
 
 class Player:
     def __init__(self, name, agent=None):
-        self.name = name
+        self.name: str = name
         self.hand: List[Card] = []
         self.deck: List[Card] = []
         self.discard_pile: List[Card] = []
