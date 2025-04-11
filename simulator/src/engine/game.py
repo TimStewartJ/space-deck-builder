@@ -176,22 +176,22 @@ class Game:
                         break
         
         elif action.type == ActionType.SCRAP_CARD:
-            self.stats.record_card_scrap(self.current_player.name, action.source)
-            if action.source and 'hand' in action.source:
+            self.stats.record_card_scrap(self.current_player.name, action.card_sources)
+            if action.card_sources and 'hand' in action.card_sources:
                 # Scrap card from hand
                 for card in self.current_player.hand:
                     if card.name == action.card_id:
                         self.current_player.hand.remove(card)
                         log(f"{self.current_player.name} scrapped {card.name} from hand")
                         break
-            elif action.source and 'discard' in action.source:
+            elif action.card_sources and 'discard' in action.card_sources:
                 # Scrap card from discard pile
                 for card in self.current_player.discard_pile:
                     if card.name == action.card_id:
                         self.current_player.discard_pile.remove(card)
                         log(f"{self.current_player.name} scrapped {card.name} from discard pile")
                         break
-            elif action.source and 'trade' in action.source:
+            elif action.card_sources and 'trade' in action.card_sources:
                 # Scrap card from trade row
                 for i, card in enumerate(self.trade_row):
                     if card.name == action.card_id:

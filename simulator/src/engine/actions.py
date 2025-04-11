@@ -5,6 +5,7 @@ from enum import Enum
 if TYPE_CHECKING:
     from src.engine.player import Player
     from src.engine.game import Game
+    from src.cards.card import Card
 
 class ActionType(Enum):
     PLAY_CARD = "play_card"
@@ -20,24 +21,25 @@ class ActionType(Enum):
 class Action:
     type: ActionType
     card_id: Optional[str] = None
+    card: Optional['Card'] = None
     target_id: Optional[str] = None
-    source: Optional[str] = None
+    card_sources: Optional[str] = None
     additional_params: Optional[dict] = None
     
     def __str__(self):
         """String representation for display in CLI"""
-        if self.type == ActionType.PLAY_CARD and self.card_id:
-            return f"Play card: {self.card_id}"
+        if self.type == ActionType.PLAY_CARD and self.card:
+            return f"Play card: {self.card}"
         elif self.type == ActionType.APPLY_EFFECT and self.card_id:
             return f"{self.card_id}: {self.additional_params.get('effect', '')}"
         elif self.type == ActionType.BUY_CARD and self.card_id:
-            return f"Buy card: {self.card_id}"
+            return f"Buy card: {self.card}"
         elif self.type == ActionType.ATTACK_BASE:
             return f"Attack base: {self.target_id}"
         elif self.type == ActionType.ATTACK_PLAYER:
             return f"Attack player: {self.target_id}"
         elif self.type == ActionType.SCRAP_CARD:
-            return f"Scrap card: {self.card_id} from {self.source}"
+            return f"Scrap card: {self.card_id} from {self.card_sources}"
         elif self.type == ActionType.END_TURN:
             return "End turn"
         return f"{self.type}"
@@ -54,12 +56,12 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
 
     # Add play card actions for each card in hand
     for card in player.hand:
-        actions.append(Action(type=ActionType.PLAY_CARD, card_id=card.name))
+        actions.append(Action(type=ActionType.PLAY_CARD, card=card, card_id=card.name))
     
     # Add buy card actions for affordable cards in trade row
     for card in game_state.trade_row:
         if player.trade >= card.cost:
-            actions.append(Action(type=ActionType.BUY_CARD, card_id=card.name))
+            actions.append(Action(type=ActionType.BUY_CARD, card=card, card_id=card.name))
 
     # Add attack actions if player has combat available
     if player.combat > 0:

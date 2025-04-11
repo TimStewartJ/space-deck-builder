@@ -72,8 +72,8 @@ class Effect:
                 for target in discard_targets:
                     action = Action(
                         ActionType.SCRAP_CARD,
-                        card_id=target,
-                        source=["discard"]
+                        card_id=target.name,
+                        card_sources=["discard"]
                     )
                     player.pending_actions.append(action)
             # Create an action for every card in hand
@@ -82,8 +82,8 @@ class Effect:
                 for target in hand_targets:
                     action = Action(
                         ActionType.SCRAP_CARD,
-                        card_id=target,
-                        source=["hand"]
+                        card_id=target.name,
+                        card_sources=["hand"]
                     )
                     player.pending_actions.append(action)
             # Create an action for every card in trade row
@@ -92,10 +92,15 @@ class Effect:
                 for target in trade_targets:
                     action = Action(
                         ActionType.SCRAP_CARD,
-                        card_id=target,
-                        source=["trade"]
+                        card_id=target.name,
+                        card_sources=["trade"]
                     )
                     player.pending_actions.append(action)
+        elif self.effect_type == CardEffectType.PARENT:
+            # Apply child effects if this card has any
+            if self.child_effects:
+                for effect in self.child_effects:
+                    effect.apply(game, player, card)
         elif self.effect_type == CardEffectType.COMPLEX:
             self.handle_complex_effect(game, player, card)
         
@@ -111,16 +116,11 @@ class Effect:
                     break
 
     def handle_complex_effect(self, game: 'Game', player: 'Player', card):
-        if self.child_effects:
-            for effect in self.child_effects:
-                effect.apply(game, player, card)
-            return
-
         # Handle conditional card draw
         draw_match = re.search(r"Draw a card for each (\w+) card", self.text)
         if draw_match:
             faction = draw_match.group(1).lower()
-            count = sum(1 for c in player.played_cards if c.faction.lower() == faction)
+            count = sum(1 for c in player.played_cards if c.faction and c.faction.lower() == faction)
             for _ in range(count):
                 player.draw_card()
 
