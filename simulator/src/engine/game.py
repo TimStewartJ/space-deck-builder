@@ -1,7 +1,6 @@
 from typing import List
 from src.cards.effects import CardEffectType
 from src.utils.logger import log
-from src.engine.card_effects import CardEffects
 from src.cards.card import Card
 from src.engine.player import Player
 from src.engine.actions import ActionType, Action, get_available_actions
@@ -17,7 +16,6 @@ class Game:
         self.is_running = False
         self.current_player: Player = None
         self.verbose = verbose
-        self.card_effects = CardEffects()
         self.stats = GameStats()
 
     def start_game(self):
@@ -117,8 +115,17 @@ class Game:
                     self.current_player.play_card(card)
                     self.stats.record_card_play(self.current_player.name)
                     log(f"{self.current_player.name} played {card.name}")
-                    self.card_effects.apply_card_effects(self, current_player=self.current_player, card=card)
+                    # Apply first card effect if ship
+                    if card.card_type == "ship" and card.effects and len(card.effects) > 0:
+                        card.effects[0].apply(self, self.current_player, card)
                     break
+        
+        elif action.type == ActionType.APPLY_EFFECT:
+            # Apply the effect directly
+            effect = action.additional_params.get('effect')
+            if effect:
+                effect.apply(self, self.current_player)
+                log(f"{self.current_player.name} applied effect: {effect}")
                     
         elif action.type == ActionType.BUY_CARD:
             # Find the card in trade row
@@ -191,17 +198,6 @@ class Game:
                         self.trade_row.pop(i)
                         log(f"{self.current_player.name} scrapped {card.name} from trade row")
                         break
-            else:
-                # find the card in player's played cards
-                card = None
-                for c in self.current_player.played_cards:
-                    if c.name == action.card_id:
-                        card = c
-                        break
-                # Scrap the card
-                if card:
-                    self.card_effects.apply_card_effects(self, current_player=self.current_player, card=card, scrap=True)
-                    log(f"{self.current_player.name} scrapped {card.name} from played cards")
 
         return False  # Turn continues
 

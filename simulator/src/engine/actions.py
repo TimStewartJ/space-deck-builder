@@ -8,6 +8,7 @@ if TYPE_CHECKING:
 
 class ActionType(Enum):
     PLAY_CARD = "play_card"
+    APPLY_EFFECT = "apply_effect"
     BUY_CARD = "buy_card"
     ATTACK_BASE = "attack_base"
     ATTACK_PLAYER = "attack_player"
@@ -27,6 +28,8 @@ class Action:
         """String representation for display in CLI"""
         if self.type == ActionType.PLAY_CARD and self.card_id:
             return f"Play card: {self.card_id}"
+        elif self.type == ActionType.APPLY_EFFECT and self.card_id:
+            return f"{self.card_id}: {self.additional_params.get('effect', '')}"
         elif self.type == ActionType.BUY_CARD and self.card_id:
             return f"Buy card: {self.card_id}"
         elif self.type == ActionType.ATTACK_BASE:
@@ -57,6 +60,7 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
     for card in game_state.trade_row:
         if player.trade >= card.cost:
             actions.append(Action(type=ActionType.BUY_CARD, card_id=card.name))
+
     # Add attack actions if player has combat available
     if player.combat > 0:
         for opponent in game_state.players:
@@ -69,8 +73,7 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                         if player.combat >= outpost.defense:
                             actions.append(Action(
                                 type=ActionType.ATTACK_BASE,
-                                target_id=outpost.name,
-                                additional_params={"defense": outpost.defense}
+                                target_id=outpost.name
                             ))
                 else:
                     # If no outposts, can attack other bases or player directly
@@ -78,21 +81,26 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                         if base.defense and player.combat >= base.defense:
                             actions.append(Action(
                                 type=ActionType.ATTACK_BASE,
-                                target_id=base.name,
-                                additional_params={"defense": base.defense}
+                                target_id=base.name
                             ))
                     # Can attack player directly only if no outposts
                     actions.append(Action(
                         type=ActionType.ATTACK_PLAYER,
-                        target_id=opponent.name,
-                        additional_params={"damage": player.combat}
+                        target_id=opponent.name
                     ))
     
-    # Add scrap card actions for played cards
+    # Add unused actions from played cards
     for card in player.played_cards:
-        if any(effect.is_scrap_effect for effect in card.effects):
-            # Only allow scrapping cards that have a scrap effect
-            actions.append(Action(type=ActionType.SCRAP_CARD, card_id=card.name, source="played"))
+        for effect in card.effects:
+            if not effect.applied:
+                # Ensure faction allies are valid
+                if effect.faction_requirement:
+                    faction_count = player.get_faction_ally_count(effect.faction_requirement)
+                    if faction_count > effect.faction_requirement_count:
+                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, additional_params={"effect": effect}))
+                    continue
+                # If no faction requirement, add effect directly
+                actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, additional_params={"effect": effect}))
 
     # Always allow ending turn
     actions.append(Action(type=ActionType.END_TURN))
