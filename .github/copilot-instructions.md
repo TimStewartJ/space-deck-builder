@@ -5,5 +5,5 @@ This is a simulator for a space-based deck building card game. The game has the 
 ## Project Details
 
 - This project uses the uv package manager.
-- Card details are available in the simulator\data\cards.csv file with the following columns:
+- Card details are available in the data\cards.csv file with the following columns:
   - Set,Qty,Name,Text,Type,Faction,Cost,Defense,Role,Notes
