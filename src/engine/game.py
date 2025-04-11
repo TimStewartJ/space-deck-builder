@@ -94,7 +94,7 @@ class Game:
             
             # End turn and move to next player
             self.current_player.end_turn()
-            log(f"Ended turn for {self.current_player.name}")
+            log(f"Ended turn for {self.current_player.name}", v=True)
             self.current_turn = (self.current_turn + 1) % len(self.players)
         
         return action
