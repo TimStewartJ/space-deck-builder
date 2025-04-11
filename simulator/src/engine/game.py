@@ -207,6 +207,7 @@ class Game:
                         break
         elif action.type == ActionType.DISCARD_CARDS:
             # Discard card from hand
+            self.stats.record_cards_discarded_from_hand(self.current_player.name, 1)
             for card in self.current_player.hand:
                 if card.name == action.card_id:
                     self.current_player.hand.remove(card)

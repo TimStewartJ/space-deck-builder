@@ -15,6 +15,7 @@ class PlayerStats:
     scrapped_from_hand: int = 0
     scrapped_from_discard: int = 0
     scrapped_from_trade: int = 0
+    cards_discarded_from_hand: int = 0
 
 @dataclass
 class GameStats:
@@ -73,6 +74,10 @@ class GameStats:
         """Record authority (health) being gained"""
         self.player_stats[player_name].authority_gained += amount
     
+    def record_cards_discarded_from_hand(self, player_name: str, count: int = 1):
+        """Record cards being discarded from hand"""
+        self.player_stats[player_name].cards_discarded_from_hand += count
+    
     def end_game(self, winner: str):
         """Record the game ending"""
         self.end_time = datetime.now()
@@ -105,6 +110,7 @@ class GameStats:
                 f"  Cards Drawn from card effects: {stats.cards_drawn}",
                 f"  Bases Destroyed: {stats.bases_destroyed}",
                 f"  Authority Gained: {stats.authority_gained}",
+                f"  Cards Discarded from Hand: {stats.cards_discarded_from_hand}",
                 f"  Total Cards Scrapped: {stats.cards_scrapped}",
                 f"    From Hand: {stats.scrapped_from_hand}",
                 f"    From Discard: {stats.scrapped_from_discard}",

@@ -15,6 +15,7 @@ class PlayerAggregateStats:
     scrapped_from_hand: List[int] = field(default_factory=list)
     scrapped_from_discard: List[int] = field(default_factory=list)
     scrapped_from_trade: List[int] = field(default_factory=list)
+    cards_discarded_from_hand: List[int] = field(default_factory=list)
 
 @dataclass
 class AggregateStats:
@@ -62,6 +63,7 @@ class AggregateStats:
             player_stats.scrapped_from_hand.append(stats.scrapped_from_hand)
             player_stats.scrapped_from_discard.append(stats.scrapped_from_discard)
             player_stats.scrapped_from_trade.append(stats.scrapped_from_trade)
+            player_stats.cards_discarded_from_hand.append(stats.cards_discarded_from_hand)
 
     def get_summary(self) -> str:
         """Get a formatted summary of the aggregate statistics"""
@@ -96,7 +98,8 @@ class AggregateStats:
                 f"  Authority Gained: min={min(stats.authority_gained)}, max={max(stats.authority_gained)}, avg={avg(stats.authority_gained):.1f}",
                 f"  Scrapped from Hand: min={min(stats.scrapped_from_hand)}, max={max(stats.scrapped_from_hand)}, avg={avg(stats.scrapped_from_hand):.1f}",
                 f"  Scrapped from Discard: min={min(stats.scrapped_from_discard)}, max={max(stats.scrapped_from_discard)}, avg={avg(stats.scrapped_from_discard):.1f}",
-                f"  Scrapped from Trade Row: min={min(stats.scrapped_from_trade)}, max={max(stats.scrapped_from_trade)}, avg={avg(stats.scrapped_from_trade):.1f}"
+                f"  Scrapped from Trade Row: min={min(stats.scrapped_from_trade)}, max={max(stats.scrapped_from_trade)}, avg={avg(stats.scrapped_from_trade):.1f}",
+                f"  Cards Discarded from Hand: min={min(stats.cards_discarded_from_hand)}, max={max(stats.cards_discarded_from_hand)}, avg={avg(stats.cards_discarded_from_hand):.1f}"
             ])
 
         return "\n".join(summary)
