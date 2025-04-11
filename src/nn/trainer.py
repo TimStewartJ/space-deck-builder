@@ -1,0 +1,83 @@
+import random
+from typing import TYPE_CHECKING
+import torch
+import numpy as np
+from src.ai.random_agent import RandomAgent
+from src.engine.game import Game
+from src.cards.loader import load_trade_deck_cards
+from src.ai.neural_agent import NeuralAgent
+from src.utils.logger import log, set_verbose
+
+if TYPE_CHECKING:
+    from src.engine.player import Player
+
+class Trainer:
+    def __init__(self, episodes=1000, batch_size=64):
+        self.episodes = episodes
+        self.batch_size = batch_size
+        self.neural_agent = NeuralAgent("NeuralAgent")
+        self.opponent_agent = RandomAgent("RandomAgent")  # Choose an opponent type
+        
+    def calculate_reward(self, game: 'Game', player: 'Player'):
+        """Calculate reward for the current game state"""
+        # Basic reward for winning/losing
+        if game.is_game_over:
+            return 100 if game.get_winner() == player.name else -100
+            
+        # Intermediate rewards
+        reward = 0
+        reward += player.health - 50  # Reward for gaining health
+        reward += len(player.hand) * 2  # Reward for card advantage
+        reward += player.trade + player.combat  # Reward for resources
+        
+        # Add more sophisticated reward signals
+        return reward
+    
+    def train(self):
+        set_verbose(False)  # Disable verbose logging for training
+        
+        for episode in range(self.episodes):
+            log(f"Episode {episode+1}/{self.episodes}")
+            
+            # Setup game
+            cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
+            game = Game(cards)
+            
+            # Add players
+            player1 = game.add_player("NeuralAgent")
+            player1.agent = self.neural_agent
+            
+            player2 = game.add_player("Opponent")
+            player2.agent = self.opponent_agent
+            
+            game.start_game()
+            
+            # Main training loop
+            while not game.is_game_over:
+                # Store state before action
+                current_player = game.current_player
+                state = self.neural_agent.encode_state(game)
+                
+                # Agent makes a decision and updates game state
+                action = game.next_step()
+                
+                # Calculate reward and remember experience
+                reward = self.calculate_reward(game, current_player)
+                next_state = self.neural_agent.encode_state(game)
+                
+                self.neural_agent.remember(state, action, reward, next_state, game.is_game_over)
+                
+                # Train the network
+                if episode % 10 == 0:
+                    self.neural_agent.train(self.batch_size)
+            
+            # Save model periodically
+            if episode % 100 == 0:
+                torch.save(self.neural_agent.model.state_dict(), f"models/neural_agent_{episode}.pth")
+                
+        # Save final model
+        torch.save(self.neural_agent.model.state_dict(), "models/neural_agent_final.pth")
+
+if __name__ == "__main__":
+    trainer = Trainer(episodes=1000, batch_size=64)
+    trainer.train()
