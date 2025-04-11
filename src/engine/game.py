@@ -36,7 +36,7 @@ class Game:
         while len(self.trade_row) < 5 and self.trade_deck:
             card = self.trade_deck.pop()
             self.trade_row.append(card)
-            log(f"Added {card.name} to trade row")
+            log(f"Added {card.name} to trade row", v=True)
 
     def shuffle_trade_deck(self):
         import random
@@ -89,7 +89,7 @@ class Game:
         
         if turn_ended:
             log(f"Ended turn for {self.current_player.name}", v=True)
-            
+
             # Tell player turn is over
             self.current_player.reset_resources()
             self.current_player.end_turn()

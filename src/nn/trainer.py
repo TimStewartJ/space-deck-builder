@@ -13,10 +13,11 @@ if TYPE_CHECKING:
     from src.engine.player import Player
 
 class Trainer:
-    def __init__(self, episodes=1000, batch_size=64):
+    def __init__(self, episodes=10000, batch_size=128, episode_sample_size=32):
         self.episodes = episodes
+        self.episode_sample_size = episode_sample_size
         self.batch_size = batch_size
-        self.neural_agent = NeuralAgent("NeuralAgent")
+        self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, look_ahead_steps=40)
         self.opponent_agent = RandomAgent("RandomAgent")  # Choose an opponent type
         
     def calculate_reward(self, game: 'Game', player: 'Player'):
@@ -46,15 +47,19 @@ class Trainer:
 
         # Reward for card synergies
         faction_counts = {"Blob": 0, "Trade Federation": 0, "Machine Cult": 0, "Star Empire": 0}
-        for card in player.hand + player.bases + player.discard_pile + player.deck:
+        all_cards = player.hand + player.bases + player.discard_pile + player.deck
+        for card in all_cards:
             if card.faction in faction_counts:
                 faction_counts[card.faction] += 1
         
         # Reward faction synergy potential
         dominant_faction = max(faction_counts, key=faction_counts.get)
         reward += faction_counts[dominant_faction] * 2
-    
-        
+
+        # Reward for high average cost of all cards
+        average_cost = np.mean([card.cost for card in all_cards]) if all_cards else 0
+        reward += average_cost * 1.5  # Higher cost cards can be more powerful
+
         # Add more sophisticated reward signals
         return reward
     
@@ -82,7 +87,7 @@ class Trainer:
             player2.agent = self.opponent_agent
 
             game.start_game()
-            
+
             # Main training loop
             current_episode_states = []
             current_episode_actions = []
@@ -128,7 +133,7 @@ class Trainer:
                 
             # Train the network
             if episode % (self.episodes/100) == 0:
-                self.neural_agent.train(self.batch_size)
+                self.neural_agent.train(self.batch_size, lambda_param=0.7, episode_sample_size=self.episode_sample_size)
             
             aggregate_stats.update(game.stats, game.get_winner())
             log(game.stats.get_summary())
@@ -144,5 +149,5 @@ class Trainer:
         torch.save(self.neural_agent.model.state_dict(), "models/neural_agent_final.pth")
 
 if __name__ == "__main__":
-    trainer = Trainer(episodes=5000, batch_size=64)
+    trainer = Trainer()
     trainer.train()

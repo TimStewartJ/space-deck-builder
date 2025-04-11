@@ -30,7 +30,7 @@ class NeuralNetwork(nn.Module):
         return self.network(x)
 
 class NeuralAgent(Agent):
-    def __init__(self, name, cli_interface=None, learning_rate=0.001):
+    def __init__(self, name, cli_interface=None, learning_rate=0.001, look_ahead_steps=10):
         super().__init__(name, cli_interface)
         # Basic parameters
         self.exploration_rate = 0.2
@@ -44,6 +44,7 @@ class NeuralAgent(Agent):
         self.memory = []
         self.current_episode = []
         self.gamma = 0.99  # Discount factor
+        self.look_ahead_steps = look_ahead_steps  # New parameter for steps to look ahead
 
     def encode_state(self, game_state: 'Game'):
         """Convert variable-length game state to fixed-length tensor"""
@@ -166,14 +167,14 @@ class NeuralAgent(Agent):
             self.memory.append(self.current_episode)
             self.current_episode = []  # Reset for next episode
     
-    def train(self, batch_size=64, lambda_param=0.7):
+    def train(self, batch_size=64, lambda_param=0.7, episode_sample_size=4):
         """Train model using experience replay with TD(λ) learning"""
         # Need enough complete episodes
-        if len(self.memory) < 4:
+        if len(self.memory) < episode_sample_size:
             return
         
         # Sample some episodes
-        sampled_episodes = random.sample(self.memory, min(4, len(self.memory)))
+        sampled_episodes = random.sample(self.memory, min(episode_sample_size, len(self.memory)))
         
         # Extract transitions from episodes
         all_states = []
@@ -190,7 +191,7 @@ class NeuralAgent(Agent):
                 
                 # Calculate n-step return with TD(λ)
                 n_step_return = 0
-                for n in range(min(len(episode) - t, 10)):  # Look ahead up to 10 steps
+                for n in range(min(len(episode) - t, self.look_ahead_steps)):  # Look ahead up to look_ahead_steps
                     # Get future reward n steps ahead
                     future_reward = episode[t + n][2]  # reward at t+n
                     
@@ -199,11 +200,11 @@ class NeuralAgent(Agent):
                     n_step_return += discount * future_reward
                 
                 # For states close to the end, add bootstrapped value
-                if t + 10 < len(episode):
-                    final_state = episode[t + 10][3]  # next_state at t+10
+                if t + self.look_ahead_steps < len(episode):
+                    final_state = episode[t + self.look_ahead_steps][3]  # next_state at t+look_ahead_steps
                     with torch.no_grad():
                         final_value = torch.max(self.model(final_state), dim=0)[0].item()
-                        n_step_return += (self.gamma ** 10) * (lambda_param ** 10) * final_value
+                        n_step_return += (self.gamma ** self.look_ahead_steps) * (lambda_param ** self.look_ahead_steps) * final_value
                 
                 all_states.append(state)
                 all_actions.append(encode_action(action))
