@@ -82,10 +82,35 @@ class PygameUI:
             self.draw_text(f"Trade: {player.trade}", 10, 340)
             self.draw_text(f"Combat: {player.combat}", 10, 370)
 
-            # Draw player's hand
-            self.draw_text("Hand:", 10, 420)
+            # Draw deck rectangle
+            deck_x, deck_y = 10, 450
+            pygame.draw.rect(self.screen, self.BLUE, (deck_x, deck_y, self.CARD_WIDTH, self.CARD_HEIGHT))
+            pygame.draw.rect(self.screen, self.WHITE, (deck_x, deck_y, self.CARD_WIDTH, self.CARD_HEIGHT), 2)
+            self.draw_text("Deck", deck_x + 10, deck_y + 10)
+            self.draw_text(f"{len(player.deck)}", deck_x + 10, deck_y + 40)
+
+            # Draw hand area
+            hand_label_x, hand_label_y = 10 + self.CARD_WIDTH + self.CARD_MARGIN, 420
+            self.draw_text("Hand:", hand_label_x, hand_label_y)
+            
+            # Draw hand card area background
+            hand_area_x = hand_label_x
+            hand_area_y = hand_label_y + 30
+            hand_area_width = 5 * (self.CARD_WIDTH + self.CARD_MARGIN)
+            hand_area_height = self.CARD_HEIGHT
+            pygame.draw.rect(self.screen, self.GRAY, (hand_area_x, hand_area_y, hand_area_width, hand_area_height), 1)
+            
+            # Draw player's hand cards
             for i, card in enumerate(player.hand):
-                self.draw_card(card, 10 + i * (self.CARD_WIDTH + self.CARD_MARGIN), 450)
+                self.draw_card(card, hand_area_x + i * (self.CARD_WIDTH + self.CARD_MARGIN), hand_area_y)
+
+            # Draw discard pile rectangle
+            discard_x = hand_area_x + hand_area_width + self.CARD_MARGIN
+            discard_y = hand_area_y
+            pygame.draw.rect(self.screen, self.RED, (discard_x, discard_y, self.CARD_WIDTH, self.CARD_HEIGHT))
+            pygame.draw.rect(self.screen, self.WHITE, (discard_x, discard_y, self.CARD_WIDTH, self.CARD_HEIGHT), 2)
+            self.draw_text("Discard", discard_x + 10, discard_y + 10)
+            self.draw_text(f"{len(player.discard_pile)}", discard_x + 10, discard_y + 40)
 
             # Draw player's bases
             if player.bases:

@@ -29,6 +29,9 @@ class Game:
 
     def setup_trade_row(self):
         self.shuffle_trade_deck()
+        self.fill_trade_row()
+    
+    def fill_trade_row(self):
         # Fill the trade row with 5 cards
         while len(self.trade_row) < 5 and self.trade_deck:
             card = self.trade_deck.pop()
@@ -202,6 +205,9 @@ class Game:
                         self.trade_row.pop(i)
                         log(f"{self.current_player.name} scrapped {card.name} from trade row")
                         break
+                # If this was the last pending action, refresh the trade row
+                if self.current_player.pending_actions_left <= 0:
+                    self.fill_trade_row()
         elif action.type == ActionType.DISCARD_CARDS:
             # Discard card from hand
             self.stats.record_cards_discarded_from_hand(self.current_player.name, 1)
