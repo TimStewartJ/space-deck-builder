@@ -36,16 +36,16 @@ def log(message, v=False):
         log_to_file(message)
 
 def log_to_console(message):
-    if not disabled and verbose:
+    if not disabled:
         print(message)
 
 def log_to_file(message, filename=log_file_name):
-    if not disabled and verbose:
+    if not disabled:
         with open(filename, 'a') as log_file:
             log_file.write(message + '\n')
 
 def log_event(event_type, details):
-    if not disabled and verbose:
+    if not disabled:
         message = f"{event_type}: {details}"
         log_to_console(message)
         log_to_file(message)
