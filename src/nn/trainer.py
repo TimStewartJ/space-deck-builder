@@ -24,9 +24,36 @@ class Trainer:
         # Basic reward for winning/losing
         if game.is_game_over:
             return 1000 if game.get_winner() == player.name else -1000
-            
-        # Intermediate rewards
+
         reward = 0
+
+        # Basic resource rewards
+        reward += player.trade * 2  # Trading is important for deck building
+        reward += player.combat * 1.5  # Combat allows attacking
+        
+        # Deck improvement rewards
+        hand_value = sum(card.cost for card in player.hand)
+        reward += hand_value * 0.5  # Reward for having valuable cards in hand
+        
+        # Base establishment rewards
+        base_count = len(player.bases)
+        reward += base_count * 10  # Bases provide lasting value
+        
+        # Health advantage reward
+        opponent = game.get_opponent(player)
+        health_advantage = player.health - opponent.health
+        reward += health_advantage * 0.5
+
+        # Reward for card synergies
+        faction_counts = {"Blob": 0, "Trade Federation": 0, "Machine Cult": 0, "Star Empire": 0}
+        for card in player.hand + player.bases + player.discard_pile + player.deck:
+            if card.faction in faction_counts:
+                faction_counts[card.faction] += 1
+        
+        # Reward faction synergy potential
+        dominant_faction = max(faction_counts, key=faction_counts.get)
+        reward += faction_counts[dominant_faction] * 2
+    
         
         # Add more sophisticated reward signals
         return reward
@@ -80,6 +107,7 @@ class Trainer:
                 self.neural_agent.train(self.batch_size)
             
             aggregate_stats.update(game.stats, game.get_winner())
+            log(game.stats.get_summary())
 
             # Save model periodically
             if episode % (self.episodes/10) == 0:
