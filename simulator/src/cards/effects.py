@@ -14,6 +14,7 @@ class CardEffectType(Enum):
     HEAL = "heal"
     SCRAP = "scrap"  # For effects that allow scrapping other cards
     PARENT = "parent"  # For effects that are parent effects
+    TARGET_DISCARD = "target_discard"  # For effects that make the target player discard cards
     COMPLEX = "complex"  # For complex effects that require special handling
 
 class CardTargetType(Enum):
@@ -49,6 +50,7 @@ class Effect:
         self.card_targets = card_targets
     
     def apply(self, game: 'Game', player: 'Player', card=None):
+        from src.engine.actions import Action, ActionType
         if self.applied:
             return
             
@@ -65,7 +67,6 @@ class Effect:
             player.health += self.value
             game.stats.record_authority_gain(player.name, self.value)
         elif self.effect_type == CardEffectType.SCRAP:
-            from src.engine.actions import Action, ActionType
             # Create an action for every card in discard pile
             if self.card_targets and "discard" in self.card_targets:
                 discard_targets = player.discard_pile
@@ -96,6 +97,21 @@ class Effect:
                         card_sources=["trade"]
                     )
                     player.pending_actions.append(action)
+        elif self.effect_type == CardEffectType.TARGET_DISCARD:
+            # Create an action for the target player to discard a card
+            if self.card_targets and "opponent" in self.card_targets:
+                # Assuming the opponent is the next player in the game
+                opponent = game.get_opponent(player)
+                opponent.pending_actions_mandatory = True
+                opponent.pending_actions_left = self.value
+                # Create an action for each card in the opponent's hand
+                for target in opponent.hand:
+                    action = Action(
+                        ActionType.DISCARD_CARDS,
+                        card_id=target.name,
+                        card_sources=["opponent"]
+                    )
+                    opponent.pending_actions.append(action)
         elif self.effect_type == CardEffectType.PARENT:
             # Apply child effects if this card has any
             if self.child_effects:

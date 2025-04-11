@@ -102,11 +102,18 @@ class Game:
         """Execute a player's action and update game state"""
         log(f"{self.current_player.name} executing action: {action}")
 
-        # if there are any pending actions left, clear them since we just did one
-        self.current_player.pending_actions.clear()
+        # Check for pending actions. Decrement the pending action count
+        if self.current_player.pending_actions:
+            self.current_player.pending_actions.remove(action)
+            self.current_player.pending_actions_left -= 1
+            if self.current_player.pending_actions_left <= 0:
+                self.current_player.reset_pending_actions()
         
         if action.type == ActionType.END_TURN:
             return True  # End the turn
+        
+        elif action.type == ActionType.SKIP_DECISION:
+            self.current_player.reset_pending_actions()
             
         elif action.type == ActionType.PLAY_CARD:
             # Find the card in player's hand
@@ -198,6 +205,14 @@ class Game:
                         self.trade_row.pop(i)
                         log(f"{self.current_player.name} scrapped {card.name} from trade row")
                         break
+        elif action.type == ActionType.DISCARD_CARDS:
+            # Discard card from hand
+            for card in self.current_player.hand:
+                if card.name == action.card_id:
+                    self.current_player.hand.remove(card)
+                    self.current_player.discard_pile.append(card)
+                    log(f"{self.current_player.name} discarded {card.name}")
+                    break
 
         return False  # Turn continues
 
@@ -215,6 +230,13 @@ class Game:
             return player
         else:
             raise ValueError("Maximum number of players reached")
+        
+    def get_opponent(self, player: Player):
+        """Get the opponent of the given player"""
+        for p in self.players:
+            if p != player:
+                return p
+        return None
         
     def get_winner(self):
         if self.is_game_over:

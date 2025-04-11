@@ -52,6 +52,11 @@ def parse_effect_text(text: str) -> Effect:
     if text == "You may scrap a card in the trade row.":
         return Effect(CardEffectType.SCRAP, 1, text, faction_requirement, is_scrap,
                       is_ally, faction_requirement_count, card_targets=["trade"])
+    
+    # Prase discard effects
+    if text == "Target opponent discards a card.":
+        return Effect(CardEffectType.TARGET_DISCARD, 1, text, faction_requirement, is_scrap,
+                      is_ally, faction_requirement_count, card_targets=["opponent"])
 
     # Parse draw effects
     if text == "Draw a card.":

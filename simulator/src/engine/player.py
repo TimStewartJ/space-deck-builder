@@ -19,6 +19,8 @@ class Player:
         self.combat = 0
         self.authority_gained = 0
         self.pending_actions: List[Action] = []  # Track actions awaiting player decisions
+        self.pending_actions_left = 0 # Track the amount of decisions left to make
+        self.pending_actions_mandatory = False # Track if the pending actions are mandatory
         self.cards_drawn = 0  # Track the number of cards drawn
         
     def draw_card(self):
@@ -54,6 +56,12 @@ class Player:
             return self.agent.make_decision(game_state)
         return None  # Should be overridden if no agent
     
+    def reset_pending_actions(self):
+        """Reset pending actions"""
+        self.pending_actions = []
+        self.pending_actions_left = 0
+        self.pending_actions_mandatory = False
+    
     def reset_resources(self):
         """Reset resources at the start of turn"""
         self.trade = 0
@@ -69,7 +77,7 @@ class Player:
                 self.discard_pile.append(card)
                 
         self.played_cards = []
-        self.pending_actions = []
+        self.reset_pending_actions()
         
         # Move hand to discard pile
         self.discard_pile.extend(self.hand)

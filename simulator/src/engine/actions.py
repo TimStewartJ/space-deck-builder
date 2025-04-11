@@ -16,6 +16,7 @@ class ActionType(Enum):
     SCRAP_CARD = "scrap_card"
     END_TURN = "end_turn"
     DISCARD_CARDS = "discard_card"
+    SKIP_DECISION = "skip_decision"
 
 @dataclass
 class Action:
@@ -40,6 +41,8 @@ class Action:
             return f"Attack player: {self.target_id}"
         elif self.type == ActionType.SCRAP_CARD:
             return f"Scrap card: {self.card_id} from {self.card_sources}"
+        elif self.type == ActionType.DISCARD_CARDS:
+            return f"Discard cards: {self.card_id} from {self.card_sources}"
         elif self.type == ActionType.END_TURN:
             return "End turn"
         return f"{self.type}"
@@ -52,6 +55,9 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
     if len(player.pending_actions) > 0:
         for action in player.pending_actions:
             actions.append(action)
+        # If the pending actions are optional, add a skip action
+        if not player.pending_actions_mandatory:
+            actions.append(Action(type=ActionType.SKIP_DECISION))
         return actions
 
     # Add play card actions for each card in hand
