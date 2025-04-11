@@ -1,7 +1,7 @@
 from src.engine.actions import Action, ActionType
 
 
-def encode_action(self, action: Action) -> int:
+def encode_action(action: Action) -> int:
     """Convert an Action object to a numerical index for neural network processing
     
     Maps different action types to different index ranges:
@@ -69,7 +69,7 @@ def encode_action(self, action: Action) -> int:
     # Default case
     return 0
 
-def decode_action(self, action_idx: int, available_actions: list[Action]) -> Action:
+def decode_action(action_idx: int, available_actions: list[Action]) -> Action:
     """Convert a neural network action index back to a game Action object
     
     Parameters:
