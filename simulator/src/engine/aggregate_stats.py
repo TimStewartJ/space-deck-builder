@@ -12,6 +12,9 @@ class PlayerAggregateStats:
     cards_drawn: List[int] = field(default_factory=list)
     bases_destroyed: List[int] = field(default_factory=list)
     authority_gained: List[int] = field(default_factory=list)
+    scrapped_from_hand: List[int] = field(default_factory=list)
+    scrapped_from_discard: List[int] = field(default_factory=list)
+    scrapped_from_trade: List[int] = field(default_factory=list)
 
 @dataclass
 class AggregateStats:
@@ -56,6 +59,9 @@ class AggregateStats:
             player_stats.cards_drawn.append(stats.cards_drawn)
             player_stats.bases_destroyed.append(stats.bases_destroyed)
             player_stats.authority_gained.append(stats.authority_gained)
+            player_stats.scrapped_from_hand.append(stats.scrapped_from_hand)
+            player_stats.scrapped_from_discard.append(stats.scrapped_from_discard)
+            player_stats.scrapped_from_trade.append(stats.scrapped_from_trade)
 
     def get_summary(self) -> str:
         """Get a formatted summary of the aggregate statistics"""
@@ -67,27 +73,30 @@ class AggregateStats:
 
         summary = [
             f"\nAggregate Statistics over {len(self.total_turns)} games:",
-            f"Average Game Duration: {avg(self.game_durations):.1f} seconds",
-            f"Average Total Turns: {avg(self.total_turns):.1f}",
+            f"Game Duration: min={min(self.game_durations):.1f}s, max={max(self.game_durations):.1f}s, avg={avg(self.game_durations):.1f}s",
+            f"Total Turns: min={min(self.total_turns)}, max={max(self.total_turns)}, avg={avg(self.total_turns):.1f}",
             "\nWin Statistics:"
         ]
 
         for player_name, wins in self.win_stats.items():
             win_rate = (wins / len(self.total_turns)) * 100
             summary.append(f"  {player_name}: {wins} wins ({win_rate:.1f}%)")
-
+            
         summary.append("\nPer Player Statistics:")
         for player_name, stats in self.player_stats.items():
             summary.extend([
-                f"\n{player_name} Averages:",
-                f"  Cards Played: {avg(stats.cards_played):.1f}",
-                f"  Cards Scrapped: {avg(stats.cards_scrapped):.1f}",
-                f"  Cards Bought: {avg(stats.cards_bought):.1f}",
-                f"  Damage Dealt: {avg(stats.damage_dealt):.1f}",
-                f"  Trade Generated: {avg(stats.trade_generated):.1f}",
-                f"  Cards Drawn: {avg(stats.cards_drawn):.1f}",
-                f"  Bases Destroyed: {avg(stats.bases_destroyed):.1f}",
-                f"  Authority Gained: {avg(stats.authority_gained):.1f}"
+                f"\n{player_name} Statistics:",
+                f"  Cards Played: min={min(stats.cards_played)}, max={max(stats.cards_played)}, avg={avg(stats.cards_played):.1f}",
+                f"  Cards Scrapped: min={min(stats.cards_scrapped)}, max={max(stats.cards_scrapped)}, avg={avg(stats.cards_scrapped):.1f}",
+                f"  Cards Bought: min={min(stats.cards_bought)}, max={max(stats.cards_bought)}, avg={avg(stats.cards_bought):.1f}",
+                f"  Damage Dealt: min={min(stats.damage_dealt)}, max={max(stats.damage_dealt)}, avg={avg(stats.damage_dealt):.1f}",
+                f"  Trade Generated: min={min(stats.trade_generated)}, max={max(stats.trade_generated)}, avg={avg(stats.trade_generated):.1f}",
+                f"  Cards Drawn: min={min(stats.cards_drawn)}, max={max(stats.cards_drawn)}, avg={avg(stats.cards_drawn):.1f}",
+                f"  Bases Destroyed: min={min(stats.bases_destroyed)}, max={max(stats.bases_destroyed)}, avg={avg(stats.bases_destroyed):.1f}",
+                f"  Authority Gained: min={min(stats.authority_gained)}, max={max(stats.authority_gained)}, avg={avg(stats.authority_gained):.1f}",
+                f"  Scrapped from Hand: min={min(stats.scrapped_from_hand)}, max={max(stats.scrapped_from_hand)}, avg={avg(stats.scrapped_from_hand):.1f}",
+                f"  Scrapped from Discard: min={min(stats.scrapped_from_discard)}, max={max(stats.scrapped_from_discard)}, avg={avg(stats.scrapped_from_discard):.1f}",
+                f"  Scrapped from Trade Row: min={min(stats.scrapped_from_trade)}, max={max(stats.scrapped_from_trade)}, avg={avg(stats.scrapped_from_trade):.1f}"
             ])
 
         return "\n".join(summary)

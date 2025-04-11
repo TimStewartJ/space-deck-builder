@@ -176,7 +176,7 @@ class Game:
                         break
         
         elif action.type == ActionType.SCRAP_CARD:
-            self.stats.record_card_scrap(self.current_player.name)
+            self.stats.record_card_scrap(self.current_player.name, action.source)
             if action.source and 'hand' in action.source:
                 # Scrap card from hand
                 for card in self.current_player.hand:

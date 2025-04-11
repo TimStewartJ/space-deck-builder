@@ -12,6 +12,9 @@ class PlayerStats:
     cards_drawn: int = 0
     bases_destroyed: int = 0
     authority_gained: int = 0
+    scrapped_from_hand: int = 0
+    scrapped_from_discard: int = 0
+    scrapped_from_trade: int = 0
 
 @dataclass
 class GameStats:
@@ -30,9 +33,21 @@ class GameStats:
         """Record a card being played"""
         self.player_stats[player_name].cards_played += 1
     
-    def record_card_scrap(self, player_name: str):
-        """Record a card being scrapped"""
-        self.player_stats[player_name].cards_scrapped += 1
+    def record_card_scrap(self, player_name: str, source: str = None):
+        """Record a card being scrapped
+        
+        Args:
+            player_name: The name of the player scrapping the card
+            source: The source of the scrapped card ('hand', 'discard', or 'trade')
+        """
+        stats = self.player_stats[player_name]
+        stats.cards_scrapped += 1
+        if source == "hand":
+            stats.scrapped_from_hand += 1
+        elif source == "discard":
+            stats.scrapped_from_discard += 1
+        elif source == "trade":
+            stats.scrapped_from_trade += 1
     
     def record_card_buy(self, player_name: str):
         """Record a card being bought"""
@@ -84,13 +99,16 @@ class GameStats:
             summary.extend([
                 f"{player_name} Statistics:",
                 f"  Cards Played: {stats.cards_played}",
-                f"  Cards Scrapped: {stats.cards_scrapped}",
                 f"  Cards Bought: {stats.cards_bought}",
                 f"  Damage Dealt: {stats.damage_dealt}",
                 f"  Trade Generated: {stats.trade_generated}",
                 f"  Cards Drawn from card effects: {stats.cards_drawn}",
                 f"  Bases Destroyed: {stats.bases_destroyed}",
-                f"  Authority Gained: {stats.authority_gained}\n"
+                f"  Authority Gained: {stats.authority_gained}",
+                f"  Total Cards Scrapped: {stats.cards_scrapped}",
+                f"    From Hand: {stats.scrapped_from_hand}",
+                f"    From Discard: {stats.scrapped_from_discard}",
+                f"    From Trade Row: {stats.scrapped_from_trade}\n"
             ])
             
         return "\n".join(summary)
