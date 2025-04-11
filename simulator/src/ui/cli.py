@@ -1,6 +1,7 @@
 from src.engine.game import Game
 from src.cards.loader import load_trade_deck_cards
 from src.engine.aggregate_stats import AggregateStats
+from src.utils.logger import log, set_disabled
 import os
 import importlib
 import inspect
@@ -161,6 +162,12 @@ class CLI:
                 
                 # Initialize win statistics
                 self._reset_aggregate_stats(name1, name2)
+
+                if self.games_count > 10:
+                    print("Disabling logging for performance due to high game count")
+                    set_disabled(True)
+                else:
+                    set_disabled(False)
                 
                 # Run multiple games
                 for game_num in range(self.games_count):
@@ -207,14 +214,17 @@ class CLI:
                     self._update_aggregate_stats()
 
                     # Display game statistics
-                    print("\n" + "="*50)
-                    print(self.game.stats.get_summary())
-                    print("="*50)
+                    log("\n" + "="*50)
+                    log(self.game.stats.get_summary())
+                    log("="*50)
 
                     # Clean up pygame
                     if self.pygame_ui:
                         self.pygame_ui.close()
                         self.pygame_ui = None
+
+                # Re-enable logging
+                set_disabled(False)
 
                 # Display aggregate statistics
                 self._display_aggregate_stats()
