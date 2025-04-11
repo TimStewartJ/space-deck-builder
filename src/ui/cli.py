@@ -73,6 +73,7 @@ class CLI:
         print("  agents - List available AI agents")
         print("  verbose - Toggle verbose mode")
         print("  pygame - Toggle pygame visualization")
+        print("  delay N - Set pygame step delay in seconds (default: 1)")
         print("  games N - Set number of games to simulate (default: 1)")
         print("  exit - Exit the game")
     
@@ -118,11 +119,23 @@ class CLI:
     
     def main(self):
         self.display_welcome()
-        
+        pygame_step_delay = 1  # Default delay in seconds
+
         while True:
             command = input("> ").strip().lower()
-            
-            if command.startswith("games "):
+
+            if command.startswith("delay "):
+                try:
+                    delay = float(command.split()[1])
+                    if delay >= 0:
+                        pygame_step_delay = delay
+                        print(f"Pygame step delay set to {delay} seconds")
+                    else:
+                        print("Delay must be non-negative")
+                except (IndexError, ValueError):
+                    print("Usage: delay N (where N is a non-negative number)")
+
+            elif command.startswith("games "):
                 try:
                     num = int(command.split()[1])
                     if num > 0:
@@ -132,10 +145,10 @@ class CLI:
                         print("Number of games must be positive")
                 except (IndexError, ValueError):
                     print("Usage: games N (where N is a positive number)")
-            
+
             elif command in ["start", "s"]:
                 agents = list(self.available_agents.items())
-                
+
                 def select_agent(player_num):
                     print(f"\nSelect agent for Player {player_num}:")
                     for i, (name, _) in enumerate(agents):
@@ -184,8 +197,8 @@ class CLI:
                     player2 = self.game.add_player(name2)
                     player2.agent = agent2
                     
-                    # Initialize pygame UI if enabled (only for single game mode)
-                    if self.use_pygame and self.games_count == 1:
+                    # Initialize pygame UI if enabled
+                    if self.use_pygame:
                         from src.ui.pygame_ui import PygameUI
                         self.pygame_ui = PygameUI()
 
@@ -201,7 +214,7 @@ class CLI:
                         if self.pygame_ui:
                             running = self.pygame_ui.handle_events()
                             self.pygame_ui.draw_game_state(self.game)
-                            self.pygame_ui.sleep(1)
+                            self.pygame_ui.sleep(pygame_step_delay)
                         self.game.next_step()
 
                     # Record winner
@@ -229,23 +242,23 @@ class CLI:
 
                 # Display aggregate statistics
                 self._display_aggregate_stats()
-            
+
             elif command == "verbose":
                 self.verbose = not self.verbose
                 if self.game:
                     self.game.verbose = self.verbose
                 print(f"Verbose mode {'enabled' if self.verbose else 'disabled'}")
-            
+
             elif command == "pygame":
                 self.use_pygame = not self.use_pygame
                 print(f"Pygame UI {'enabled' if self.use_pygame else 'disabled'}")
-            
+
             elif command in ["help", "h", "?"]:
                 self.display_help()
-            
+
             elif command in ["quit", "q", "exit"]:
                 break
-            
+
             elif command:
                 print("Unknown command. Type 'help' for available commands.")
 
