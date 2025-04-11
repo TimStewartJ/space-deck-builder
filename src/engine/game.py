@@ -88,15 +88,17 @@ class Game:
             turn_ended = self.execute_action(action)
         
         if turn_ended:
-            self.stats.total_turns += 1
-            self.current_player = self.players[self.current_turn]
-            self.current_player.reset_resources()
-            
-            # End turn and move to next player
-            self.current_player.end_turn()
             log(f"Ended turn for {self.current_player.name}", v=True)
+            
+            # Tell player turn is over
+            self.current_player.reset_resources()
+            self.current_player.end_turn()
+
+            # Increment turn counter and move onto next player
+            self.stats.total_turns += 1
             self.current_turn = (self.current_turn + 1) % len(self.players)
-        
+            self.current_player = self.players[self.current_turn]
+
         return action
         
     
