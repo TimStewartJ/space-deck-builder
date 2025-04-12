@@ -1,3 +1,4 @@
+import argparse
 import random
 from typing import TYPE_CHECKING
 import torch
@@ -17,7 +18,8 @@ class Trainer:
         self.episodes = episodes
         self.episode_sample_size = episode_sample_size
         self.batch_size = batch_size
-        self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, look_ahead_steps=40)
+        self.cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
+        self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, look_ahead_steps=40, cards=self.cards)
         self.opponent_agent = RandomAgent("RandomAgent")  # Choose an opponent type
         
     def calculate_reward(self, game: 'Game', player: 'Player'):
@@ -66,8 +68,6 @@ class Trainer:
     def train(self):
         set_verbose(False)  # Disable verbose logging for training
 
-        cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
-
         aggregate_stats = AggregateStats()
         player1Name = "NeuralAgent"
         player2Name = "Opponent"
@@ -77,7 +77,7 @@ class Trainer:
             log(f"Episode {episode+1}/{self.episodes}")
             
             # Setup game
-            game = Game(cards)
+            game = Game(self.cards)
             
             # Add players
             player1 = game.add_player(player1Name)
@@ -149,5 +149,9 @@ class Trainer:
         torch.save(self.neural_agent.model.state_dict(), "models/neural_agent_final.pth")
 
 if __name__ == "__main__":
-    trainer = Trainer()
+    parser = argparse.ArgumentParser(description="Train a Neural Agent for Space Deck Builder.")
+    parser.add_argument("--episodes", type=int, default=10000, help="Number of episodes to train for.")
+    args = parser.parse_args()
+
+    trainer = Trainer(episodes=args.episodes)
     trainer.train()
