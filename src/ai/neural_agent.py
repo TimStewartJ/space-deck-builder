@@ -31,10 +31,14 @@ class NeuralNetwork(nn.Module):
         return self.network(x)
 
 class NeuralAgent(Agent):
-    def __init__(self, name, cli_interface=None, learning_rate=0.001, look_ahead_steps=10, cards=None):
+    def __init__(self, name, cli_interface=None, learning_rate=0.001, look_ahead_steps=10, cards=None,
+                 initial_exploration_rate=1.0, min_exploration_rate=0.01, exploration_decay_rate=0.99): # Added exploration params
         super().__init__(name, cli_interface)
         # Basic parameters
-        self.exploration_rate = 0.2
+        self.initial_exploration_rate = initial_exploration_rate # Store initial rate
+        self.min_exploration_rate = min_exploration_rate         # Store minimum rate
+        self.exploration_decay_rate = exploration_decay_rate     # Store decay rate
+        self.exploration_rate = self.initial_exploration_rate    # Start at initial rate
         self.CARD_ENCODING_SIZE = 19
         self.state_size = 860
         self.cards = cards
@@ -151,6 +155,9 @@ class NeuralAgent(Agent):
         
         # Exploration-exploitation trade-off
         if np.random.random() < self.exploration_rate:
+            # if there is an end turn action, remove it from available actions
+            if len(available_actions) > 1:
+                available_actions = [action for action in available_actions if action.type != ActionType.END_TURN]
             action = np.random.choice(available_actions)
             log(f"Random action chosen: {action}")
             return action
@@ -178,7 +185,7 @@ class NeuralAgent(Agent):
         # Find the original Action object corresponding to the best index
         for action in available_actions:
             if encode_action(action, cards=self.cards) == best_action_index:
-                log(f"Best action chosen: {action} (index {best_action_index}) ({action_values})")
+                log(f"Best action chosen: {action} (index {best_action_index})")
                 return action
         
         # Fallback if decoding fails (should not happen if masking is correct)
@@ -252,6 +259,13 @@ class NeuralAgent(Agent):
         
         # Update model using the TD targets
         self.optimizer.zero_grad()
-        loss = nn.MSELoss()(q_values.gather(1, actions.unsqueeze(1)).squeeze(1), td_targets)
+        # Select the Q-values corresponding to the actions taken
+        predicted_q_values = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
+        loss = nn.MSELoss()(predicted_q_values, td_targets)
         loss.backward()
         self.optimizer.step()
+
+        # Decay exploration rate after training step
+        self.exploration_rate = max(self.min_exploration_rate, self.exploration_rate * self.exploration_decay_rate)
+        # Optional: Log the current exploration rate
+        log(f"Exploration rate decayed to: {self.exploration_rate:.4f}")

@@ -1,5 +1,5 @@
 import argparse
-import random
+from datetime import datetime
 from typing import TYPE_CHECKING
 import torch
 import numpy as np
@@ -12,6 +12,7 @@ from src.utils.logger import log, set_verbose
 
 if TYPE_CHECKING:
     from src.engine.player import Player
+    from src.engine.actions import Action
 
 class Trainer:
     def __init__(self, episodes=10000, batch_size=128, episode_sample_size=32):
@@ -19,14 +20,18 @@ class Trainer:
         self.episode_sample_size = episode_sample_size
         self.batch_size = batch_size
         self.cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
-        self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, look_ahead_steps=40, cards=self.cards)
+        self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, look_ahead_steps=10, cards=self.cards)
         self.opponent_agent = RandomAgent("RandomAgent")  # Choose an opponent type
         
-    def calculate_reward(self, game: 'Game', player: 'Player'):
+    def calculate_reward(self, game: 'Game', player: 'Player', action_taken: 'Action', learner_name: str = "NeuralAgent") -> float:
         """Calculate reward for the current game state"""
+        from src.engine.actions import ActionType
         # Basic reward for winning/losing
         if game.is_game_over:
-            return 1000 if game.get_winner() == player.name else -1000
+            return 1000 if game.get_winner() == learner_name else -1000
+
+        if action_taken.type == ActionType.END_TURN and player.name == learner_name:
+            return -100  # Small penalty for ending turn without action
 
         reward = 0
 
@@ -62,7 +67,9 @@ class Trainer:
         average_cost = np.mean([card.cost for card in all_cards]) if all_cards else 0
         reward += average_cost * 1.5  # Higher cost cards can be more powerful
 
-        # Add more sophisticated reward signals
+        # Negate the reward if the current player is not the neural agent
+        if player.name != learner_name:
+            reward = -reward
         return reward
     
     def train(self):
@@ -99,26 +106,22 @@ class Trainer:
                 # Store state before action
                 current_player = game.current_player
                 
-                # Check if the current player is the neural agent
-                if current_player.name == player1Name:
-                    state = self.neural_agent.encode_state(game)
-                    current_episode_states.append(state)
+                state = self.neural_agent.encode_state(game)
+                current_episode_states.append(state)
                 
                 # Agent makes a decision and updates game state
                 action = game.next_step()
                 
                 # Calculate reward and remember experience
-                # if the current player is the neural agent
-                if current_player.name == player1Name:
-                    reward = self.calculate_reward(game, current_player)
-                    next_state = self.neural_agent.encode_state(game)
-                    done = game.is_game_over
-                    
-                    # Store experience
-                    current_episode_actions.append(action)
-                    current_episode_rewards.append(reward)
-                    current_episode_next_states.append(next_state)
-                    current_episode_dones.append(done)
+                reward = self.calculate_reward(game, current_player, action)
+                next_state = self.neural_agent.encode_state(game)
+                done = game.is_game_over
+                
+                # Store experience
+                current_episode_actions.append(action)
+                current_episode_rewards.append(reward)
+                current_episode_next_states.append(next_state)
+                current_episode_dones.append(done)
                 
             # When game is over, store the complete episode
             if len(current_episode_states) > 0:
@@ -133,7 +136,12 @@ class Trainer:
                 
             # Train the network
             if episode % (self.episodes/100) == 0:
+                log(f"Training neural agent at episode {episode}...")
+                # keep track of time taken to train
+                start_time = datetime.now()
                 self.neural_agent.train(self.batch_size, lambda_param=0.7, episode_sample_size=self.episode_sample_size)
+                end_time = datetime.now()
+                log(f"Training took {(end_time - start_time).total_seconds():.2f} seconds.")
             
             aggregate_stats.update(game.stats, game.get_winner())
             log(game.stats.get_summary())
