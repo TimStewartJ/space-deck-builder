@@ -4,18 +4,23 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from src.engine.game import Game
     from src.cards.card import Card
+    from src.engine.player import Player
 
 # Constants for encoding
 MAX_HAND = 20
 MAX_TRADE_ROW = 5
 MAX_BASES = 10
 CARD_ENCODING_SIZE = 19 # Determined by the encode_card function structure
+PLAYER_ENCODING_SIZE = (
+    5 + # Player resources (trade, combat, health, deck size, discard pile size)
+    MAX_HAND * CARD_ENCODING_SIZE + # Player hand
+    MAX_BASES * CARD_ENCODING_SIZE # Player bases
+)
 STATE_SIZE = (
-    5 + # Player resources
-    MAX_HAND * CARD_ENCODING_SIZE +
-    MAX_TRADE_ROW * CARD_ENCODING_SIZE +
-    MAX_BASES * CARD_ENCODING_SIZE + # Player bases
-    MAX_BASES * CARD_ENCODING_SIZE   # Opponent bases
+    1 + # is_training_player flag
+    PLAYER_ENCODING_SIZE + # Player resources
+    PLAYER_ENCODING_SIZE + # Opponent resources
+    MAX_TRADE_ROW * CARD_ENCODING_SIZE # Trade row
 )
 
 
@@ -81,28 +86,55 @@ def encode_card(card: 'Card') -> list[float]:
 
     return card_encoding
 
+def encode_player(player: 'Player') -> list[float]:
+    """Convert player information to a fixed-length vector"""
+    # Player resources (trade, combat, health, deck size, discard pile size)
+    player_resources = [
+        player.trade / 100.0,  # Normalize values
+        player.combat / 100.0,
+        player.health / 100.0,
+        len(player.deck) / 40.0,
+        len(player.discard_pile) / 40.0
+    ]
 
-def encode_state(game_state: 'Game') -> torch.FloatTensor:
+    # Encode hand cards (variable -> fixed)
+    hand_encoding = []
+    for card in player.hand[:MAX_HAND]:
+        hand_encoding.extend(encode_card(card))
+    # Pad to fixed length
+    padding_needed = MAX_HAND - len(player.hand)
+    hand_encoding.extend([0.0] * (padding_needed * CARD_ENCODING_SIZE))
+
+    # Encode bases as well
+    bases_encoding = []
+    for base in player.bases[:MAX_BASES]:
+        bases_encoding.extend(encode_card(base))
+    padding_needed = MAX_BASES - len(player.bases)
+    bases_encoding.extend([0.0] * (padding_needed * CARD_ENCODING_SIZE))
+
+    return player_resources + hand_encoding + bases_encoding
+
+def encode_state(game_state: 'Game', is_current_player_training: bool) -> torch.FloatTensor:
     """Convert variable-length game state to fixed-length tensor"""
     state = []
 
-    # Encode player resources (fixed length)
-    state.extend([
-        game_state.current_player.trade / 100.0,  # Normalize values
-        game_state.current_player.combat / 100.0,
-        game_state.current_player.health / 100.0,
-        len(game_state.current_player.deck) / 40.0,
-        len(game_state.current_player.discard_pile) / 40.0
-    ])
+    training_player = game_state.current_player if is_current_player_training else game_state.get_opponent(game_state.current_player)
+    if training_player is None:
+        raise ValueError("Training player not found in game state.")
+    
+    opponent = game_state.get_opponent(training_player)
+    if opponent is None:
+        raise ValueError("Opponent not found in game state.")
+    
+    # Encode if the current player is the training player
+    is_training_player = 1.0 if game_state.current_player == training_player else 0.0
+    state.append(is_training_player)
 
-    # Encode player hand (variable -> fixed)
-    hand_encoding = []
-    for card in game_state.current_player.hand[:MAX_HAND]:
-        hand_encoding.extend(encode_card(card))
-    # Pad to fixed length
-    padding_needed = MAX_HAND - len(game_state.current_player.hand)
-    hand_encoding.extend([0.0] * (padding_needed * CARD_ENCODING_SIZE))
-    state.extend(hand_encoding)
+    # Encode training player
+    state.extend(encode_player(training_player))
+
+    # Encode opponent player
+    state.extend(encode_player(opponent))
 
     # Encode trade row
     trade_row_encoding = []
@@ -111,28 +143,6 @@ def encode_state(game_state: 'Game') -> torch.FloatTensor:
     padding_needed = MAX_TRADE_ROW - len(game_state.trade_row)
     trade_row_encoding.extend([0.0] * (padding_needed * CARD_ENCODING_SIZE))
     state.extend(trade_row_encoding)
-
-    # Encode player bases
-    bases_encoding = []
-    for base in game_state.current_player.bases[:MAX_BASES]:
-        bases_encoding.extend(encode_card(base))
-    padding_needed = MAX_BASES - len(game_state.current_player.bases)
-    bases_encoding.extend([0.0] * (padding_needed * CARD_ENCODING_SIZE))
-    state.extend(bases_encoding)
-
-    # Encode opponent bases
-    opponent = game_state.get_opponent(game_state.current_player)
-    opponent_bases_encoding = []
-    # Add check for opponent existence
-    if opponent:
-        for base in opponent.bases[:MAX_BASES]:
-            opponent_bases_encoding.extend(encode_card(base))
-        padding_needed = MAX_BASES - len(opponent.bases)
-        opponent_bases_encoding.extend([0.0] * (padding_needed * CARD_ENCODING_SIZE))
-    else:
-        # If no opponent, pad with zeros for the entire opponent bases section
-        opponent_bases_encoding.extend([0.0] * (MAX_BASES * CARD_ENCODING_SIZE))
-    state.extend(opponent_bases_encoding)
 
     # Ensure final state vector matches STATE_SIZE
     if len(state) != STATE_SIZE:

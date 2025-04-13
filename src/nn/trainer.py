@@ -16,23 +16,27 @@ if TYPE_CHECKING:
     from src.engine.actions import Action
 
 class Trainer:
-    def __init__(self, episodes=10000, batch_size=128, episode_sample_size=32):
+    def __init__(self, episodes=10000, batch_size=128, episode_sample_size=32, cards_path='data/cards.csv'):
         self.episodes = episodes
         self.episode_sample_size = episode_sample_size
         self.batch_size = batch_size
-        self.cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
+        self.cards = load_trade_deck_cards(cards_path, filter_sets=["Core Set"])
         self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, look_ahead_steps=10, cards=self.cards)
         self.opponent_agent = RandomAgent("RandomAgent")  # Choose an opponent type
         
-    def calculate_reward(self, game: 'Game', player: 'Player', action_taken: 'Action', learner_name: str = "NeuralAgent") -> float:
+    def calculate_reward(self, game: 'Game', player: 'Player', action_taken: 'Action | None', learner_name: str = "NeuralAgent") -> float:
         """Calculate reward for the current game state"""
         from src.engine.actions import ActionType
+
+        if action_taken is None:
+            return 0.0
+
         # Basic reward for winning/losing
         if game.is_game_over:
             return 1000 if game.get_winner() == learner_name else -1000
 
-        if action_taken.type == ActionType.END_TURN and player.name == learner_name:
-            return -100  # Small penalty for ending turn without action
+        if player.name != learner_name:
+            return 0.0
 
         reward = 0
 
@@ -66,12 +70,9 @@ class Trainer:
         reward += faction_counts[dominant_faction] * 2
 
         # Reward for high average cost of all cards
-        average_cost = np.mean([card.cost for card in all_cards]) if all_cards else 0
+        average_cost = np.mean([card.cost for card in all_cards]).item() if all_cards else 0
         reward += average_cost * 1.5  # Higher cost cards can be more powerful
 
-        # Negate the reward if the current player is not the neural agent
-        if player.name != learner_name:
-            reward = -reward
         return reward
     
     def train(self):
@@ -107,16 +108,20 @@ class Trainer:
             while not game.is_game_over:
                 # Store state before action
                 current_player = game.current_player
+                is_current_player_training = current_player.name == player1Name
                 
-                state = encode_state(game)
+                state = encode_state(game, is_current_player_training=is_current_player_training)
                 current_episode_states.append(state)
                 
                 # Agent makes a decision and updates game state
                 action = game.next_step()
                 
+                # Recalculate current player
+                is_current_player_training = current_player.name == player1Name
+
                 # Calculate reward and remember experience
                 reward = self.calculate_reward(game, current_player, action)
-                next_state = encode_state(game)
+                next_state = encode_state(game, is_current_player_training=is_current_player_training)
                 done = game.is_game_over
                 
                 # Store experience

@@ -34,7 +34,7 @@ class AggregateStats:
             player2_name: PlayerAggregateStats()
         }
 
-    def update(self, game_stats: GameStats, winner: str):
+    def update(self, game_stats: GameStats, winner: str | None):
         """Update aggregate statistics after each game"""
         if not game_stats:
             return

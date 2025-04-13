@@ -27,6 +27,7 @@ class NeuralNetwork(nn.Module):
             nn.ReLU(),
             nn.Linear(512, output_size)
         )
+        log(f"Neural Network initialized with input size: {input_size}, output size: {output_size}")
     
     def forward(self, x):
         return self.network(x)
@@ -54,7 +55,7 @@ class NeuralAgent(Agent):
     
     def make_decision(self, game_state: 'Game'):
         available_actions = get_available_actions(game_state, game_state.current_player)
-        state = encode_state(game_state)
+        state = encode_state(game_state, is_current_player_training=True)
         
         # Exploration-exploitation trade-off
         if np.random.random() < self.exploration_rate:
@@ -170,5 +171,4 @@ class NeuralAgent(Agent):
 
         # Decay exploration rate after training step
         self.exploration_rate = max(self.min_exploration_rate, self.exploration_rate * self.exploration_decay_rate)
-        # Optional: Log the current exploration rate
         log(f"Exploration rate decayed to: {self.exploration_rate:.4f}")
