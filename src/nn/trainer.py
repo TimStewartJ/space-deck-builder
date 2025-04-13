@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 import torch
 import numpy as np
+from src.nn.state_encoder import encode_state
 from src.engine.aggregate_stats import AggregateStats
 from src.ai.random_agent import RandomAgent
 from src.engine.game import Game
@@ -107,7 +108,7 @@ class Trainer:
                 # Store state before action
                 current_player = game.current_player
                 
-                state = self.neural_agent.encode_state(game)
+                state = encode_state(game)
                 current_episode_states.append(state)
                 
                 # Agent makes a decision and updates game state
@@ -115,7 +116,7 @@ class Trainer:
                 
                 # Calculate reward and remember experience
                 reward = self.calculate_reward(game, current_player, action)
-                next_state = self.neural_agent.encode_state(game)
+                next_state = encode_state(game)
                 done = game.is_game_over
                 
                 # Store experience
