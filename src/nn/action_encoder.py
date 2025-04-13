@@ -40,6 +40,7 @@ def encode_action(action: Action, cards: list[Card]) -> int:
     current_act_index += 1
 
     cards_length = len(cards)
+    card_index = None
     if action.card_id is not None:
         # Get index of card in all available cards
         card_index = next((i for i, card in enumerate(cards) if card.name == action.card_id), None)

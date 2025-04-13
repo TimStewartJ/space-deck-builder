@@ -49,8 +49,9 @@ class Trainer:
         
         # Health advantage reward
         opponent = game.get_opponent(player)
-        health_advantage = player.health - opponent.health
-        reward += health_advantage * 0.5
+        if opponent:
+            health_advantage = player.health - opponent.health
+            reward += health_advantage * 0.5
 
         # Reward for card synergies
         faction_counts = {"Blob": 0, "Trade Federation": 0, "Machine Cult": 0, "Star Empire": 0}
