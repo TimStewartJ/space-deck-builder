@@ -1,3 +1,4 @@
+import pickle
 import random
 from typing import TYPE_CHECKING
 import numpy as np
@@ -19,9 +20,9 @@ class NeuralNetwork(nn.Module):
     def __init__(self, input_size, output_size):
         super(NeuralNetwork, self).__init__()
         self.network = nn.Sequential(
-            nn.Linear(input_size, 512),
+            nn.Linear(input_size, 1024),
             nn.ReLU(),
-            nn.Linear(512, 512),
+            nn.Linear(1024, 512),
             nn.ReLU(),
             nn.Linear(512, 512),
             nn.ReLU(),
@@ -36,6 +37,11 @@ class NeuralAgent(Agent):
     def __init__(self, name, cli_interface=None, learning_rate=0.001, look_ahead_steps=10, cards=None,
                  initial_exploration_rate=1.0, min_exploration_rate=0.01, exploration_decay_rate=0.99): # Added exploration params
         super().__init__(name, cli_interface)
+        # Determine device (GPU if available, else CPU)
+        # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device("cpu")
+        log(f"Using device: {self.device}")
+
         # Basic parameters
         self.initial_exploration_rate = initial_exploration_rate # Store initial rate
         self.min_exploration_rate = min_exploration_rate         # Store minimum rate
@@ -139,9 +145,13 @@ class NeuralAgent(Agent):
                 
                 # For states close to the end, add bootstrapped value
                 if t + self.look_ahead_steps < len(episode):
-                    final_state = episode[t + self.look_ahead_steps][3]  # next_state at t+look_ahead_steps
+                    final_state_cpu = episode[t + self.look_ahead_steps][3]  # next_state at t+look_ahead_steps
+                    # Move final_state to the device for model inference
+                    final_state = final_state_cpu.to(self.device)
                     with torch.no_grad():
+                        self.model.to(self.device)  # Ensure model is on the same device
                         final_value = torch.max(self.model(final_state), dim=0)[0].item()
+                        self.model.to('cpu')  # Move model back to CPU after inference
                         n_step_return += (self.gamma ** self.look_ahead_steps) * (lambda_param ** self.look_ahead_steps) * final_value
                 
                 all_states.append(state)
@@ -172,3 +182,15 @@ class NeuralAgent(Agent):
         # Decay exploration rate after training step
         self.exploration_rate = max(self.min_exploration_rate, self.exploration_rate * self.exploration_decay_rate)
         log(f"Exploration rate decayed to: {self.exploration_rate:.4f}")
+
+
+    def save_memory(self):
+        """Saves the agent's memory (list of episodes) to a file using pickle."""
+        memory_file = "memory.pkl"
+        log(f"Attempting to save memory to {memory_file}...")
+        try:
+            with open(memory_file, 'wb') as f:
+                pickle.dump(self.memory, f)
+            log(f"Successfully saved {len(self.memory)} episodes to {memory_file}.")
+        except Exception as e:
+            log(f"Error saving memory to {memory_file}: {e}")

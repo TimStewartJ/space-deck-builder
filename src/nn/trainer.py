@@ -16,12 +16,13 @@ if TYPE_CHECKING:
     from src.engine.actions import Action
 
 class Trainer:
-    def __init__(self, episodes=10000, batch_size=128, episode_sample_size=32, cards_path='data/cards.csv'):
+    def __init__(self, episodes=10000, batch_size=128, episode_sample_size=32, lambda_param=0.7, cards_path='data/cards.csv'):
         self.episodes = episodes
         self.episode_sample_size = episode_sample_size
         self.batch_size = batch_size
+        self.lambda_param = lambda_param  # Lambda parameter for TD(λ) learning
         self.cards = load_trade_deck_cards(cards_path, filter_sets=["Core Set"])
-        self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, look_ahead_steps=10, cards=self.cards)
+        self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, look_ahead_steps=10, cards=self.cards, exploration_decay_rate=0.99)
         self.opponent_agent = RandomAgent("RandomAgent")  # Choose an opponent type
         
     def calculate_reward(self, game: 'Game', player: 'Player', action_taken: 'Action | None', learner_name: str = "NeuralAgent") -> float:
@@ -146,7 +147,7 @@ class Trainer:
                 log(f"Training neural agent at episode {episode}...")
                 # keep track of time taken to train
                 start_time = datetime.now()
-                self.neural_agent.train(self.batch_size, lambda_param=0.7, episode_sample_size=self.episode_sample_size)
+                self.neural_agent.train(self.batch_size, lambda_param=self.lambda_param, episode_sample_size=self.episode_sample_size)
                 end_time = datetime.now()
                 log(f"Training took {(end_time - start_time).total_seconds():.2f} seconds.")
             
@@ -162,11 +163,12 @@ class Trainer:
         # Save final model
         log(aggregate_stats.get_summary())
         torch.save(self.neural_agent.model.state_dict(), "models/neural_agent_final.pth")
+        self.neural_agent.save_memory()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a Neural Agent for Space Deck Builder.")
     parser.add_argument("--episodes", type=int, default=10000, help="Number of episodes to train for.")
     args = parser.parse_args()
 
-    trainer = Trainer(episodes=args.episodes)
+    trainer = Trainer(episodes=args.episodes, lambda_param=0.9)
     trainer.train()
