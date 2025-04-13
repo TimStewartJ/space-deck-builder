@@ -184,9 +184,8 @@ class NeuralAgent(Agent):
         log(f"Exploration rate decayed to: {self.exploration_rate:.4f}")
 
 
-    def save_memory(self):
+    def save_memory(self, memory_file="memory.pkl"):
         """Saves the agent's memory (list of episodes) to a file using pickle."""
-        memory_file = "memory.pkl"
         log(f"Attempting to save memory to {memory_file}...")
         try:
             with open(memory_file, 'wb') as f:
