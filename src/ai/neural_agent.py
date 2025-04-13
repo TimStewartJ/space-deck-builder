@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from src.nn.state_encoder import encode_state
+from src.nn.state_encoder import CARD_ENCODING_SIZE, STATE_SIZE, encode_state
 from src.nn.action_encoder import decode_action, encode_action, get_action_space_size
 from src.ai.agent import Agent
 from src.engine.actions import get_available_actions, Action, ActionType
@@ -40,8 +40,8 @@ class NeuralAgent(Agent):
         self.min_exploration_rate = min_exploration_rate         # Store minimum rate
         self.exploration_decay_rate = exploration_decay_rate     # Store decay rate
         self.exploration_rate = self.initial_exploration_rate    # Start at initial rate
-        self.CARD_ENCODING_SIZE = 19
-        self.state_size = 860
+        self.CARD_ENCODING_SIZE = CARD_ENCODING_SIZE
+        self.state_size = STATE_SIZE
         self.cards = cards if cards is not None else []
         self.model = NeuralNetwork(self.state_size, get_action_space_size(self.cards))
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -61,7 +61,7 @@ class NeuralAgent(Agent):
             # if there is an end turn action, remove it from available actions
             if len(available_actions) > 1:
                 available_actions = [action for action in available_actions if action.type != ActionType.END_TURN]
-            action = np.random.choice(available_actions)
+            action = random.choice(available_actions)
             log(f"Random action chosen: {action}")
             return action
         
