@@ -51,7 +51,12 @@ class Effect:
     
     def apply(self, game: 'Game', player: 'Player', card=None):
         from src.engine.actions import Action, ActionType
+        # If it has already been applied, do nothing
         if self.applied:
+            return
+        
+        # Check if the player meets the faction requirement
+        if self.faction_requirement and player.get_faction_ally_count(self.faction_requirement) <= self.faction_requirement_count:
             return
             
         if self.effect_type == CardEffectType.COMBAT:

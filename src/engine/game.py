@@ -132,6 +132,12 @@ class Game:
                     # Apply first card effect if ship
                     if card.card_type == "ship" and card.effects and len(card.effects) > 0:
                         card.effects[0].apply(self, self.current_player, card)
+                    # Attempt application of all other effects if they don't require decisions
+                    for card in self.current_player.played_cards:
+                        for effect in card.effects:
+                            if effect.effect_type in [CardEffectType.COMBAT, CardEffectType.TRADE, CardEffectType.HEAL, CardEffectType.DRAW, CardEffectType.TARGET_DISCARD]:
+                                # Attempt application
+                                effect.apply(self, self.current_player, card)
                     break
         
         elif action.type == ActionType.APPLY_EFFECT and action.card_effect is not None:
