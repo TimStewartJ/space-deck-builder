@@ -43,17 +43,6 @@ def analyze_win_loss_and_steps(memory: List[List[Tuple]]) -> Tuple[List[int], Li
         # The last transition in the episode should have done=True
         last_state, last_action, last_reward, _, done = episode[-1]
 
-        if not done:
-            log(f"Warning: Episode {i} (length {num_steps}) did not end with done=True. Last transition reward: {last_reward}")
-            # Cannot reliably determine outcome or consider this a complete episode, skip
-            continue
-
-        # Check the reward of the final step. Based on trainer.py, win reward is 1000, loss is -1000.
-        # We assume the reward recorded is for the agent being trained.
-        if abs(last_reward) != 1000:
-            log(f"Warning: Episode {i} (length {num_steps}) has an unexpected reward value: {last_reward}. Expected -1000 or 1000.")
-            continue
-
         steps_per_episode.append(num_steps)
         if last_reward > 0:
             outcomes.append(1)  # Win
