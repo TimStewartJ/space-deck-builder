@@ -134,7 +134,7 @@ class Game:
                         card.effects[0].apply(self, self.current_player, card)
                     break
         
-        elif action.type == ActionType.APPLY_EFFECT:
+        elif action.type == ActionType.APPLY_EFFECT and action.additional_params is not None:
             # Apply the effect directly
             effect = action.additional_params.get('effect')
             if effect:
