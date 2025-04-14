@@ -120,25 +120,26 @@ class Trainer:
                 current_player = game.current_player
                 is_current_player_training = current_player.name == player1Name
                 
-                state = encode_state(game, is_current_player_training=is_current_player_training)
-                current_episode_states.append(state)
+                state = encode_state(game, is_current_player_training=is_current_player_training, cards=self.card_names)
                 
                 # Agent makes a decision and updates game state
                 action = game.next_step()
-                
-                # Recalculate current player
-                is_current_player_training = current_player.name == player1Name
 
-                # Calculate reward and remember experience
-                reward = self.calculate_reward(game, current_player, action)
-                next_state = encode_state(game, is_current_player_training=is_current_player_training)
-                done = game.is_game_over
-                
-                # Store experience
-                current_episode_actions.append(action)
-                current_episode_rewards.append(reward)
-                current_episode_next_states.append(next_state)
-                current_episode_dones.append(done)
+                if is_current_player_training:
+                    # Recalculate current player
+                    is_current_player_training = current_player.name == player1Name
+
+                    # Calculate reward and remember experience
+                    reward = self.calculate_reward(game, current_player, action)
+                    next_state = encode_state(game, is_current_player_training=is_current_player_training, cards=self.card_names)
+                    done = game.is_game_over
+                    
+                    # Store experience
+                    current_episode_states.append(state)
+                    current_episode_actions.append(action)
+                    current_episode_rewards.append(reward)
+                    current_episode_next_states.append(next_state)
+                    current_episode_dones.append(done)
                 
             # When game is over, store the complete episode
             if len(current_episode_states) > 0:

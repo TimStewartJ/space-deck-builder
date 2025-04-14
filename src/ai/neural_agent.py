@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from src.nn.state_encoder import CARD_ENCODING_SIZE, STATE_SIZE, encode_state
+from src.nn.state_encoder import CARD_ENCODING_SIZE, STATE_SIZE, encode_state, get_state_size
 from src.nn.action_encoder import decode_action, encode_action, get_action_space_size
 from src.ai.agent import Agent
 from src.engine.actions import get_available_actions, Action, ActionType
@@ -48,7 +48,7 @@ class NeuralAgent(Agent):
         self.exploration_decay_rate = exploration_decay_rate     # Store decay rate
         self.exploration_rate = self.initial_exploration_rate    # Start at initial rate
         self.CARD_ENCODING_SIZE = CARD_ENCODING_SIZE
-        self.state_size = STATE_SIZE
+        self.state_size = get_state_size(cards)  # Get state size based on cards
         self.cards = cards
         self.model = NeuralNetwork(self.state_size, get_action_space_size(self.cards))
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
@@ -61,7 +61,7 @@ class NeuralAgent(Agent):
     
     def make_decision(self, game_state: 'Game'):
         available_actions = get_available_actions(game_state, game_state.current_player)
-        state = encode_state(game_state, is_current_player_training=True)
+        state = encode_state(game_state, is_current_player_training=True, cards=self.cards)
         
         # Exploration-exploitation trade-off
         if np.random.random() < self.exploration_rate:

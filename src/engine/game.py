@@ -17,6 +17,7 @@ class Game:
         self.is_running = False
         self.current_player: Player = None
         self.stats = GameStats()
+        self.first_player_name = None
 
     def start_game(self):
         if not self.trade_deck:
@@ -47,6 +48,8 @@ class Game:
         import random
         random.shuffle(self.players)
 
+        is_first_player = True
+
         for player in self.players:
             # Initialize statistics for this player
             self.stats.add_player(player.name)
@@ -55,9 +58,13 @@ class Game:
             player.deck.extend(starting_deck)
             player.shuffle_deck()
             # Draw initial hand
-            for _ in range(5):
+            starting_hand_size = 3 if is_first_player else 5
+            for _ in range(starting_hand_size):
                 player.draw_card()
                 self.stats.record_card_draw(player.name)
+            if is_first_player:
+                self.first_player_name = player.name
+                is_first_player = False
 
     def create_starting_deck(self):
         from src.cards.effects import Effect

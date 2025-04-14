@@ -1,6 +1,9 @@
 import torch
 from typing import TYPE_CHECKING
 
+from src.engine.actions import get_available_actions
+from src.nn.action_encoder import encode_action, get_action_space_size
+
 if TYPE_CHECKING:
     from src.engine.game import Game
     from src.cards.card import Card
@@ -18,11 +21,15 @@ PLAYER_ENCODING_SIZE = (
 )
 STATE_SIZE = (
     1 + # is_training_player flag
+    1 + # is_first_player flag
     PLAYER_ENCODING_SIZE + # Player resources
     PLAYER_ENCODING_SIZE + # Opponent resources
     MAX_TRADE_ROW * CARD_ENCODING_SIZE # Trade row
 )
 
+def get_state_size(cards: list[str]) -> int:
+    """Get the size of the state vector"""
+    return STATE_SIZE + get_action_space_size(cards)
 
 def encode_card(card: 'Card') -> list[float]:
     """Convert a card to a fixed-length embedding vector"""
@@ -114,7 +121,7 @@ def encode_player(player: 'Player') -> list[float]:
 
     return player_resources + hand_encoding + bases_encoding
 
-def encode_state(game_state: 'Game', is_current_player_training: bool) -> torch.FloatTensor:
+def encode_state(game_state: 'Game', is_current_player_training: bool, cards: list[str]) -> torch.FloatTensor:
     """Convert variable-length game state to fixed-length tensor"""
     state = []
 
@@ -127,14 +134,27 @@ def encode_state(game_state: 'Game', is_current_player_training: bool) -> torch.
         raise ValueError("Opponent not found in game state.")
     
     # Encode if the current player is the training player
-    is_training_player = 1.0 if game_state.current_player == training_player else 0.0
+    is_training_player = 1.0 if is_current_player_training else 0.0
     state.append(is_training_player)
+
+    # Encode if the first player is the training player
+    is_first_player = 1.0 if game_state.first_player_name == training_player.name else 0.0
+    state.append(is_first_player)
 
     # Encode training player
     state.extend(encode_player(training_player))
 
     # Encode opponent player
     state.extend(encode_player(opponent))
+
+    # Encode available actions for the training player in 1 hot format
+    available_actions = get_available_actions(game_state, training_player)
+    action_encoding = [0.0] * get_action_space_size(cards)
+    for action in available_actions:
+        action_index = encode_action(action, cards=cards)
+        if 0 <= action_index < len(action_encoding):
+            action_encoding[action_index] = 1.0
+    state.extend(action_encoding)
 
     # Encode trade row
     trade_row_encoding = []
@@ -143,10 +163,5 @@ def encode_state(game_state: 'Game', is_current_player_training: bool) -> torch.
     padding_needed = MAX_TRADE_ROW - len(game_state.trade_row)
     trade_row_encoding.extend([0.0] * (padding_needed * CARD_ENCODING_SIZE))
     state.extend(trade_row_encoding)
-
-    # Ensure final state vector matches STATE_SIZE
-    if len(state) != STATE_SIZE:
-        # Pad or truncate if necessary, though it indicates a mismatch
-        state = state[:STATE_SIZE] + [0.0] * (STATE_SIZE - len(state))
 
     return torch.FloatTensor(state)
