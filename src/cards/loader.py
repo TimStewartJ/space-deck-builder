@@ -20,7 +20,7 @@ def load_trade_deck_cards(file_path, filter_names=None, filter_sets=None):
         list[Card]: List of card objects that match the filters
     """
 
-    cards = []
+    cards: list[Card] = []
     with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:

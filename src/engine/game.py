@@ -163,7 +163,7 @@ class Game:
             for player in self.players:
                 if player != self.current_player:
                     for base in player.bases:
-                        if base.name == action.target_id and self.current_player.combat >= base.defense:
+                        if base.name == action.target_id and base.defense and self.current_player.combat >= base.defense:
                             self.current_player.combat -= base.defense
                             player.bases.remove(base)
                             player.discard_pile.append(base)

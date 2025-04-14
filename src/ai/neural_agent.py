@@ -34,7 +34,7 @@ class NeuralNetwork(nn.Module):
         return self.network(x)
 
 class NeuralAgent(Agent):
-    def __init__(self, name, cli_interface=None, learning_rate=0.001, look_ahead_steps=10, cards=None,
+    def __init__(self, name, cli_interface=None, learning_rate=0.001, look_ahead_steps=10, cards: list[str] = [],
                  initial_exploration_rate=1.0, min_exploration_rate=0.01, exploration_decay_rate=0.99): # Added exploration params
         super().__init__(name, cli_interface)
         # Determine device (GPU if available, else CPU)
@@ -49,7 +49,7 @@ class NeuralAgent(Agent):
         self.exploration_rate = self.initial_exploration_rate    # Start at initial rate
         self.CARD_ENCODING_SIZE = CARD_ENCODING_SIZE
         self.state_size = STATE_SIZE
-        self.cards = cards if cards is not None else []
+        self.cards = cards
         self.model = NeuralNetwork(self.state_size, get_action_space_size(self.cards))
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         
@@ -106,12 +106,11 @@ class NeuralAgent(Agent):
         """Store experience in current episode"""
         self.current_episode.append((state, action, reward, next_state, done))
     
-        # When episode is done, store it in memory
-        if done:
-            self.memory.append(self.current_episode)
-            self.current_episode = []  # Reset for next episode
-    
-    def train(self, batch_size=64, lambda_param=0.7, episode_sample_size=4):
+    def finish_remembering_episode(self):
+        self.memory.append(self.current_episode)
+        self.current_episode = []
+
+    def train(self, batch_size, lambda_param, episode_sample_size):
         """Train model using experience replay with TD(λ) learning"""
         # Need enough complete episodes
         if len(self.memory) < episode_sample_size:

@@ -1,7 +1,7 @@
 from src.cards.card import Card
 from src.engine.actions import Action, ActionType
 
-def get_action_space_size(cards: list[Card]) -> int:
+def get_action_space_size(cards: list[str]) -> int:
     """Calculate the total size of the action space based on the encoding scheme.
 
     Args:
@@ -21,7 +21,7 @@ def get_action_space_size(cards: list[Card]) -> int:
     
     return size
 
-def encode_action(action: Action, cards: list[Card]) -> int:
+def encode_action(action: Action, cards: list[str]) -> int:
     """Convert an Action object to a numerical index for neural network processing
     
     Maps different action types to different index ranges
@@ -43,7 +43,7 @@ def encode_action(action: Action, cards: list[Card]) -> int:
     card_index = None
     if action.card_id is not None:
         # Get index of card in all available cards
-        card_index = next((i for i, card in enumerate(cards) if card.name == action.card_id), None)
+        card_index = next((i for i, card in enumerate(cards) if card == action.card_id), None)
 
     # Encode play card action based on the card
     if action.type == ActionType.PLAY_CARD:
