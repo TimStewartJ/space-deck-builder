@@ -7,20 +7,6 @@ from src.utils.logger import log
 from collections import Counter
 from src.engine.actions import Action, ActionType
 
-def load_memory(memory_file_path: Path = Path("memory.pkl")) -> List[List[Tuple]]:
-    """Loads the agent's memory from a pickle file."""
-    try:
-        with open(memory_file_path, 'rb') as f:
-            memory = pickle.load(f)
-        log(f"Successfully loaded {len(memory)} episodes from {memory_file_path}.")
-        return memory
-    except FileNotFoundError:
-        log(f"Error: Memory file not found at {memory_file_path}")
-        return []
-    except Exception as e:
-        log(f"Error loading memory from {memory_file_path}: {e}")
-        return []
-
 def analyze_win_loss_and_steps(memory: List[List[Tuple]]) -> Tuple[List[int], List[int], Counter]:
     """
     Analyzes the memory to determine win/loss outcomes, steps per episode,
@@ -150,68 +136,3 @@ def plot_action_distribution(action_counts: Counter):
         plt.text(bar.get_x() + bar.get_width()/2.0, yval, str(int(yval)), va='bottom', ha='center') # Add text labels
 
     plt.show()
-
-if __name__ == "__main__":
-    # Get the user's home directory
-    home_dir = Path.home()
-
-    # Construct the path to the Downloads folder
-    downloads_dir = home_dir / "Downloads"
-    # Define the path to the memory file
-    memory_file = downloads_dir / "memory.pkl"
-    
-    # Load the memory
-    agent_memory = load_memory(memory_file)
-    
-    if agent_memory:
-        # Analyze win/loss outcomes, steps per episode, and action counts
-        episode_outcomes, episode_steps, action_distribution = analyze_win_loss_and_steps(agent_memory)
-
-        if episode_outcomes:
-            # Calculate win rate over time (e.g., in chunks of 100 episodes)
-            chunk_size = 100
-            chunks, rates = calculate_win_rate_over_time(episode_outcomes, chunk_size)
-
-            # Plot the results
-            plot_win_rate(chunks, rates)
-
-            # Plot action distribution
-            plot_action_distribution(action_distribution)
-
-            # Print overall summary
-            overall_win_rate = np.mean(episode_outcomes) * 100
-            log(f"\n--- Analysis Summary ---")
-            log(f"Total valid episodes analyzed: {len(episode_outcomes)}")
-            log(f"Overall Win Rate: {overall_win_rate:.2f}%")
-
-            # Calculate and log step statistics
-            if episode_steps:
-                avg_steps = np.mean(episode_steps)
-                median_steps = np.median(episode_steps)
-                min_steps = np.min(episode_steps)
-                max_steps = np.max(episode_steps)
-                log(f"Average steps per episode: {avg_steps:.2f}")
-                log(f"Median steps per episode: {median_steps}")
-                log(f"Min steps per episode: {min_steps}")
-                log(f"Max steps per episode: {max_steps}")
-            else:
-                log("No step data available for completed episodes.")
-
-            # Log action distribution summary
-            log("\n--- Action Distribution ---")
-            if action_distribution:
-                total_actions = sum(action_distribution.values())
-                log(f"Total actions taken across all episodes: {total_actions}")
-                # Sort actions by count for display
-                sorted_actions = sorted(action_distribution.items(), key=lambda item: item[1], reverse=True)
-                for action_type, count in sorted_actions:
-                    percentage = (count / total_actions) * 100 if total_actions > 0 else 0
-                    log(f"- {action_type.name}: {count} ({percentage:.2f}%)")
-            else:
-                log("No action data recorded.")
-            log(f"------------------------")
-
-        else:
-            log("No valid episode outcomes found to calculate statistics.")
-    else:
-        log("Could not load memory or memory is empty.")
