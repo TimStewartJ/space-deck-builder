@@ -24,7 +24,7 @@ class Action:
     card_id: Optional[str] = None
     card: Optional['Card'] = None
     target_id: Optional[str] = None
-    card_sources: Optional[str] = None
+    card_source: Optional[str] = None
     additional_params: Optional[dict] = None
     
     def __str__(self):
@@ -40,9 +40,9 @@ class Action:
         elif self.type == ActionType.ATTACK_PLAYER:
             return f"Attack player: {self.target_id}"
         elif self.type == ActionType.SCRAP_CARD:
-            return f"Scrap card: {self.card_id} from {self.card_sources}"
+            return f"Scrap card: {self.card_id} from {self.card_source}"
         elif self.type == ActionType.DISCARD_CARDS:
-            return f"Discard cards: {self.card_id} from {self.card_sources}"
+            return f"Discard cards: {self.card_id} from {self.card_source}"
         elif self.type == ActionType.END_TURN:
             return "End turn"
         return f"{self.type}"

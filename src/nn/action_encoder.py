@@ -76,11 +76,11 @@ def encode_action(action: Action, cards: list[str]) -> int:
     
     if action.type == ActionType.SCRAP_CARD:
         if card_index is not None: # Check if card was found
-            if "hand" in action.card_sources:
+            if "hand" == action.card_source:
                 return scrap_hand_start_index + card_index
-            if "discard" in action.card_sources:
+            if "discard" == action.card_source:
                 return scrap_discard_start_index + card_index
-            if "trade" in action.card_sources:
+            if "trade" == action.card_source:
                 return scrap_trade_start_index + card_index
                 
     current_act_index += 3 * cards_length # Increment for all three potential scrap sources

@@ -74,7 +74,7 @@ class Effect:
                     action = Action(
                         ActionType.SCRAP_CARD,
                         card_id=target.name,
-                        card_sources=["discard"]
+                        card_source="discard"
                     )
                     player.pending_actions.append(action)
             # Create an action for every card in hand
@@ -84,7 +84,7 @@ class Effect:
                     action = Action(
                         ActionType.SCRAP_CARD,
                         card_id=target.name,
-                        card_sources=["hand"]
+                        card_source="hand"
                     )
                     player.pending_actions.append(action)
             # Create an action for every card in trade row
@@ -94,7 +94,7 @@ class Effect:
                     action = Action(
                         ActionType.SCRAP_CARD,
                         card_id=target.name,
-                        card_sources=["trade"]
+                        card_source="trade"
                     )
                     player.pending_actions.append(action)
         elif self.effect_type == CardEffectType.TARGET_DISCARD:
@@ -102,6 +102,8 @@ class Effect:
             if self.card_targets and "opponent" in self.card_targets:
                 # Assuming the opponent is the next player in the game
                 opponent = game.get_opponent(player)
+                if opponent is None:
+                    return
                 opponent.pending_actions_mandatory = True
                 opponent.pending_actions_left = self.value
                 # Create an action for each card in the opponent's hand
@@ -109,7 +111,7 @@ class Effect:
                     action = Action(
                         ActionType.DISCARD_CARDS,
                         card_id=target.name,
-                        card_sources=["opponent"]
+                        card_source="opponent"
                     )
                     opponent.pending_actions.append(action)
         elif self.effect_type == CardEffectType.PARENT:

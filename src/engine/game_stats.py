@@ -34,7 +34,7 @@ class GameStats:
         """Record a card being played"""
         self.player_stats[player_name].cards_played += 1
     
-    def record_card_scrap(self, player_name: str, scrap_sources: List[str] = None):
+    def record_card_scrap(self, player_name: str, scrap_source: str):
         """Record a card being scrapped
         
         Args:
@@ -43,11 +43,11 @@ class GameStats:
         """
         stats = self.player_stats[player_name]
         stats.cards_scrapped += 1
-        if "hand" in scrap_sources:
+        if "hand" == scrap_source:
             stats.scrapped_from_hand += 1
-        elif "discard" in scrap_sources:
+        elif "discard" == scrap_source:
             stats.scrapped_from_discard += 1
-        elif "trade" in scrap_sources:
+        elif "trade" == scrap_source:
             stats.scrapped_from_trade += 1
     
     def record_card_buy(self, player_name: str):
