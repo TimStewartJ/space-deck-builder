@@ -7,22 +7,27 @@ from src.utils.logger import log
 from collections import Counter
 from src.engine.actions import Action, ActionType
 
-def analyze_win_loss_and_steps(memory: List[List[Tuple]]) -> Tuple[List[int], List[int], Counter]:
+def analyze_win_loss_and_steps(memory: List[List[Tuple]]) -> Tuple[List[int], List[int], List[int], List[int], Counter]:
     """
     Analyzes the memory to determine win/loss outcomes, steps per episode,
     and the frequency of different action types.
     Assumes the NeuralAgent is Player 1 and a positive reward at the end signifies a win.
+    Separates outcomes based on whether the agent was first player or not.
 
     Args:
         memory: A list of episodes, where each episode is a list of transitions.
 
     Returns:
         A tuple containing:
-        - A list of integers representing outcomes (1 for win, 0 for loss).
+        - A list of integers representing all outcomes (1 for win, 0 for loss).
+        - A list of integers representing outcomes when agent is first player.
+        - A list of integers representing outcomes when agent is not first player.
         - A list of integers representing the number of steps in each valid episode.
         - A Counter object mapping ActionType to its frequency.
     """
-    outcomes = []
+    all_outcomes = []
+    first_player_outcomes = []
+    second_player_outcomes = []
     steps_per_episode = []
     action_counts = Counter()
 
@@ -32,8 +37,20 @@ def analyze_win_loss_and_steps(memory: List[List[Tuple]]) -> Tuple[List[int], Li
             continue
 
         num_steps = 0
+        is_first_player = None
+        
         for transition in episode:
             state, action, reward, next_state, done = transition
+            
+            # Extract first player status from state (index 1 in the encoded state)
+            if is_first_player is None and hasattr(state, "__getitem__"):
+                try:
+                    # Check if state is a tensor and get the is_first_player flag (at index 1)
+                    is_first_player = bool(state[1] > 0.5)
+                except (IndexError, TypeError, AttributeError):
+                    # If we can't determine first player status, default to None
+                    pass
+                    
             if isinstance(action, Action): # Ensure action is an Action object
                 action_counts[action.type] += 1
             else:
@@ -43,15 +60,23 @@ def analyze_win_loss_and_steps(memory: List[List[Tuple]]) -> Tuple[List[int], Li
             
         # Assuming the last reward determines win/loss for the episode
         last_reward = episode[-1][2] if episode[-1][2] is not None else 0
-        if last_reward > 0:
-            outcomes.append(1)  # Win
-        else:
-            outcomes.append(0)  # Loss or Draw
+        outcome = 1 if last_reward > 0 else 0  # 1 for Win, 0 for Loss or Draw
+        
+        all_outcomes.append(outcome)
+        
+        # Categorize outcome based on whether agent was first player or not
+        if is_first_player is True:
+            first_player_outcomes.append(outcome)
+        elif is_first_player is False:
+            second_player_outcomes.append(outcome)
+        
         steps_per_episode.append(num_steps)
 
-    log(f"Analyzed {len(outcomes)} completed episodes for outcomes and steps.")
+    log(f"Analyzed {len(all_outcomes)} completed episodes for outcomes and steps.")
+    log(f"First player episodes: {len(first_player_outcomes)}, Second player episodes: {len(second_player_outcomes)}")
     log(f"Total actions analyzed: {sum(action_counts.values())}")
-    return outcomes, steps_per_episode, action_counts
+    
+    return all_outcomes, first_player_outcomes, second_player_outcomes, steps_per_episode, action_counts
 
 def calculate_win_rate_over_time(outcomes: List[int], chunk_size: int = 100) -> Tuple[List[int], List[float]]:
     """
@@ -82,33 +107,71 @@ def calculate_win_rate_over_time(outcomes: List[int], chunk_size: int = 100) -> 
         win_rate = np.mean(current_chunk_outcomes) * 100  # Calculate win rate as percentage
         episode_chunks.append(chunk_end)
         win_rates.append(win_rate)
-        log(f"Episodes {1}-{chunk_end}: Win Rate = {win_rate:.2f}%")
-
+        
     return episode_chunks, win_rates
 
-def plot_win_rate(episode_chunks: List[int], win_rates: List[float]):
-    """Plots the win rate over time."""
-    if not episode_chunks or not win_rates:
+def plot_win_rate(all_data: Tuple[List[int], List[float]], first_player_data: Tuple[List[int], List[float]], 
+              second_player_data: Tuple[List[int], List[float]]):
+    """
+    Plots the win rate over time, with separate lines for overall win rate, 
+    win rate when the agent starts first, and win rate when the agent starts second.
+    
+    Args:
+        all_data: Tuple containing episode counts and overall win rates
+        first_player_data: Tuple containing episode counts and win rates when agent starts first
+        second_player_data: Tuple containing episode counts and win rates when agent starts second
+    """
+    all_episodes, all_win_rates = all_data
+    first_player_episodes, first_player_win_rates = first_player_data
+    second_player_episodes, second_player_win_rates = second_player_data
+    
+    if not all_episodes:
         log("No data to plot.")
         return
 
-    plt.figure(figsize=(10, 5))
-    plt.plot(episode_chunks, win_rates, marker='o')
+    plt.figure(figsize=(12, 6))
+    
+    # Plot all win rates
+    plt.plot(all_episodes, all_win_rates, marker='o', label='Overall Win Rate')
+    
+    # Plot first player win rates if available
+    if first_player_episodes and first_player_win_rates:
+        plt.plot(first_player_episodes, first_player_win_rates, marker='^', 
+                 label='Win Rate (Agent First)', linestyle='--')
+    
+    # Plot second player win rates if available
+    if second_player_episodes and second_player_win_rates:
+        plt.plot(second_player_episodes, second_player_win_rates, marker='s', 
+                 label='Win Rate (Agent Second)', linestyle='-.')
+    
     plt.title('Neural Agent Win Rate Over Training Episodes')
     plt.xlabel('Number of Episodes')
     plt.ylabel('Win Rate (%)')
     plt.grid(True)
     plt.ylim(0, 100) # Win rate is a percentage
-    # Ensure x-axis starts near 0 or the first chunk size
-    plt.xlim(left=0) 
+    plt.xlim(left=0) # Ensure x-axis starts near 0
+    plt.legend(loc='best')
     
-    # Add text for final win rate
-    if win_rates:
-        final_win_rate = win_rates[-1]
-        final_episodes = episode_chunks[-1]
-        plt.text(final_episodes, final_win_rate, f'{final_win_rate:.1f}%', 
+    # Add text for final win rates
+    if all_win_rates:
+        final_all_win_rate = all_win_rates[-1]
+        final_all_episodes = all_episodes[-1]
+        plt.text(final_all_episodes, final_all_win_rate, f'{final_all_win_rate:.1f}%', 
+                 ha='right', va='bottom')
+        
+    if first_player_win_rates:
+        final_first_win_rate = first_player_win_rates[-1]
+        final_first_episodes = first_player_episodes[-1]
+        plt.text(final_first_episodes, final_first_win_rate, f'{final_first_win_rate:.1f}%', 
+                 ha='right', va='bottom')
+        
+    if second_player_win_rates:
+        final_second_win_rate = second_player_win_rates[-1]
+        final_second_episodes = second_player_episodes[-1]
+        plt.text(final_second_episodes, final_second_win_rate, f'{final_second_win_rate:.1f}%', 
                  ha='right', va='bottom')
 
+    plt.tight_layout()
     plt.show()
 
 def plot_action_distribution(action_counts: Counter):
@@ -136,3 +199,42 @@ def plot_action_distribution(action_counts: Counter):
         plt.text(bar.get_x() + bar.get_width()/2.0, yval, str(int(yval)), va='bottom', ha='center') # Add text labels
 
     plt.show()
+
+def analyze_and_plot_win_rates_by_starting_position(memory: List[List[Tuple]], chunk_size: int = 100):
+    """
+    Analyzes memory data and plots win rates based on whether the agent goes first or second.
+    
+    Args:
+        memory: A list of episodes, where each episode is a list of transitions.
+        chunk_size: The number of episodes per chunk for calculating win rate.
+    """
+    # Analyze memory to get outcomes separated by starting position
+    all_outcomes, first_player_outcomes, second_player_outcomes, steps, action_counts = analyze_win_loss_and_steps(memory)
+    
+    # Calculate win rates over time for all three categories
+    all_chunks, all_win_rates = calculate_win_rate_over_time(all_outcomes, chunk_size)
+    log(f"Overall win rate (latest {chunk_size} episodes): {all_win_rates[-1]:.2f}% over {len(all_outcomes)} episodes")
+    
+    # Calculate first player win rates
+    first_chunks, first_win_rates = calculate_win_rate_over_time(first_player_outcomes, chunk_size)
+    if first_win_rates:
+        log(f"Win rate when agent starts first (latest chunk): {first_win_rates[-1]:.2f}% over {len(first_player_outcomes)} episodes")
+    else:
+        log("No data available for when agent starts first")
+    
+    # Calculate second player win rates
+    second_chunks, second_win_rates = calculate_win_rate_over_time(second_player_outcomes, chunk_size)
+    if second_win_rates:
+        log(f"Win rate when agent starts second (latest chunk): {second_win_rates[-1]:.2f}% over {len(second_player_outcomes)} episodes")
+    else:
+        log("No data available for when agent starts second")
+    
+    # Plot win rates
+    plot_win_rate(
+        (all_chunks, all_win_rates),
+        (first_chunks, first_win_rates),
+        (second_chunks, second_win_rates)
+    )
+    
+    # Also plot action distribution
+    plot_action_distribution(action_counts)
