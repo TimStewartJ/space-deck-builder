@@ -3,18 +3,25 @@ from .effects import CardEffectType, Effect
 
 def parse_effect_text(text: str) -> Effect:
     """Parse a single effect text and return an Effect object"""
-    # if this effect has multiple effects, we will parse them separately and add them as child effects
-    if len(text.split("\n")) > 1:
-        child_effects = []
-        for effect_text in text.split("\n"):
-            child_effects.append(parse_effect_text(effect_text.strip()))
-        return Effect(CardEffectType.PARENT, 0, text, child_effects=child_effects)
+
+    # If text ends with a period, remove it
+    if text.endswith("."):
+        text = text[:-1]
 
     # Check for scrap effects
     is_scrap = False
     if text.startswith("{Scrap}:"):
         is_scrap = True
         text = text.replace("{Scrap}:", "").strip()
+
+    # if this effect has multiple effects, we will parse them separately and add them as child effects
+    # Split text by both new line and period
+    split_text = [chunk for chunk in re.split(r"[.\n]", text) if chunk.strip()]
+    if len(split_text) > 1:
+        child_effects = []
+        for effect_text in split_text:
+            child_effects.append(parse_effect_text(effect_text.strip()))
+        return Effect(CardEffectType.PARENT, 0, text, child_effects=child_effects, is_scrap_effect=is_scrap)
     
     # Check for ally effects
     is_ally = False
@@ -45,29 +52,34 @@ def parse_effect_text(text: str) -> Effect:
                      faction_requirement, is_scrap, is_ally, faction_requirement_count)
     
     # Parse scrap effects
-    if text == "You may scrap a card in your hand or discard pile." or text == "Scrap a card in your hand or discard pile.":
+    if text == "You may scrap a card in your hand or discard pile" or text == "Scrap a card in your hand or discard pile":
         return Effect(CardEffectType.SCRAP, 1, text, faction_requirement, is_scrap, 
                       is_ally, faction_requirement_count, card_targets=["hand", "discard"])
     
-    if text == "You may scrap a card in the trade row.":
+    if text == "You may scrap a card in the trade row":
         return Effect(CardEffectType.SCRAP, 1, text, faction_requirement, is_scrap,
                       is_ally, faction_requirement_count, card_targets=["trade"])
     
-    # Prase discard effects
-    if text == "Target opponent discards a card.":
+    # Parse discard effects
+    if text == "Target opponent discards a card":
         return Effect(CardEffectType.TARGET_DISCARD, 1, text, faction_requirement, is_scrap,
                       is_ally, faction_requirement_count, card_targets=["opponent"])
 
     # Parse draw effects
-    if text == "Draw a card.":
+    if text == "Draw a card":
         return Effect(CardEffectType.DRAW, 1, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)
-    if text == "Draw two cards.":
+    if text == "Draw two cards":
         return Effect(CardEffectType.DRAW, 2, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)
     
     draw_match = re.search(r"Draw (\d+) cards?", text)
     if draw_match:
         return Effect(CardEffectType.DRAW, int(draw_match.group(1)), text,
                      faction_requirement, is_scrap, is_ally, faction_requirement_count)
+    
+    # Parse destroy base effects
+    if text == "Destroy target base" or text == "You may destroy target base":
+        return Effect(CardEffectType.DESTROY_BASE, 1, text, faction_requirement, is_scrap,
+                      is_ally, faction_requirement_count)
     
     # Default case - store as text for complex effects
     return Effect(CardEffectType.COMPLEX, 0, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)

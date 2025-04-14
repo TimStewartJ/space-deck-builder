@@ -15,6 +15,7 @@ class CardEffectType(Enum):
     SCRAP = "scrap"  # For effects that allow scrapping other cards
     PARENT = "parent"  # For effects that are parent effects
     TARGET_DISCARD = "target_discard"  # For effects that make the target player discard cards
+    DESTROY_BASE = "destroy_base"  # For effects that destroy bases
     COMPLEX = "complex"  # For complex effects that require special handling
 
 class CardTargetType(Enum):
@@ -119,6 +120,31 @@ class Effect:
                         card_source="opponent"
                     )
                     opponent.pending_actions.append(action)
+        elif self.effect_type == CardEffectType.DESTROY_BASE:
+            # Assuming the opponent is the next player in the game
+            opponent = game.get_opponent(player)
+            if opponent is None:
+                return
+            opponent.pending_actions_mandatory = False
+            opponent.pending_actions_left = self.value
+            # First check for outposts - must be destroyed before attacking other bases or player
+            outposts = [b for b in opponent.bases if b.is_outpost()]
+            if outposts:
+                for output in outposts:
+                    action = Action(
+                        ActionType.DESTROY_BASE,
+                        target_id=output.name
+                    )
+                    opponent.pending_actions.append(action)
+            else:
+                # If no outposts, can destroy other bases or player directly
+                for base in opponent.bases:
+                    action = Action(
+                        ActionType.DESTROY_BASE,
+                        target_id=base.name
+                    )
+                    opponent.pending_actions.append(action)
+                
         elif self.effect_type == CardEffectType.PARENT:
             # Apply child effects if this card has any
             if self.child_effects:
@@ -154,12 +180,12 @@ class Effect:
     def __str__(self):
         base = f"{self.effect_type.name.capitalize()}: "
         if self.child_effects:
-            base += " | Child Effects: " + ", ".join(str(effect) for effect in self.child_effects)
+            base += "| Child Effects: " + ", ".join(str(effect) for effect in self.child_effects)
             return base
         base += f"{self.value}" if self.value else self.text
         base += f" from {self.card_targets}" if self.card_targets else ""
         if self.is_scrap_effect:
-            base = f"Scrap: {base}"
+            base = f"(Scrap required): {base}"
         if self.is_ally_effect and self.faction_requirement:
             base = f"{self.faction_requirement} Ally: {base}"
         return base

@@ -175,6 +175,18 @@ class Game:
                             log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
                             break
 
+        elif action.type == ActionType.DESTROY_BASE:
+            # Destroy base
+            for player in self.players:
+                if player != self.current_player:
+                    for base in player.bases:
+                        if base.name == action.target_id:
+                            self.stats.record_base_destroy(self.current_player.name)
+                            player.bases.remove(base)
+                            player.discard_pile.append(base)
+                            log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
+                            break
+
         elif action.type == ActionType.ATTACK_PLAYER:
             # Attack player directly
             for player in self.players:

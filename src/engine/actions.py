@@ -17,6 +17,7 @@ class ActionType(Enum):
     SCRAP_CARD = "scrap_card"
     END_TURN = "end_turn"
     DISCARD_CARDS = "discard_card"
+    DESTROY_BASE = "destroy_base"
     SKIP_DECISION = "skip_decision"
 
 @dataclass
