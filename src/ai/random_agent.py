@@ -14,7 +14,4 @@ class RandomAgent(Agent):
         # Remove the last action from the list
         available_actions.pop()
 
-        if available_actions:
-            return choice(available_actions)
-        return None
-    
+        return choice(available_actions)
