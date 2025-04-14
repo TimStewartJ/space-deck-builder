@@ -119,9 +119,6 @@ def plot_win_rate(episode_chunks: List[int], win_rates: List[float]):
         plt.text(final_episodes, final_win_rate, f'{final_win_rate:.1f}%', 
                  ha='right', va='bottom')
 
-    plot_filename = "win_rate_over_time.png"
-    plt.savefig(plot_filename)
-    log(f"Win rate plot saved to {plot_filename}")
     plt.show()
 
 if __name__ == "__main__":
