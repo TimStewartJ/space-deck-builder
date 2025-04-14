@@ -1,5 +1,6 @@
 import argparse
 from datetime import datetime
+from pathlib import Path
 from typing import TYPE_CHECKING
 import torch
 import numpy as np
@@ -78,6 +79,8 @@ class Trainer:
     
     def train(self):
         set_verbose(False)  # Disable verbose logging for training
+
+        training_start_time = datetime.now()
 
         aggregate_stats = AggregateStats()
         player1Name = "NeuralAgent"
@@ -159,11 +162,28 @@ class Trainer:
                 log(f"Saving model at episode {episode}")
                 log(aggregate_stats.get_summary())
                 torch.save(self.neural_agent.model.state_dict(), f"models/neural_agent_{episode}.pth")
-                
+
+        training_time = (datetime.now() - training_start_time).total_seconds()
+        log(f"Training completed in {training_time:.2f} seconds.")
+        # Log the average time per episode
+        log(f"Average time per episode: {training_time / self.episodes:.2f} seconds.")
+
         # Save final model
         log(aggregate_stats.get_summary())
         torch.save(self.neural_agent.model.state_dict(), "models/neural_agent_final.pth")
-        self.neural_agent.save_memory(memory_file="C:\\Users\\timmie\\Downloads\\memory.pkl")
+        
+        # Get the user's home directory
+        home_dir = Path.home()
+
+        # Construct the path to the Downloads folder
+        downloads_dir = home_dir / "Downloads"
+        # Define the path to the memory file
+        memory_file = downloads_dir / "memory.pkl"
+
+        memory_saving_time = datetime.now()
+        log(f"Saving memory at {memory_saving_time} to {memory_file}")
+        self.neural_agent.save_memory(memory_file=str(memory_file))
+        log(f"Memory saved in {(datetime.now() - memory_saving_time).total_seconds():.2f} seconds.")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a Neural Agent for Space Deck Builder.")

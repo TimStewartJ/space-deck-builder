@@ -1,10 +1,11 @@
+from pathlib import Path
 import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Tuple
 from src.utils.logger import log
 
-def load_memory(memory_file_path: str = "memory.pkl") -> List[List[Tuple]]:
+def load_memory(memory_file_path: Path = Path("memory.pkl")) -> List[List[Tuple]]:
     """Loads the agent's memory from a pickle file."""
     try:
         with open(memory_file_path, 'rb') as f:
@@ -118,8 +119,13 @@ def plot_win_rate(episode_chunks: List[int], win_rates: List[float]):
     plt.show()
 
 if __name__ == "__main__":
+    # Get the user's home directory
+    home_dir = Path.home()
+
+    # Construct the path to the Downloads folder
+    downloads_dir = home_dir / "Downloads"
     # Define the path to the memory file
-    memory_file = "memory.pkl"
+    memory_file = downloads_dir / "memory.pkl"
     
     # Load the memory
     agent_memory = load_memory(memory_file)
