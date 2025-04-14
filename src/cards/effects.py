@@ -179,13 +179,13 @@ class Effect:
         
     def __str__(self):
         base = f"{self.effect_type.name.capitalize()}: "
+        if self.is_scrap_effect:
+            base = f"(Scrap required): {base}"
         if self.child_effects:
             base += "| Child Effects: " + ", ".join(str(effect) for effect in self.child_effects)
             return base
         base += f"{self.value}" if self.value else self.text
         base += f" from {self.card_targets}" if self.card_targets else ""
-        if self.is_scrap_effect:
-            base = f"(Scrap required): {base}"
         if self.is_ally_effect and self.faction_requirement:
             base = f"{self.faction_requirement} Ally: {base}"
         return base
