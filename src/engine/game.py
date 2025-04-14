@@ -134,12 +134,10 @@ class Game:
                         card.effects[0].apply(self, self.current_player, card)
                     break
         
-        elif action.type == ActionType.APPLY_EFFECT and action.additional_params is not None:
+        elif action.type == ActionType.APPLY_EFFECT and action.card_effect is not None:
             # Apply the effect directly
-            effect = action.additional_params.get('effect')
-            if effect:
-                effect.apply(self, self.current_player)
-                log(f"{self.current_player.name} applied effect: {effect}", v=True)
+            action.card_effect.apply(self, self.current_player)
+            log(f"{self.current_player.name} applied effect: {action.card_effect}", v=True)
                     
         elif action.type == ActionType.BUY_CARD:
             # Find the card in trade row

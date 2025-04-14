@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     from src.engine.player import Player
     from src.engine.game import Game
     from src.cards.card import Card
+    from src.cards.effects import Effect
 
 class ActionType(Enum):
     PLAY_CARD = "play_card"
@@ -25,6 +26,7 @@ class Action:
     card: Optional['Card'] = None
     target_id: Optional[str] = None
     card_source: Optional[str] = None
+    card_effect: Optional['Effect'] = None
     additional_params: Optional[dict] = None
     
     def __str__(self):
@@ -32,7 +34,7 @@ class Action:
         if self.type == ActionType.PLAY_CARD and self.card:
             return f"Play card: {self.card}"
         elif self.type == ActionType.APPLY_EFFECT and self.card_id:
-            return f"{self.card_id}: {self.additional_params.get('effect', '')}"
+            return f"{self.card_id}: {self.card_effect}"
         elif self.type == ActionType.BUY_CARD and self.card_id:
             return f"Buy card: {self.card}"
         elif self.type == ActionType.ATTACK_BASE:
@@ -78,7 +80,7 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                 if outposts:
                     # Can only attack outposts
                     for outpost in outposts:
-                        if player.combat >= outpost.defense:
+                        if outpost.defense and player.combat >= outpost.defense:
                             actions.append(Action(
                                 type=ActionType.ATTACK_BASE,
                                 target_id=outpost.name
@@ -105,10 +107,10 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                 if effect.faction_requirement:
                     faction_count = player.get_faction_ally_count(effect.faction_requirement)
                     if faction_count > effect.faction_requirement_count:
-                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, additional_params={"effect": effect}))
+                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=effect))
                     continue
                 # If no faction requirement, add effect directly
-                actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, additional_params={"effect": effect}))
+                actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=effect))
 
     # Always allow ending turn
     actions.append(Action(type=ActionType.END_TURN))
