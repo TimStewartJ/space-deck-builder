@@ -100,7 +100,7 @@ def decode_action(action_idx: int, available_actions: list[Action], cards: list[
     """
     # Bound check
     if action_idx <= 0 or not available_actions:
-        return available_actions[0] if available_actions else None
+        return available_actions[0] if available_actions else Action(type=ActionType.END_TURN)
     
     # Create mappings of available actions by type
     action_by_type = {ActionType.END_TURN: [], ActionType.SKIP_DECISION: [],

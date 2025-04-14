@@ -54,6 +54,10 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
     """Return list of available actions for a player given the current game state"""
     actions = []
 
+    # If it's not the player's turn, return empty list
+    if game_state.current_player != player:
+        return actions
+
     # If there are any pending actions, those are the only actions that a player can do right now
     if len(player.pending_actions) > 0:
         for action in player.pending_actions:
