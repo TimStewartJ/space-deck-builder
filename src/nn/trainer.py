@@ -186,7 +186,9 @@ class Trainer:
         # Construct the path to the Downloads folder
         downloads_dir = home_dir / "Downloads"
         # Define the path to the memory file
-        memory_file = downloads_dir / "memory.pkl"
+        # Add number of episodes to the filename
+        memory_file_name = f"memory_{self.episodes}.pkl"
+        memory_file = downloads_dir / memory_file_name
 
         memory_saving_time = datetime.now()
         log(f"Saving memory at {memory_saving_time} to {memory_file}")

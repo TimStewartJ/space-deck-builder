@@ -171,8 +171,12 @@ class NeuralAgent(Agent):
         self.exploration_rate = max(self.min_exploration_rate, self.exploration_rate * self.exploration_decay_rate)
         log(f"Exploration rate decayed to: {self.exploration_rate:.4f}")
 
+        # There is a 9/10 chance to remove the episodes just trained on
+        if random.random() > 0.1:
+            # Keep all episodes except the last episode_sample_size
+            self.memory = self.memory[:-episode_sample_size]
 
-    def save_memory(self, memory_file="memory.pkl"):
+    def save_memory(self, memory_file):
         """Saves the agent's memory (list of episodes) to a file using pickle."""
         log(f"Attempting to save memory to {memory_file}...")
         try:
