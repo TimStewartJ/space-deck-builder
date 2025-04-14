@@ -69,7 +69,7 @@ class NeuralAgent(Agent):
             if len(available_actions) > 1:
                 available_actions = [action for action in available_actions if action.type != ActionType.END_TURN]
             action = random.choice(available_actions)
-            log(f"Random action chosen: {action}")
+            log(f"Random action chosen: {action}", v=True)
             return action
         
         with torch.no_grad():
@@ -95,7 +95,7 @@ class NeuralAgent(Agent):
         # Find the original Action object corresponding to the best index
         for action in available_actions:
             if encode_action(action, cards=self.cards) == best_action_index:
-                log(f"Best action chosen: {action} (index {best_action_index})")
+                log(f"Best action chosen: {action} (index {best_action_index})", v=True)
                 return action
         
         # Fallback if decoding fails (should not happen if masking is correct)
@@ -143,17 +143,6 @@ class NeuralAgent(Agent):
                     discount = (self.gamma ** n) * (lambda_param ** n)
                     n_step_return += discount * future_reward
                 
-                # For states close to the end, add bootstrapped value
-                if t + self.look_ahead_steps < len(episode):
-                    final_state_cpu = episode[t + self.look_ahead_steps][3]  # next_state at t+look_ahead_steps
-                    # Move final_state to the device for model inference
-                    final_state = final_state_cpu.to(self.device)
-                    with torch.no_grad():
-                        self.model.to(self.device)  # Ensure model is on the same device
-                        final_value = torch.max(self.model(final_state), dim=0)[0].item()
-                        self.model.to('cpu')  # Move model back to CPU after inference
-                        n_step_return += (self.gamma ** self.look_ahead_steps) * (lambda_param ** self.look_ahead_steps) * final_value
-                
                 all_states.append(state)
                 all_actions.append(encode_action(action, cards=self.cards))
                 all_td_targets.append(n_step_return)
@@ -169,13 +158,13 @@ class NeuralAgent(Agent):
         td_targets = torch.FloatTensor([all_td_targets[i] for i in indices])
         
         # Compute Q values
-        q_values = self.model(states)
+        q_values: torch.Tensor = self.model(states)
         
         # Update model using the TD targets
         self.optimizer.zero_grad()
         # Select the Q-values corresponding to the actions taken
         predicted_q_values = q_values.gather(1, actions.unsqueeze(1)).squeeze(1)
-        loss = nn.MSELoss()(predicted_q_values, td_targets)
+        loss: torch.Tensor = nn.MSELoss()(predicted_q_values, td_targets)
         loss.backward()
         self.optimizer.step()
 
