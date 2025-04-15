@@ -207,7 +207,7 @@ class Game:
                         log(f"{self.current_player.name} attacked {player.name} for {damage} damage", v=True)
                         # Check for game over
                         if player.health <= 0:
-                            log(f"{player.name} has been defeated!")
+                            log(f"{player.name} has been defeated!", v=True)
                             self.is_game_over = True
                             self.stats.end_game(self.current_player.name)
                         break
