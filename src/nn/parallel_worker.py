@@ -17,7 +17,7 @@ def worker_run_episode(episode, cards, card_names, first_agent, second_agent, fi
 
     Returns:
         tuple: (experiences, game_stats, winner)
-            experiences (dict): Contains lists for states, actions, rewards, next_states, and dones.
+            experiences (list): List of tuples (state, action, reward, next_state, done).
             game_stats: The game statistics object.
             winner: Name of the winning agent.
     """
@@ -34,14 +34,8 @@ def worker_run_episode(episode, cards, card_names, first_agent, second_agent, fi
 
     game.start_game()
     
-    # Initialize experience buffers
-    experiences = {
-        "states": [],
-        "actions": [],
-        "rewards": [],
-        "next_states": [],
-        "dones": []
-    }
+    # Initialize experiences as a list of tuples
+    experiences = []
     
     while not game.is_game_over:
         current_player = game.current_player
@@ -64,10 +58,7 @@ def worker_run_episode(episode, cards, card_names, first_agent, second_agent, fi
             next_state = encode_state(game, is_current_player_training=is_training, cards=card_names)
             done = game.is_game_over
 
-            experiences["states"].append(state)
-            experiences["actions"].append(action)
-            experiences["rewards"].append(reward)
-            experiences["next_states"].append(next_state)
-            experiences["dones"].append(done)
+            # Store experience as a tuple instead of in separate dictionary lists
+            experiences.append((state, action, reward, next_state, done))
     winner = game.get_winner()
     return experiences, game.stats, winner
