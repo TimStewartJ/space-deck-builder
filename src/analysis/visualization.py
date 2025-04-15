@@ -9,7 +9,7 @@ def calculate_epsilon_values(num_episodes, initial_epsilon=0.995, decay_interval
     for episode in range(num_episodes):
         epsilon_values.append(current_epsilon)
         if (episode + 1) % decay_interval == 0:
-            current_epsilon *= 0.995
+            current_epsilon *= initial_epsilon
 
     return epsilon_values
 
