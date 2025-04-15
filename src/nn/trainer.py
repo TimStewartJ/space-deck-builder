@@ -14,6 +14,7 @@ from src.ai.neural_agent import NeuralAgent
 from src.utils.logger import log, set_verbose
 # Import the worker function
 from src.nn.parallel_worker import worker_run_episode
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 if TYPE_CHECKING:
     from src.engine.player import Player
@@ -49,29 +50,42 @@ class Trainer:
 
         all_episodes = []
 
+        thread_count = 4
+
         for batch_start in range(0, self.episodes, self.episode_batch_size):
             batch_end = min(batch_start + self.episode_batch_size, self.episodes)
             log(f"Processing batch {batch_start + 1} to {batch_end}")
 
-            for episode in range(batch_start, batch_end):
-                log(f"Episode {episode+1}/{self.episodes}")
-                # Run the episode using the worker function
-                experiences, game_stats, winner = worker_run_episode(
-                    episode, 
-                    self.cards, 
-                    self.card_names, 
-                    self.neural_agent, 
-                    self.opponent_agent,
-                    player1Name,
-                    player2Name
-                )
+            batch_start_time = datetime.now()
+            # Run episodes in parallel
+            with ThreadPoolExecutor() as executor: 
+                futures = [
+                    executor.submit(
+                        worker_run_episode,
+                        self.episode_batch_size//thread_count,
+                        self.cards,
+                        self.card_names,
+                        self.neural_agent,
+                        self.opponent_agent,
+                        player1Name,
+                        player2Name
+                    ) for _ in range(thread_count)
+                ]
 
-                # Store the collected experiences from the worker
-                all_episodes.append(experiences)
+                for future in futures:
+                    experiences_list = future.result()
 
-                # Update aggregate statistics using results from the worker
-                aggregate_stats.update(game_stats, winner)
-                log(f"Game took {game_stats.get_game_duration():.4f} seconds.")
+                    for experience in experiences_list:
+                        experiences, game_stats, winner = experience
+
+                        # Store the collected experiences from the worker
+                        all_episodes.append(experiences)
+
+                        # Update aggregate statistics using results from the worker
+                        aggregate_stats.update(game_stats, winner)
+                        log(f"{winner} wins!")
+            batch_duration = (datetime.now() - batch_start_time).total_seconds()
+            log(f"Batch {batch_start + 1} took {batch_duration:.4f} seconds, average of {batch_duration / self.episode_batch_size:.4f} seconds per episode.")
 
             # Train the network after completing the batch
             log(f"Training neural agent for batch {batch_start + 1} to {batch_end}...")
@@ -90,7 +104,7 @@ class Trainer:
         training_time = (datetime.now() - training_start_time).total_seconds()
         log(f"Training completed in {training_time:.2f} seconds.")
         # Log the average time per episode
-        log(f"Average time per episode: {training_time / self.episodes:.4f} seconds.")
+        log(f"Average time per episode: {training_time / len(all_episodes):.4f} seconds.")
 
         # Save final model
         log(aggregate_stats.get_summary())
@@ -111,7 +125,13 @@ class Trainer:
         log(f"Saving memory at {memory_saving_time} to {memory_file}")
         # Save all the episodes to a file
         with open(memory_file, "wb") as f:
-            pickle.dump(all_episodes, f)
+            pickle.dump(
+                {"episodes": all_episodes,
+                 "batch_size": self.episode_batch_size,
+                 "lambda_param": self.lambda_param,
+                 "exploration_decay_rate": self.neural_agent.exploration_decay_rate,
+                 }
+                 , f)
         log(f"Memory saved in {(datetime.now() - memory_saving_time).total_seconds():.2f} seconds.")
 
 if __name__ == "__main__":
