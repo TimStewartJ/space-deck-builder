@@ -144,7 +144,8 @@ class Trainer:
 
         # Save final model
         log(aggregate_stats.get_summary())
-        torch.save(self.neural_agent.model.state_dict(), "models/neural_agent_final.pth")
+        current_date_time = datetime.now().strftime("%m%d_%H%M")
+        torch.save(self.neural_agent.model.state_dict(), f"models/neural_agent_final_{current_date_time}_{self.episodes}.pth")
         
         # Get the user's home directory
         home_dir = Path.home()
