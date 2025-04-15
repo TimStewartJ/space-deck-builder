@@ -36,14 +36,14 @@ def plot_win_rate_and_epsilon(episode_outcomes: List[int], chunk_size=100, initi
     ax1.set_ylabel('Win Rate', color=color)
     ax1.plot(chunks, rates, marker='o', linestyle='-', color=color, label='Win Rate')
     ax1.tick_params(axis='y', labelcolor=color)
-    ax1.set_ylim([0, 1.05])
+    ax1.set_ylim((0.0, 1.05))
 
     ax2 = ax1.twinx()
     color = 'tab:red'
     ax2.set_ylabel('Epsilon Value', color=color)
     ax2.plot(chunks, chunk_epsilon_values, marker='x', linestyle='--', color=color, label='Epsilon')
     ax2.tick_params(axis='y', labelcolor=color)
-    ax2.set_ylim([0, 1.05])
+    ax2.set_ylim((0.0, 1.05))
 
     plt.title('Win Rate and Exploration Epsilon Over Time')
     ax1.grid(True, alpha=0.3)
