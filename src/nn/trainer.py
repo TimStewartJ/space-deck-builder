@@ -1,6 +1,7 @@
 import argparse
 from datetime import datetime
 from pathlib import Path
+import pickle
 from typing import TYPE_CHECKING
 import torch
 import numpy as np
@@ -46,6 +47,8 @@ class Trainer:
         player2Name = self.opponent_agent.name # Use agent's name
         aggregate_stats.reset(player1_name=player1Name, player2_name=player2Name)
 
+        all_episodes = []
+
         for episode in range(self.episodes):
             log(f"Episode {episode+1}/{self.episodes}")
               # Run the episode using the worker function
@@ -60,16 +63,7 @@ class Trainer:
             )
 
             # Store the collected experiences from the worker
-            if len(experiences["states"]) > 0:
-                for i in range(len(experiences["states"])):
-                    self.neural_agent.remember(
-                        experiences["states"][i],
-                        experiences["actions"][i],
-                        experiences["rewards"][i],
-                        experiences["next_states"][i],
-                        experiences["dones"][i]
-                    )
-                self.neural_agent.finish_remembering_episode()
+            all_episodes.append(experiences)
 
             # Update aggregate statistics using results from the worker
             aggregate_stats.update(game_stats, winner)
@@ -80,7 +74,9 @@ class Trainer:
                 log(f"Training neural agent at episode {episode}...")
                 # keep track of time taken to train
                 start_time = datetime.now()
-                self.neural_agent.train(lambda_param=self.lambda_param, episode_sample_size=self.episode_sample_size)
+                # Get the experiences from the last sample size episodes
+                experiences_to_train = all_episodes[-self.episode_sample_size:]
+                self.neural_agent.train(lambda_param=self.lambda_param, episodes=experiences_to_train)
                 end_time = datetime.now()
                 log(f"Training took {(end_time - start_time).total_seconds():.4f} seconds.")
 
@@ -112,7 +108,9 @@ class Trainer:
 
         memory_saving_time = datetime.now()
         log(f"Saving memory at {memory_saving_time} to {memory_file}")
-        self.neural_agent.save_memory(memory_file=str(memory_file))
+        # Save all the episodes to a file
+        with open(memory_file, "wb") as f:
+            pickle.dump(all_episodes, f)
         log(f"Memory saved in {(datetime.now() - memory_saving_time).total_seconds():.2f} seconds.")
 
 if __name__ == "__main__":

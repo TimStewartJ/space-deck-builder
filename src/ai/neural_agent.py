@@ -1,6 +1,6 @@
 import pickle
 import random
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, List, Tuple, Optional
 import numpy as np
 import torch
 import torch.nn as nn
@@ -56,10 +56,6 @@ class NeuralAgent(Agent):
             log(f"Loading model from {model_file_path}")
             self.model.load_state_dict(torch.load(model_file_path, map_location=self.device))
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-        
-        # Change memory structure to track episodes
-        self.memory = []
-        self.current_episode = []
 
     def make_decision(self, game_state: 'Game'):
         available_actions = get_available_actions(game_state, game_state.current_player)
@@ -100,30 +96,22 @@ class NeuralAgent(Agent):
         # Fallback if decoding fails (should not happen if masking is correct)
         log(f"Warning: Could not decode action index {best_action_index}. Choosing randomly.")
         return random.choice(available_actions)
-    
-    def remember(self, state, action, reward, next_state, done):
-        """Store experience in current episode"""
-        self.current_episode.append((state, action, reward, next_state, done))
-    
-    def finish_remembering_episode(self):
-        self.memory.append(self.current_episode)
-        self.current_episode = []
 
-    def train(self, lambda_param, episode_sample_size):
-        """Train model using experience replay"""
-        # Need enough complete episodes
-        if len(self.memory) < episode_sample_size:
-            return
+    def train(self, episodes: List[List[Tuple]], lambda_param: float):
+        """
+        Train model using provided episodes
         
-        # Take the most recent episodes
-        sampled_episodes = self.memory[-episode_sample_size:]
+        Args:
+            episodes: List of episodes to train on, where each episode is a list of (state, action, reward, next_state, done) tuples
+            lambda_param: Lambda parameter for n-step returns calculation
+        """
         
         # Extract transitions from episodes
         all_states = []
         all_actions = []
         all_td_targets = []
         
-        for episode in sampled_episodes:
+        for episode in episodes:
             if len(episode) < 2:  # Skip very short episodes
                 continue
 
@@ -146,6 +134,10 @@ class NeuralAgent(Agent):
                 all_td_targets.append(n_step_return)
         
         # Convert to tensors
+        if not all_states:  # No valid training data
+            log("No valid training data in episodes")
+            return
+            
         indices = range(len(all_states))
         states = torch.stack([all_states[i] for i in indices])
         actions = torch.LongTensor([all_actions[i] for i in indices])
@@ -164,25 +156,4 @@ class NeuralAgent(Agent):
 
         # Decay exploration rate after training step
         self.exploration_rate = max(self.min_exploration_rate, self.exploration_rate * self.exploration_decay_rate)
-        log(f"Exploration rate decayed to: {self.exploration_rate:.4f}")        
-        
-        # Keep a random 1/10 sample of the episodes just trained on
-        # Get the episodes that were just used for training
-        trained_episodes = self.memory[-episode_sample_size:]
-        # Keep all episodes before the ones we just trained on
-        self.memory = self.memory[:-episode_sample_size]
-        # Add a random 10% sample of the trained episodes back to memory
-        sample_size = max(1, int(episode_sample_size * 0.1))
-        if trained_episodes:
-            sampled_episodes = random.sample(trained_episodes, sample_size)
-            self.memory.extend(sampled_episodes)
-
-    def save_memory(self, memory_file):
-        """Saves the agent's memory (list of episodes) to a file using pickle."""
-        log(f"Attempting to save memory to {memory_file}...")
-        try:
-            with open(memory_file, 'wb') as f:
-                pickle.dump(self.memory, f)
-            log(f"Successfully saved {len(self.memory)} episodes to {memory_file}.")
-        except Exception as e:
-            log(f"Error saving memory to {memory_file}: {e}")
+        log(f"Exploration rate decayed to: {self.exploration_rate:.4f}")
