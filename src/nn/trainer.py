@@ -11,6 +11,8 @@ from src.engine.game import Game
 from src.cards.loader import load_trade_deck_cards
 from src.ai.neural_agent import NeuralAgent
 from src.utils.logger import log, set_verbose
+# Import the worker function
+from src.nn.parallel_worker import worker_run_episode
 
 if TYPE_CHECKING:
     from src.engine.player import Player
@@ -32,22 +34,7 @@ class Trainer:
         self.card_names += ["Viper", "Scout"]
         self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, cards=self.card_names, exploration_decay_rate=exploration_decay_rate, model_file_path=model_file_path)
         self.opponent_agent = RandomAgent("RandomAgent")  # Choose an opponent type
-        
-    def calculate_reward(self, game: 'Game', player: 'Player', action_taken: 'Action | None', learner_name: str = "NeuralAgent") -> float:
-        """Calculate reward for the current game state"""
-        from src.engine.actions import ActionType
-
-        if action_taken is None:
-            return 0.0
-
-        # Basic reward for winning/losing
-        if game.is_game_over:
-            return 1 if game.get_winner() == learner_name else -1
-
-        if player.name != learner_name:
-            return 0.0
-
-        return 0.0
+          # Reward calculation is now handled within the worker_run_episode function
     
     def train(self):
         set_verbose(False)  # Disable verbose logging for training
@@ -55,75 +42,41 @@ class Trainer:
         training_start_time = datetime.now()
 
         aggregate_stats = AggregateStats()
-        player1Name = "NeuralAgent"
-        player2Name = "Opponent"
+        player1Name = self.neural_agent.name # Use agent's name
+        player2Name = self.opponent_agent.name # Use agent's name
         aggregate_stats.reset(player1_name=player1Name, player2_name=player2Name)
 
         for episode in range(self.episodes):
             log(f"Episode {episode+1}/{self.episodes}")
-            
-            # Setup game
-            game = Game(self.cards)
-            
-            # Add players
-            player1 = game.add_player(player1Name)
-            player1.agent = self.neural_agent
-            
-            player2 = game.add_player(player2Name)
-            player2.agent = self.opponent_agent
+              # Run the episode using the worker function
+            experiences, game_stats, winner = worker_run_episode(
+                episode, 
+                self.cards, 
+                self.card_names, 
+                self.neural_agent, 
+                self.opponent_agent,
+                player1Name,
+                player2Name
+            )
 
-            game.start_game()
-
-            # Main training loop
-            current_episode_states = []
-            current_episode_actions = []
-            current_episode_rewards = []
-            current_episode_next_states = []
-            current_episode_dones = []
-
-            while not game.is_game_over:
-                # Store state before action
-                current_player = game.current_player
-                is_current_player_training = current_player.name == player1Name
-                
-                state = encode_state(game, is_current_player_training=is_current_player_training, cards=self.card_names)
-                
-                # Agent makes a decision and updates game state
-                action = game.next_step()
-
-                if is_current_player_training:
-                    # Recalculate current player
-                    is_current_player_training = current_player.name == player1Name
-
-                    # Calculate reward and remember experience
-                    reward = self.calculate_reward(game, current_player, action)
-                    next_state = encode_state(game, is_current_player_training=is_current_player_training, cards=self.card_names)
-                    done = game.is_game_over
-                    
-                    # Store experience
-                    current_episode_states.append(state)
-                    current_episode_actions.append(action)
-                    current_episode_rewards.append(reward)
-                    current_episode_next_states.append(next_state)
-                    current_episode_dones.append(done)
-                
-            # When game is over, store the complete episode
-            if len(current_episode_states) > 0:
-                for i in range(len(current_episode_states)):
+            # Store the collected experiences from the worker
+            if len(experiences["states"]) > 0:
+                for i in range(len(experiences["states"])):
                     self.neural_agent.remember(
-                        current_episode_states[i],
-                        current_episode_actions[i],
-                        current_episode_rewards[i],
-                        current_episode_next_states[i],
-                        current_episode_dones[i]
+                        experiences["states"][i],
+                        experiences["actions"][i],
+                        experiences["rewards"][i],
+                        experiences["next_states"][i],
+                        experiences["dones"][i]
                     )
                 self.neural_agent.finish_remembering_episode()
 
-            aggregate_stats.update(game.stats, game.get_winner())
-            log(f"Game took {game.stats.get_game_duration():.4f} seconds.")
+            # Update aggregate statistics using results from the worker
+            aggregate_stats.update(game_stats, winner)
+            log(f"Game took {game_stats.get_game_duration():.4f} seconds.")
                 
             # Train the network
-            if episode % self.episode_sample_size == 0:
+            if (episode + 1) % self.episode_sample_size == 0 and episode > 0: # Train after sample_size episodes completed
                 log(f"Training neural agent at episode {episode}...")
                 # keep track of time taken to train
                 start_time = datetime.now()
@@ -132,7 +85,7 @@ class Trainer:
                 log(f"Training took {(end_time - start_time).total_seconds():.4f} seconds.")
 
             # Save model periodically
-            if episode % (self.episodes/10) == 0:
+            if (episode + 1) % (self.episodes // 10) == 0 and episode > 0: # Save after certain milestones
                 log(f"Saving model at episode {episode}")
                 log(aggregate_stats.get_summary())
                 torch.save(self.neural_agent.model.state_dict(), f"models/neural_agent_{episode}.pth")
