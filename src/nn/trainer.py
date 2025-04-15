@@ -20,11 +20,11 @@ if TYPE_CHECKING:
     from src.engine.actions import Action
 
 class Trainer:
-    def __init__(self, episodes, episode_sample_size=100, lambda_param=0.999, 
+    def __init__(self, episodes, episode_batch_size=100, lambda_param=0.999, 
                  exploration_decay_rate=0.999, cards_path='data/cards.csv', model_file_path=None):
         """Initialize the Trainer with the specified parameters"""
         self.episodes = episodes
-        self.episode_sample_size = episode_sample_size
+        self.episode_batch_size = episode_batch_size
         self.lambda_param = lambda_param
         # Initialize cards to a list of card names, extract name from list of Card objects
         self.cards = load_trade_deck_cards(cards_path, filter_sets=["Core Set"])
@@ -70,12 +70,12 @@ class Trainer:
             log(f"Game took {game_stats.get_game_duration():.4f} seconds.")
                 
             # Train the network
-            if (episode + 1) % self.episode_sample_size == 0 and episode > 0: # Train after sample_size episodes completed
+            if (episode + 1) % self.episode_batch_size == 0 and episode > 0: # Train after sample_size episodes completed
                 log(f"Training neural agent at episode {episode}...")
                 # keep track of time taken to train
                 start_time = datetime.now()
                 # Get the experiences from the last sample size episodes
-                experiences_to_train = all_episodes[-self.episode_sample_size:]
+                experiences_to_train = all_episodes[-self.episode_batch_size:]
                 self.neural_agent.train(lambda_param=self.lambda_param, episodes=experiences_to_train)
                 end_time = datetime.now()
                 log(f"Training took {(end_time - start_time).total_seconds():.4f} seconds.")
@@ -116,7 +116,7 @@ class Trainer:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a Neural Agent for Space Deck Builder.")
     parser.add_argument("--episodes", type=int, default=10000, help="Number of episodes to train for.")
-    parser.add_argument("--sample-size", type=int, default=100, help="Number of episodes to sample before training.")
+    parser.add_argument("--batch-size", type=int, default=100, help="Number of episodes to batch before training.")
     parser.add_argument("--lambda", type=float, default=0.999, dest="lambda_param", help="Lambda parameter for TD(λ) learning.")
     parser.add_argument("--decay", type=float, default=0.999, help="Exploration decay rate.")
     parser.add_argument("--model", type=str, default=None, help="Path to the model file.")
@@ -124,7 +124,7 @@ if __name__ == "__main__":
 
     trainer = Trainer(
         episodes=args.episodes,
-        episode_sample_size=args.sample_size,
+        episode_batch_size=args.batch_size,
         lambda_param=args.lambda_param,
         exploration_decay_rate=args.decay,
         model_file_path=args.model
