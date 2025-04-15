@@ -17,7 +17,9 @@ if TYPE_CHECKING:
     from src.engine.actions import Action
 
 class Trainer:
-    def __init__(self, episodes, episode_sample_size=100, lambda_param=0.999, cards_path='data/cards.csv'):
+    def __init__(self, episodes, episode_sample_size=100, lambda_param=0.999, 
+                 exploration_decay_rate=0.999, cards_path='data/cards.csv', model_file_path=None):
+        """Initialize the Trainer with the specified parameters"""
         self.episodes = episodes
         self.episode_sample_size = episode_sample_size
         self.lambda_param = lambda_param
@@ -28,7 +30,7 @@ class Trainer:
         self.card_names = list(dict.fromkeys(self.card_names))
         # Add starter cards to the list
         self.card_names += ["Viper", "Scout"]
-        self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, cards=self.card_names, exploration_decay_rate=0.999)
+        self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, cards=self.card_names, exploration_decay_rate=exploration_decay_rate, model_file_path=model_file_path)
         self.opponent_agent = RandomAgent("RandomAgent")  # Choose an opponent type
         
     def calculate_reward(self, game: 'Game', player: 'Player', action_taken: 'Action | None', learner_name: str = "NeuralAgent") -> float:
@@ -116,6 +118,9 @@ class Trainer:
                         current_episode_dones[i]
                     )
                 self.neural_agent.finish_remembering_episode()
+
+            aggregate_stats.update(game.stats, game.get_winner())
+            log(f"Game took {game.stats.get_game_duration():.4f} seconds.")
                 
             # Train the network
             if episode % self.episode_sample_size == 0:
@@ -124,10 +129,7 @@ class Trainer:
                 start_time = datetime.now()
                 self.neural_agent.train(lambda_param=self.lambda_param, episode_sample_size=self.episode_sample_size)
                 end_time = datetime.now()
-                log(f"Training took {(end_time - start_time).total_seconds():.2f} seconds.")
-            
-            aggregate_stats.update(game.stats, game.get_winner())
-            log(game.stats.get_summary())
+                log(f"Training took {(end_time - start_time).total_seconds():.4f} seconds.")
 
             # Save model periodically
             if episode % (self.episodes/10) == 0:
@@ -138,7 +140,7 @@ class Trainer:
         training_time = (datetime.now() - training_start_time).total_seconds()
         log(f"Training completed in {training_time:.2f} seconds.")
         # Log the average time per episode
-        log(f"Average time per episode: {training_time / self.episodes:.2f} seconds.")
+        log(f"Average time per episode: {training_time / self.episodes:.4f} seconds.")
 
         # Save final model
         log(aggregate_stats.get_summary())
@@ -162,7 +164,17 @@ class Trainer:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train a Neural Agent for Space Deck Builder.")
     parser.add_argument("--episodes", type=int, default=10000, help="Number of episodes to train for.")
+    parser.add_argument("--sample-size", type=int, default=100, help="Number of episodes to sample before training.")
+    parser.add_argument("--lambda", type=float, default=0.999, dest="lambda_param", help="Lambda parameter for TD(λ) learning.")
+    parser.add_argument("--decay", type=float, default=0.999, help="Exploration decay rate.")
+    parser.add_argument("--model", type=str, default=None, help="Path to the model file.")
     args = parser.parse_args()
 
-    trainer = Trainer(episodes=args.episodes)
+    trainer = Trainer(
+        episodes=args.episodes,
+        episode_sample_size=args.sample_size,
+        lambda_param=args.lambda_param,
+        exploration_decay_rate=args.decay,
+        model_file_path=args.model
+    )
     trainer.train()

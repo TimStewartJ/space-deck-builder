@@ -35,7 +35,8 @@ class NeuralNetwork(nn.Module):
 
 class NeuralAgent(Agent):
     def __init__(self, name, cli_interface=None, learning_rate=0.001, cards: list[str] = [],
-                 initial_exploration_rate=1.0, min_exploration_rate=0.01, exploration_decay_rate=0.99): # Added exploration params
+                 initial_exploration_rate=1.0, min_exploration_rate=0.01, exploration_decay_rate=0.99,
+                 model_file_path:str|None=None): # Added exploration params
         super().__init__(name, cli_interface)
         # Determine device (GPU if available, else CPU)
         # self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -51,6 +52,9 @@ class NeuralAgent(Agent):
         self.state_size = get_state_size(cards)  # Get state size based on cards
         self.cards = cards
         self.model = NeuralNetwork(self.state_size, get_action_space_size(self.cards))
+        if model_file_path:
+            log(f"Loading model from {model_file_path}")
+            self.model.load_state_dict(torch.load(model_file_path, map_location=self.device))
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         
         # Change memory structure to track episodes
