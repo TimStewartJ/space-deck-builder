@@ -49,42 +49,43 @@ class Trainer:
 
         all_episodes = []
 
-        for episode in range(self.episodes):
-            log(f"Episode {episode+1}/{self.episodes}")
-              # Run the episode using the worker function
-            experiences, game_stats, winner = worker_run_episode(
-                episode, 
-                self.cards, 
-                self.card_names, 
-                self.neural_agent, 
-                self.opponent_agent,
-                player1Name,
-                player2Name
-            )
+        for batch_start in range(0, self.episodes, self.episode_batch_size):
+            batch_end = min(batch_start + self.episode_batch_size, self.episodes)
+            log(f"Processing batch {batch_start + 1} to {batch_end}")
 
-            # Store the collected experiences from the worker
-            all_episodes.append(experiences)
+            for episode in range(batch_start, batch_end):
+                log(f"Episode {episode+1}/{self.episodes}")
+                # Run the episode using the worker function
+                experiences, game_stats, winner = worker_run_episode(
+                    episode, 
+                    self.cards, 
+                    self.card_names, 
+                    self.neural_agent, 
+                    self.opponent_agent,
+                    player1Name,
+                    player2Name
+                )
 
-            # Update aggregate statistics using results from the worker
-            aggregate_stats.update(game_stats, winner)
-            log(f"Game took {game_stats.get_game_duration():.4f} seconds.")
-                
-            # Train the network
-            if (episode + 1) % self.episode_batch_size == 0 and episode > 0: # Train after sample_size episodes completed
-                log(f"Training neural agent at episode {episode}...")
-                # keep track of time taken to train
-                start_time = datetime.now()
-                # Get the experiences from the last sample size episodes
-                experiences_to_train = all_episodes[-self.episode_batch_size:]
-                self.neural_agent.train(lambda_param=self.lambda_param, episodes=experiences_to_train)
-                end_time = datetime.now()
-                log(f"Training took {(end_time - start_time).total_seconds():.4f} seconds.")
+                # Store the collected experiences from the worker
+                all_episodes.append(experiences)
+
+                # Update aggregate statistics using results from the worker
+                aggregate_stats.update(game_stats, winner)
+                log(f"Game took {game_stats.get_game_duration():.4f} seconds.")
+
+            # Train the network after completing the batch
+            log(f"Training neural agent for batch {batch_start + 1} to {batch_end}...")
+            start_time = datetime.now()
+            experiences_to_train = all_episodes[-self.episode_batch_size:]
+            self.neural_agent.train(lambda_param=self.lambda_param, episodes=experiences_to_train)
+            end_time = datetime.now()
+            log(f"Training took {(end_time - start_time).total_seconds():.4f} seconds.")
 
             # Save model periodically
-            if (episode + 1) % (self.episodes // 10) == 0 and episode > 0: # Save after certain milestones
-                log(f"Saving model at episode {episode}")
+            if (batch_end) % (self.episodes // 10) == 0 and batch_end > 0:
+                log(f"Saving model at episode {batch_end}")
                 log(aggregate_stats.get_summary())
-                torch.save(self.neural_agent.model.state_dict(), f"models/neural_agent_{episode}.pth")
+                torch.save(self.neural_agent.model.state_dict(), f"models/neural_agent_{batch_end}.pth")
 
         training_time = (datetime.now() - training_start_time).total_seconds()
         log(f"Training completed in {training_time:.2f} seconds.")
