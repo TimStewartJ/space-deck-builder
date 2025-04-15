@@ -56,10 +56,10 @@ class NeuralAgent(Agent):
         # Change memory structure to track episodes
         self.memory = []
         self.current_episode = []
-    
+
     def make_decision(self, game_state: 'Game'):
         available_actions = get_available_actions(game_state, game_state.current_player)
-        state = encode_state(game_state, is_current_player_training=True, cards=self.cards)
+        state = encode_state(game_state, is_current_player_training=True, cards=self.cards, available_actions=available_actions)
         
         # Exploration-exploitation trade-off
         if np.random.random() < self.exploration_rate:
@@ -72,24 +72,21 @@ class NeuralAgent(Agent):
         
         with torch.no_grad():
             action_values: torch.Tensor = self.model(state)
-
-        # Create a mask for available actions
-        mask = torch.full_like(action_values, -float('inf'))
-        available_action_indices = [encode_action(action, cards=self.cards) for action in available_actions]
-
-        # Check for invalid indices before masking
-        valid_indices = [idx for idx in available_action_indices if 0 <= idx < len(action_values)]
-        if not valid_indices:
-             # Fallback if no valid actions can be encoded (should not happen ideally)
-             log("Warning: No valid actions found after encoding. Choosing randomly.")
-             return random.choice(available_actions)
-
-        mask[valid_indices] = action_values[valid_indices] # Use original values for valid actions
+        
+        # Extract the action mask from the encoded state
+        # The action part of the state is a one-hot encoding of available actions
+        # STATE_SIZE represents all non-action parts of the state
+        action_mask_start = STATE_SIZE
+        action_mask_end = STATE_SIZE + get_action_space_size(self.cards)
+        action_mask = state[action_mask_start:action_mask_end]
+        
+        # Apply the mask to action values (set unavailable actions to -inf)
+        masked_action_values = action_values.clone()
+        masked_action_values[action_mask == 0] = float('-inf')
         
         # Select best valid action index
-        best_action_index = torch.argmax(mask).item()
-
-        # Decode the selected action index back to an Action object
+        best_action_index = torch.argmax(masked_action_values).item()
+        
         # Find the original Action object corresponding to the best index
         for action in available_actions:
             if encode_action(action, cards=self.cards) == best_action_index:
