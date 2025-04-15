@@ -34,7 +34,7 @@ class NeuralNetwork(nn.Module):
         return self.network(x)
 
 class NeuralAgent(Agent):
-    def __init__(self, name, cli_interface=None, learning_rate=0.001, look_ahead_steps=10, cards: list[str] = [],
+    def __init__(self, name, cli_interface=None, learning_rate=0.001, cards: list[str] = [],
                  initial_exploration_rate=1.0, min_exploration_rate=0.01, exploration_decay_rate=0.99): # Added exploration params
         super().__init__(name, cli_interface)
         # Determine device (GPU if available, else CPU)
@@ -56,7 +56,6 @@ class NeuralAgent(Agent):
         # Change memory structure to track episodes
         self.memory = []
         self.current_episode = []
-        self.look_ahead_steps = look_ahead_steps  # New parameter for steps to look ahead
     
     def make_decision(self, game_state: 'Game'):
         available_actions = get_available_actions(game_state, game_state.current_player)
@@ -109,7 +108,7 @@ class NeuralAgent(Agent):
         self.memory.append(self.current_episode)
         self.current_episode = []
 
-    def train(self, batch_size, lambda_param, episode_sample_size):
+    def train(self, lambda_param, episode_sample_size):
         """Train model using experience replay"""
         # Need enough complete episodes
         if len(self.memory) < episode_sample_size:
@@ -144,10 +143,6 @@ class NeuralAgent(Agent):
                 all_states.append(state)
                 all_actions.append(encode_action(action, cards=self.cards))
                 all_td_targets.append(n_step_return)
-        
-        # Skip training if not enough samples
-        if len(all_states) < batch_size:
-            return
         
         # Convert to tensors
         indices = range(len(all_states))
