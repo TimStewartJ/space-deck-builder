@@ -24,15 +24,15 @@ def main():
     card_names = [card.name for card in cards]
     # Remove duplicates and add starter cards
     card_names = list(dict.fromkeys(card_names))
-    card_names += ["Viper", "Scout"]
+    card_names += ["Scout", "Viper"]
 
     # Initialize the agents
     neural_agent = NeuralAgent("NeuralAgent",
                                learning_rate=0.001,
                                cards=card_names,
                                model_file_path=args.model,
-                               min_exploration_rate=0.1,
-                               initial_exploration_rate=1.0)
+                               min_exploration_rate=0.0,
+                               initial_exploration_rate=0.0)
     random_agent = RandomAgent("RandomAgent")
 
     wins = {neural_agent.name: 0, random_agent.name: 0}
@@ -57,13 +57,16 @@ def main():
         wins[winner] += 1
         duration = (datetime.now() - start_time).total_seconds()
         game_durations.append(duration)
-        log(f"Game {i+1}: Winner - {winner} (Duration: {duration:.2f} seconds)")
 
     total_time = sum(game_durations)
     average_time = total_time / args.games if args.games else 0
     log(f"Simulated {args.games} games.")
     log(f"Results: {wins}")
-    log(f"Average game duration: {average_time:.2f} seconds.")
+    log(f"Percentage of wins:")
+    for agent, win_count in wins.items():
+        percentage = (win_count / args.games) * 100 if args.games else 0
+        log(f"{agent}: {percentage:.2f}% wins")
+    log(f"Average game duration: {average_time:.4f} seconds.")
 
 if __name__ == "__main__":
     main()
