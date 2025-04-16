@@ -58,14 +58,21 @@ class Trainer:
         all_experiences: list[Experience] = []
         episode_save_chance = calculate_save_probability(self.episodes, 10000)
         log(f"Episode save chance: {episode_save_chance*100:.2f}%")
+        log(f"There will be {self.episodes/self.episode_batch_size} batches of {self.episode_batch_size} episodes.")
 
         thread_count = 4
+
+        all_batch_winners = []
 
         for batch_start in range(0, self.episodes, self.episode_batch_size):
             batch_end = min(batch_start + self.episode_batch_size, self.episodes)
             log(f"Processing batch {batch_start + 1} to {batch_end}")
 
             batch_start_time = datetime.now()
+            batch_winners = {
+                player1Name: 0,
+                player2Name: 0
+            }
             # Run episodes in parallel
             with ThreadPoolExecutor() as executor: 
                 futures = [
@@ -96,7 +103,10 @@ class Trainer:
 
                         # Update aggregate statistics using results from the worker
                         aggregate_stats.update(game_stats, winner)
-                        log(f"{winner} wins!")
+                        batch_winners[winner] += 1
+
+            log(f"Batch winners: {batch_winners}")
+            all_batch_winners.append(batch_winners)
             batch_duration = (datetime.now() - batch_start_time).total_seconds()
             log(f"Batch {batch_start + 1} took {batch_duration:.4f} seconds, average of {batch_duration / self.episode_batch_size:.4f} seconds per episode.")
 
