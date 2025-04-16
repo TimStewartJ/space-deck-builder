@@ -18,6 +18,7 @@ from src.utils.logger import log, set_verbose
 from src.nn.parallel_worker import worker_run_episode
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from src.utils.decay_rate_calculator import calculate_exploration_decay_rate
+from src.nn.memory_data import MemoryData
 
 if TYPE_CHECKING:
     from src.engine.player import Player
@@ -163,13 +164,14 @@ class Trainer:
         log(f"Saving memory at {memory_saving_time} to {memory_file}")
         # Save all the episodes to a file
         with open(memory_file, "wb") as f:
-            pickle.dump(
-                {"episodes": all_episodes,
-                 "batch_size": self.episode_batch_size,
-                 "lambda_param": self.lambda_param,
-                 "exploration_decay_rate": self.neural_agent.exploration_decay_rate,
-                 }
-                 , f)
+            memory_data = MemoryData(
+                episodes=all_episodes,
+                batch_size=self.episode_batch_size,
+                lambda_param=self.lambda_param,
+                exploration_decay_rate=self.neural_agent.exploration_decay_rate,
+                batch_winners=all_batch_winners
+            )
+            pickle.dump(memory_data, f)
         log(f"Memory saved in {(datetime.now() - memory_saving_time).total_seconds():.2f} seconds.")
 
 if __name__ == "__main__":
