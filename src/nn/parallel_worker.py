@@ -30,7 +30,7 @@ def worker_run_episode(episode_count, cards, card_names, first_agent, second_age
     experiences_list: list[tuple[list[Experience], GameStats, str | None]] = []  # List to store experiences for training
 
     for i in range(episode_count):
-        game = Game(cards)
+        game = Game(cards, card_names=card_names)
         player1_name = first_agent_name
         player2_name = second_agent_name
         

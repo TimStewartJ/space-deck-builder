@@ -8,11 +8,12 @@ from src.engine.actions import ActionType, Action, get_available_actions
 from src.engine.game_stats import GameStats
 
 class Game:
-    def __init__(self, cards=None):
+    def __init__(self, cards=None, card_names: list[str] | None = None):
         self.players: List[Player] = []
         self.current_turn = 0
         self.is_game_over = False
         self.trade_deck = copy.deepcopy(cards) if cards else []
+        self.card_names = card_names if card_names else []
         self.trade_row: List[Card] = []
         self.is_running = False
         self.current_player: Player = None
@@ -74,10 +75,10 @@ class Game:
         starting_deck = []
         # Add 8 Scouts
         for _ in range(8):
-            starting_deck.append(Card("Scout", 0, [Effect(CardEffectType.TRADE, 1)], "ship"))
+            starting_deck.append(Card("Scout", len(self.card_names) - 2, 0, [Effect(CardEffectType.TRADE, 1)], "ship"))
         # Add 2 Vipers
         for _ in range(2):
-            starting_deck.append(Card("Viper", 0, [Effect(CardEffectType.COMBAT, 1)], "ship"))
+            starting_deck.append(Card("Viper", len(self.card_names) - 1, 0, [Effect(CardEffectType.COMBAT, 1)], "ship"))
         return starting_deck
 
     def next_step(self):
