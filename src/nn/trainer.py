@@ -27,7 +27,7 @@ class Trainer:
     def __init__(self, episodes, episode_batch_size=100, lambda_param=0.999, 
                  cards_path='data/cards.csv', model_file_path=None, 
                  min_exploration_rate=0.1, initial_exploration_rate=1.0,
-                 sample_size=None):
+                 sample_size=None, memory_batches=None):
         """Initialize the Trainer with the specified parameters"""
         self.episodes = episodes
         self.episode_batch_size = episode_batch_size
@@ -46,6 +46,8 @@ class Trainer:
         self.opponent_agent = RandomAgent("RandomAgent")
         # Determine how many experiences to sample each training batch
         self.experiences_sample_size = sample_size if sample_size is not None else self.episode_batch_size * 100
+        # Maximum number of batches worth of experiences to keep in memory
+        self.memory_batches = memory_batches
     
     def train(self):
         set_verbose(False)  # Disable verbose logging for training
@@ -70,6 +72,9 @@ class Trainer:
         for batch_start in range(0, self.episodes, self.episode_batch_size):
             batch_end = min(batch_start + self.episode_batch_size, self.episodes)
             log(f"Processing batch {batch_start + 1} to {batch_end}")
+
+            # Count experiences in this batch for memory trimming
+            batch_experiences_count = 0
 
             batch_start_time = datetime.now()
             batch_winners = {
@@ -99,6 +104,7 @@ class Trainer:
                         experiences, game_stats, winner = experience
 
                         all_experiences.extend(experiences)
+                        batch_experiences_count += len(experiences)
 
                         # Store the collected experiences from the worker
                         if random.random() < episode_save_chance:
@@ -112,6 +118,12 @@ class Trainer:
             all_batch_winners.append(batch_winners)
             batch_duration = (datetime.now() - batch_start_time).total_seconds()
             log(f"Batch {batch_start + 1} took {batch_duration:.4f} seconds, average of {batch_duration / self.episode_batch_size:.4f} seconds per episode.")
+
+            # Trim experiences to only keep the last N batches worth
+            if self.memory_batches is not None:
+                max_exp = self.memory_batches * batch_experiences_count
+                if len(all_experiences) > max_exp:
+                    del all_experiences[:len(all_experiences) - max_exp]
 
             # Train the network after completing the batch
             log(f"Training neural agent for batch {batch_start + 1} to {batch_end}...")
@@ -169,6 +181,7 @@ if __name__ == "__main__":
     parser.add_argument("--initial-exploration", type=float, default=1.0, help="Initial exploration rate.")
     parser.add_argument("--model", type=str, default=None, help="Path to the model file.")
     parser.add_argument("--sample-size", type=int, default=None, help="Number of experiences to sample for training per batch.")
+    parser.add_argument("--memory-batches", type=int, default=None, help="Number of batches worth of experiences to keep in memory.")
     args = parser.parse_args()
 
     trainer = Trainer(
@@ -179,5 +192,6 @@ if __name__ == "__main__":
         min_exploration_rate=args.min_exploration,
         initial_exploration_rate=args.initial_exploration,
         sample_size=args.sample_size,
+        memory_batches=args.memory_batches,
     )
     trainer.train()
