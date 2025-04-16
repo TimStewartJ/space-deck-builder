@@ -26,7 +26,8 @@ if TYPE_CHECKING:
 class Trainer:
     def __init__(self, episodes, episode_batch_size=100, lambda_param=0.999, 
                  cards_path='data/cards.csv', model_file_path=None, 
-                 min_exploration_rate=0.1, initial_exploration_rate=1.0):
+                 min_exploration_rate=0.1, initial_exploration_rate=1.0,
+                 sample_size=None):
         """Initialize the Trainer with the specified parameters"""
         self.episodes = episodes
         self.episode_batch_size = episode_batch_size
@@ -43,6 +44,8 @@ class Trainer:
                                         exploration_decay_rate=exploration_decay_rate, model_file_path=model_file_path, 
                                         min_exploration_rate=min_exploration_rate, initial_exploration_rate=initial_exploration_rate)
         self.opponent_agent = RandomAgent("RandomAgent")
+        # Determine how many experiences to sample each training batch
+        self.experiences_sample_size = sample_size if sample_size is not None else self.episode_batch_size * 100
     
     def train(self):
         set_verbose(False)  # Disable verbose logging for training
@@ -113,7 +116,7 @@ class Trainer:
             # Train the network after completing the batch
             log(f"Training neural agent for batch {batch_start + 1} to {batch_end}...")
             start_time = datetime.now()
-            experiences_to_train = random.sample(all_experiences, min(len(all_experiences), self.episode_batch_size*100))
+            experiences_to_train = random.sample(all_experiences, min(len(all_experiences), self.experiences_sample_size))
             self.neural_agent.train(lambda_param=self.lambda_param, experiences=experiences_to_train)
             end_time = datetime.now()
             log(f"Training took {(end_time - start_time).total_seconds():.4f} seconds.")
@@ -165,6 +168,7 @@ if __name__ == "__main__":
     parser.add_argument("--min-exploration", type=float, default=0.1, help="Minimum exploration rate.")
     parser.add_argument("--initial-exploration", type=float, default=1.0, help="Initial exploration rate.")
     parser.add_argument("--model", type=str, default=None, help="Path to the model file.")
+    parser.add_argument("--sample-size", type=int, default=None, help="Number of experiences to sample for training per batch.")
     args = parser.parse_args()
 
     trainer = Trainer(
@@ -174,5 +178,6 @@ if __name__ == "__main__":
         model_file_path=args.model,
         min_exploration_rate=args.min_exploration,
         initial_exploration_rate=args.initial_exploration,
+        sample_size=args.sample_size,
     )
     trainer.train()
