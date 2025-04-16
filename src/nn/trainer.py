@@ -12,9 +12,9 @@ from src.engine.game import Game
 from src.cards.loader import load_trade_deck_cards
 from src.ai.neural_agent import NeuralAgent
 from src.utils.logger import log, set_verbose
-# Import the worker function
 from src.nn.parallel_worker import worker_run_episode
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
+from src.utils.decay_rate_calculator import calculate_exploration_decay_rate
 
 if TYPE_CHECKING:
     from src.engine.player import Player
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 class Trainer:
     def __init__(self, episodes, episode_batch_size=100, lambda_param=0.999, 
-                 exploration_decay_rate=0.999, cards_path='data/cards.csv', model_file_path=None):
+                 cards_path='data/cards.csv', model_file_path=None, min_exploration_rate=0.1):
         """Initialize the Trainer with the specified parameters"""
         self.episodes = episodes
         self.episode_batch_size = episode_batch_size
@@ -34,9 +34,11 @@ class Trainer:
         self.card_names = list(dict.fromkeys(self.card_names))
         # Add starter cards to the list
         self.card_names += ["Viper", "Scout"]
-        self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, cards=self.card_names, exploration_decay_rate=exploration_decay_rate, model_file_path=model_file_path)
-        self.opponent_agent = RandomAgent("RandomAgent")  # Choose an opponent type
-          # Reward calculation is now handled within the worker_run_episode function
+        exploration_decay_rate = calculate_exploration_decay_rate(episodes // episode_batch_size, min_exploration_rate, 0.8)
+        self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, cards=self.card_names, 
+                                        exploration_decay_rate=exploration_decay_rate, model_file_path=model_file_path, 
+                                        min_exploration_rate=min_exploration_rate)
+        self.opponent_agent = RandomAgent("RandomAgent")
     
     def train(self):
         set_verbose(False)  # Disable verbose logging for training
@@ -139,7 +141,7 @@ if __name__ == "__main__":
     parser.add_argument("--episodes", type=int, default=10000, help="Number of episodes to train for.")
     parser.add_argument("--batch-size", type=int, default=100, help="Number of episodes to batch before training.")
     parser.add_argument("--lambda", type=float, default=0.999, dest="lambda_param", help="Lambda parameter for TD(λ) learning.")
-    parser.add_argument("--decay", type=float, default=0.999, help="Exploration decay rate.")
+    parser.add_argument("--min-exploration", type=float, default=0.1, help="Minimum exploration rate.")
     parser.add_argument("--model", type=str, default=None, help="Path to the model file.")
     args = parser.parse_args()
 
@@ -147,7 +149,7 @@ if __name__ == "__main__":
         episodes=args.episodes,
         episode_batch_size=args.batch_size,
         lambda_param=args.lambda_param,
-        exploration_decay_rate=args.decay,
-        model_file_path=args.model
+        model_file_path=args.model,
+        min_exploration_rate=args.min_exploration,
     )
     trainer.train()
