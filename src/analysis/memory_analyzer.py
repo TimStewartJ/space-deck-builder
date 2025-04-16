@@ -3,11 +3,13 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Tuple
+from src.nn.action_encoder import decode_action
+from src.nn.experience import Experience
 from src.utils.logger import log
 from collections import Counter
 from src.engine.actions import Action, ActionType
 
-def analyze_win_loss_and_steps(memory: List[List[Tuple]]) -> Tuple[List[int], List[int], List[int], List[int], Counter]:
+def analyze_win_loss_and_steps(memory: List[List[Experience]]) -> Tuple[List[int], List[int], List[int], List[int], Counter]:
     """
     Analyzes the memory to determine win/loss outcomes, steps per episode,
     and the frequency of different action types.
@@ -40,8 +42,8 @@ def analyze_win_loss_and_steps(memory: List[List[Tuple]]) -> Tuple[List[int], Li
         is_first_player = None
         
         for transition in episode:
-            state, action, reward, next_state, done = transition
-            
+            state = transition.state
+
             # Extract first player status from state (index 1 in the encoded state)
             if is_first_player is None and hasattr(state, "__getitem__"):
                 try:
@@ -50,16 +52,11 @@ def analyze_win_loss_and_steps(memory: List[List[Tuple]]) -> Tuple[List[int], Li
                 except (IndexError, TypeError, AttributeError):
                     # If we can't determine first player status, default to None
                     pass
-                    
-            if isinstance(action, Action): # Ensure action is an Action object
-                action_counts[action.type] += 1
-            else:
-                # Handle cases where action might not be an Action object (e.g., if stored differently)
-                log(f"Warning: Encountered unexpected action format in episode {i}, step {num_steps}: {action}")
+            
             num_steps += 1
             
         # Assuming the last reward determines win/loss for the episode
-        last_reward = episode[-1][2] if episode[-1][2] is not None else 0
+        last_reward = episode[-1].reward 
         outcome = 1 if last_reward > 0 else 0  # 1 for Win, 0 for Loss or Draw
         
         all_outcomes.append(outcome)
@@ -200,7 +197,7 @@ def plot_action_distribution(action_counts: Counter):
 
     plt.show()
 
-def analyze_and_plot_win_rates_by_starting_position(memory: List[List[Tuple]], chunk_size: int = 100):
+def analyze_and_plot_win_rates_by_starting_position(memory: List[List[Experience]], chunk_size: int = 100):
     """
     Analyzes memory data and plots win rates based on whether the agent goes first or second.
     
