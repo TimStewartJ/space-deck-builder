@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 from typing import List
 
+from src.nn.save_probability import calculate_save_probability
+
 def calculate_epsilon_values(num_episodes, initial_epsilon=0.995, decay_interval=5):
     """Calculate epsilon values for each episode based on the decay schedule."""
     epsilon_values = []
@@ -26,7 +28,9 @@ def plot_win_rate_and_epsilon(episode_outcomes: List[int], chunk_size=100, initi
             chunks.append(chunk_num)
             rates.append(win_rate)
 
-    epsilon_values = calculate_epsilon_values(len(episode_outcomes), initial_epsilon, decay_interval)
+    save_probability = calculate_save_probability(len(episode_outcomes), 10000)
+
+    epsilon_values = calculate_epsilon_values(len(episode_outcomes), initial_epsilon, int(decay_interval * save_probability))
     chunk_epsilon_values = [epsilon_values[min(i*chunk_size, len(epsilon_values)-1)] for i in chunks]
 
     fig, ax1 = plt.subplots(figsize=(12, 6))
