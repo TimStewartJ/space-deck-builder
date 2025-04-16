@@ -23,6 +23,7 @@ def load_trade_deck_cards(file_path, filter_names=None, filter_sets=None):
     cards: list[Card] = []
     with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)
+        index = 0
         for row in reader:
             # Skip non-card rows like rules, scorecard, etc.
             if row['Type'].lower() not in ['ship', 'base']:
@@ -73,6 +74,7 @@ def load_trade_deck_cards(file_path, filter_names=None, filter_sets=None):
 
             card = Card(
                 name=row['Name'],
+                index=index,
                 cost=cost,
                 effects=effects,
                 card_type=card_type,
@@ -80,6 +82,8 @@ def load_trade_deck_cards(file_path, filter_names=None, filter_sets=None):
                 faction=faction,
                 set=row['Set']
             )
+
+            index += 1
                 
             # Add multiple copies based on Qty
             qty = int(row.get('Qty', 1))
