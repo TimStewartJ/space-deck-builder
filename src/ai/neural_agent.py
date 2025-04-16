@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from src.nn.experience import Experience
-from src.nn.state_encoder import CARD_ENCODING_SIZE, STATE_SIZE, encode_state, get_state_size
+from src.nn.state_encoder import encode_state, get_state_size
 from src.nn.action_encoder import decode_action, encode_action, get_action_space_size
 from src.ai.agent import Agent
 from src.engine.actions import get_available_actions, Action, ActionType
@@ -23,9 +23,11 @@ class NeuralNetwork(nn.Module):
         self.network = nn.Sequential(
             nn.Linear(input_size, 1024),
             nn.ReLU(),
-            nn.Linear(1024, 768),
+            nn.Linear(1024, 1024),
             nn.ReLU(),
-            nn.Linear(768, 512),
+            nn.Linear(1024, 1024),
+            nn.ReLU(),
+            nn.Linear(1024, 512),
             nn.ReLU(),
             nn.Linear(512, output_size)
         )
@@ -49,8 +51,8 @@ class NeuralAgent(Agent):
         self.min_exploration_rate = min_exploration_rate         # Store minimum rate
         self.exploration_decay_rate = exploration_decay_rate     # Store decay rate
         self.exploration_rate = self.initial_exploration_rate    # Start at initial rate
-        self.CARD_ENCODING_SIZE = CARD_ENCODING_SIZE
         self.state_size = get_state_size(cards)  # Get state size based on cards
+        self.action_size = get_action_space_size(cards)
         self.cards = cards
         self.model = NeuralNetwork(self.state_size, get_action_space_size(self.cards))
         if model_file_path:
@@ -75,10 +77,8 @@ class NeuralAgent(Agent):
             action_values: torch.Tensor = self.model(state)
         
         # Extract the action mask from the encoded state
-        # The action part of the state is a one-hot encoding of available actions
-        # STATE_SIZE represents all non-action parts of the state
-        action_mask_start = STATE_SIZE
-        action_mask_end = STATE_SIZE + get_action_space_size(self.cards)
+        action_mask_start = self.state_size - self.action_size
+        action_mask_end = self.state_size
         action_mask = state[action_mask_start:action_mask_end]
         
         # Apply the mask to action values (set unavailable actions to -inf)
@@ -98,52 +98,18 @@ class NeuralAgent(Agent):
         log(f"Warning: Could not decode action index {best_action_index}. Choosing randomly.")
         return random.choice(available_actions)
 
-    def train(self, episodes: List[List[Experience]], lambda_param: float):
+    def train(self, experiences: List[Experience], lambda_param: float):
         """
         Train model using provided episodes
         
         Args:
             episodes: List of episodes to train on, where each episode is a list of (state, action, reward, next_state, done) tuples
             lambda_param: Lambda parameter for n-step returns calculation
-        """
-        
-        # Extract transitions from episodes
-        all_states = []
-        all_actions = []
-        all_td_targets = []
-        
-        for episode in episodes:
-            if len(episode) < 2:  # Skip very short episodes
-                continue
-
-            # Final reward for the last state in the episode
-            last_experience = episode[-1]
-            last_reward = last_experience.reward
-                
-            # Process each experience in the episode
-            for t in range(len(episode)):
-                experience = episode[t]
-
-                n_step_return = 0
-
-                # Distance to the end of the episode, where the last step distance is 0
-                distance_to_end = len(episode) - t - 1
-
-                n_step_return += last_reward * (lambda_param ** distance_to_end)
-                
-                all_states.append(experience.state)
-                all_actions.append(experience.action)
-                all_td_targets.append(n_step_return)
-        
-        # Convert to tensors
-        if not all_states:  # No valid training data
-            log("No valid training data in episodes")
-            return
-            
-        indices = range(len(all_states))
-        states = torch.stack([all_states[i] for i in indices])
-        actions = torch.LongTensor([all_actions[i] for i in indices])
-        td_targets = torch.FloatTensor([all_td_targets[i] for i in indices])
+        """ 
+        indices = range(len(experiences))
+        states = torch.stack([experiences[i].state for i in indices])
+        actions = torch.LongTensor([experiences[i].action for i in indices])
+        td_targets = torch.FloatTensor([experiences[i].reward for i in indices])
         
         # Compute Q values
         q_values: torch.Tensor = self.model(states)

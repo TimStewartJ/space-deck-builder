@@ -6,7 +6,7 @@ from src.engine.game import Game
 from src.nn.state_encoder import encode_state
 from src.utils.logger import set_verbose
 
-def worker_run_episode(episode_count, cards, card_names, first_agent, second_agent, first_agent_name, second_agent_name):
+def worker_run_episode(episode_count, cards, card_names, first_agent, second_agent, first_agent_name, second_agent_name, lambda_param):
     """
     Runs episodes in parallel.
 
@@ -68,6 +68,13 @@ def worker_run_episode(episode_count, cards, card_names, first_agent, second_age
                 # Store experience as an Experience object
                 encoded_action = encode_action(action, cards=card_names)
                 experiences.append(Experience(state, encoded_action, reward, next_state, done))
+
+        # Update the rewards in the episode relative to the game outcome
+        last_reward = experiences[-1].reward
+        for experience in reversed(experiences):
+            experience.reward = last_reward * lambda_param
+            last_reward = experience.reward
+
         winner = game.get_winner()
         experiences_list.append((experiences, game.stats, winner))
 

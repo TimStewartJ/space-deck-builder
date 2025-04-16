@@ -6,6 +6,7 @@ import random
 from typing import TYPE_CHECKING
 import torch
 import numpy as np
+from src.nn.experience import Experience
 from src.nn.save_probability import calculate_save_probability
 from src.nn.state_encoder import encode_state
 from src.engine.aggregate_stats import AggregateStats
@@ -36,7 +37,7 @@ class Trainer:
         # Remove duplicates from card list
         self.card_names = list(dict.fromkeys(self.card_names))
         # Add starter cards to the list
-        self.card_names += ["Viper", "Scout"]
+        self.card_names += ["Scout", "Viper"]
         exploration_decay_rate = calculate_exploration_decay_rate(episodes // episode_batch_size, min_exploration_rate, 0.8)
         self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, cards=self.card_names, 
                                         exploration_decay_rate=exploration_decay_rate, model_file_path=model_file_path, 
@@ -53,7 +54,8 @@ class Trainer:
         player2Name = self.opponent_agent.name # Use agent's name
         aggregate_stats.reset(player1_name=player1Name, player2_name=player2Name)
 
-        all_episodes = []
+        all_episodes: list[list[Experience]] = []
+        all_experiences: list[Experience] = []
         episode_save_chance = calculate_save_probability(self.episodes, 10000)
         log(f"Episode save chance: {episode_save_chance*100:.2f}%")
 
@@ -75,7 +77,8 @@ class Trainer:
                         self.neural_agent,
                         self.opponent_agent,
                         player1Name,
-                        player2Name
+                        player2Name,
+                        self.lambda_param
                     ) for _ in range(thread_count)
                 ]
 
@@ -84,6 +87,8 @@ class Trainer:
 
                     for experience in experiences_list:
                         experiences, game_stats, winner = experience
+
+                        all_experiences.extend(experiences)
 
                         # Store the collected experiences from the worker
                         if random.random() < episode_save_chance:
@@ -98,8 +103,8 @@ class Trainer:
             # Train the network after completing the batch
             log(f"Training neural agent for batch {batch_start + 1} to {batch_end}...")
             start_time = datetime.now()
-            experiences_to_train = all_episodes[-self.episode_batch_size:]
-            self.neural_agent.train(lambda_param=self.lambda_param, episodes=experiences_to_train)
+            experiences_to_train = random.sample(all_experiences, min(len(all_experiences), self.episode_batch_size*100))
+            self.neural_agent.train(lambda_param=self.lambda_param, experiences=experiences_to_train)
             end_time = datetime.now()
             log(f"Training took {(end_time - start_time).total_seconds():.4f} seconds.")
 
