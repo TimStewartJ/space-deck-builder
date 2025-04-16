@@ -2,9 +2,11 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 import pickle
+import random
 from typing import TYPE_CHECKING
 import torch
 import numpy as np
+from src.nn.save_probability import calculate_save_probability
 from src.nn.state_encoder import encode_state
 from src.engine.aggregate_stats import AggregateStats
 from src.ai.random_agent import RandomAgent
@@ -51,6 +53,8 @@ class Trainer:
         aggregate_stats.reset(player1_name=player1Name, player2_name=player2Name)
 
         all_episodes = []
+        episode_save_chance = calculate_save_probability(self.episodes, 10000)
+        log(f"Episode save chance: {episode_save_chance*100:.2f}%")
 
         thread_count = 4
 
@@ -81,7 +85,8 @@ class Trainer:
                         experiences, game_stats, winner = experience
 
                         # Store the collected experiences from the worker
-                        all_episodes.append(experiences)
+                        if random.random() < episode_save_chance:
+                            all_episodes.append(experiences)
 
                         # Update aggregate statistics using results from the worker
                         aggregate_stats.update(game_stats, winner)
