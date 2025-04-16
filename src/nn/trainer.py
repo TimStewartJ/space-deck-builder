@@ -69,6 +69,7 @@ class Trainer:
         thread_count = 4
 
         all_batch_winners = []
+        epsilon_progression = []
 
         for batch_start in range(0, self.episodes, self.episode_batch_size):
             batch_end = min(batch_start + self.episode_batch_size, self.episodes)
@@ -119,6 +120,7 @@ class Trainer:
             all_batch_winners.append(batch_winners)
             batch_duration = (datetime.now() - batch_start_time).total_seconds()
             log(f"Batch {batch_start + 1} took {batch_duration:.4f} seconds, average of {batch_duration / self.episode_batch_size:.4f} seconds per episode.")
+            epsilon_progression.append(self.neural_agent.exploration_rate)
 
             # Trim experiences to only keep the last N batches worth
             if self.memory_batches is not None:
@@ -169,7 +171,8 @@ class Trainer:
                 batch_size=self.episode_batch_size,
                 lambda_param=self.lambda_param,
                 exploration_decay_rate=self.neural_agent.exploration_decay_rate,
-                batch_winners=all_batch_winners
+                batch_winners=all_batch_winners,
+                epsilon_progression=epsilon_progression
             )
             pickle.dump(memory_data, f)
         log(f"Memory saved in {(datetime.now() - memory_saving_time).total_seconds():.2f} seconds.")
