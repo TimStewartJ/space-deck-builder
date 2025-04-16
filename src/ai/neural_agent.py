@@ -5,6 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
+from src.nn.experience import Experience
 from src.nn.state_encoder import CARD_ENCODING_SIZE, STATE_SIZE, encode_state, get_state_size
 from src.nn.action_encoder import decode_action, encode_action, get_action_space_size
 from src.ai.agent import Agent
@@ -97,7 +98,7 @@ class NeuralAgent(Agent):
         log(f"Warning: Could not decode action index {best_action_index}. Choosing randomly.")
         return random.choice(available_actions)
 
-    def train(self, episodes: List[List[Tuple]], lambda_param: float):
+    def train(self, episodes: List[List[Experience]], lambda_param: float):
         """
         Train model using provided episodes
         
@@ -116,11 +117,12 @@ class NeuralAgent(Agent):
                 continue
 
             # Final reward for the last state in the episode
-            last_state, last_action, last_reward, _, done = episode[-1]
+            last_experience = episode[-1]
+            last_reward = last_experience.reward
                 
-            # Process each transition in the episode
+            # Process each experience in the episode
             for t in range(len(episode)):
-                state, action, reward, _, _ = episode[t]
+                experience = episode[t]
 
                 n_step_return = 0
 
@@ -129,8 +131,8 @@ class NeuralAgent(Agent):
 
                 n_step_return += last_reward * (lambda_param ** distance_to_end)
                 
-                all_states.append(state)
-                all_actions.append(encode_action(action, cards=self.cards))
+                all_states.append(experience.state)
+                all_actions.append(experience.action)
                 all_td_targets.append(n_step_return)
         
         # Convert to tensors

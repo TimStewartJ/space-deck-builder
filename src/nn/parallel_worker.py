@@ -1,4 +1,7 @@
 from datetime import datetime
+from src.nn.action_encoder import encode_action
+from src.engine.game_stats import GameStats
+from src.nn.experience import Experience
 from src.engine.game import Game
 from src.nn.state_encoder import encode_state
 from src.utils.logger import set_verbose
@@ -24,7 +27,7 @@ def worker_run_episode(episode_count, cards, card_names, first_agent, second_age
     """
     set_verbose(False)  # Disable verbose logging for training
 
-    experiences_list = []  # List to store experiences for training
+    experiences_list: list[tuple[list[Experience], GameStats, str | None]] = []  # List to store experiences for training
 
     for i in range(episode_count):
         game = Game(cards)
@@ -39,7 +42,7 @@ def worker_run_episode(episode_count, cards, card_names, first_agent, second_age
         game.start_game()
 
         # Initialize experiences as a list of tuples
-        experiences = []
+        experiences: list[Experience] = []
         
         while not game.is_game_over:
             current_player = game.current_player
@@ -62,8 +65,9 @@ def worker_run_episode(episode_count, cards, card_names, first_agent, second_age
                 next_state = encode_state(game, is_current_player_training=is_training, cards=card_names)
                 done = game.is_game_over
 
-                # Store experience as a tuple instead of in separate dictionary lists
-                experiences.append((state, action, reward, next_state, done))
+                # Store experience as an Experience object
+                encoded_action = encode_action(action, cards=card_names)
+                experiences.append(Experience(state, encoded_action, reward, next_state, done))
         winner = game.get_winner()
         experiences_list.append((experiences, game.stats, winner))
 

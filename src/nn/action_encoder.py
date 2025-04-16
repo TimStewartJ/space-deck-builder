@@ -21,13 +21,16 @@ def get_action_space_size(cards: list[str]) -> int:
     
     return size
 
-def encode_action(action: Action, cards: list[str]) -> int:
+def encode_action(action: Action | None, cards: list[str]) -> int:
     """Convert an Action object to a numerical index for neural network processing
     
     Maps different action types to different index ranges
     
     Returns an integer representation of the action.
     """
+
+    if action is None:
+        return 0
 
     current_act_index = 1
 
