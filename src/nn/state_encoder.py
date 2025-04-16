@@ -10,91 +10,35 @@ if TYPE_CHECKING:
     from src.engine.player import Player
     from src.engine.actions import Action
 
-# Constants for encoding
-MAX_HAND = 20
-MAX_TRADE_ROW = 5
-MAX_BASES = 10
-CARD_ENCODING_SIZE = 19 # Determined by the encode_card function structure
-PLAYER_ENCODING_SIZE = (
-    5 + # Player resources (trade, combat, health, deck size, discard pile size)
-    MAX_HAND * CARD_ENCODING_SIZE + # Player hand
-    MAX_BASES * CARD_ENCODING_SIZE # Player bases
-)
-STATE_SIZE = (
-    1 + # is_training_player flag
-    1 + # is_first_player flag
-    PLAYER_ENCODING_SIZE + # Player resources
-    PLAYER_ENCODING_SIZE + # Opponent resources
-    MAX_TRADE_ROW * CARD_ENCODING_SIZE # Trade row
-)
-
 def get_state_size(cards: list[str]) -> int:
     """Get the size of the state vector"""
-    return STATE_SIZE + get_action_space_size(cards)
+    cards_length = len(cards)
+    player_encoding_size = (
+        5 + # Player resources (trade, combat, health, deck size, discard pile size)
+        cards_length * 4 # Player hand, discard pile, deck, bases
+    )
+    return (
+        1 + # is_training_player flag
+        1 + # is_first_player flag
+        cards_length + # Trade row
+        player_encoding_size * 2 + # Players
+        get_action_space_size(cards) # Available actions
+    )
 
-def encode_card(card: 'Card') -> list[float]:
-    """Convert a card to a fixed-length embedding vector"""
-    # imports
-    from src.cards.effects import CardEffectType
+def encode_card_presence(cards_list: list['Card'], cards: list[str]) -> list[float]:
+    """Encode card presence in a list of cards"""
 
-    # Card type one-hot encoding (ship, base, outpost)
-    card_type = [0.0, 0.0, 0.0]  # [ship, base, outpost]
-    if card.card_type == "ship":
-        card_type[0] = 1.0
-    elif card.card_type == "base":
-        card_type[1] = 1.0
-        if card.is_outpost():
-            card_type[2] = 1.0
+    card_presence_worth = 0.25
 
-    # Faction one-hot encoding
-    faction = [0.0, 0.0, 0.0, 0.0, 0.0]  # [trade_federation, blob, machine_cult, star_empire, unaligned]
-    if card.faction == "Trade Federation":
-        faction[0] = 1.0
-    elif card.faction == "Blob":
-        faction[1] = 1.0
-    elif card.faction == "Machine Cult":
-        faction[2] = 1.0
-    elif card.faction == "Star Empire":
-        faction[3] = 1.0
-    else:  # Unaligned
-        faction[4] = 1.0
+    card_presence = [0.0] * len(cards)
+    for card in cards_list:
+        if card.name in cards:
+            card_index = card.index
+            card_presence[card_index] += card_presence_worth  # Increment the count for this card
+            card_presence[card_index] = min(card_presence[card_index], 1.0)  # Cap at 1.0
+    return card_presence
 
-    # Numeric properties
-    properties = [
-        card.cost / 10.0,  # Normalize cost
-        card.defense / 10.0 if card.defense else 0.0,
-    ]
-
-    # Effects encoding (simplified: only first effect)
-    effects = []
-    if card.effects:
-        effect = card.effects[0]
-        effect_type_encoding = [0.0] * len(CardEffectType)
-        try:
-            effect_type_encoding[list(CardEffectType).index(effect.effect_type)] = 1.0
-        except ValueError:
-            # Handle cases where effect_type might not be in CardEffectType enum
-            pass # Keep as all zeros
-        effects.extend(effect_type_encoding)
-        # Normalize effect value if it exists, else 0
-        effects.append(effect.value / 10.0 if hasattr(effect, 'value') and effect.value is not None else 0.0)
-    else:
-        # If no effects, add padding for the effect encoding size (len(CardEffectType) + 1 for value)
-        effects.extend([0.0] * (len(CardEffectType) + 1))
-
-
-    # Combine all features
-    card_encoding = card_type + faction + properties + effects
-
-    # Ensure the encoding size matches CARD_ENCODING_SIZE
-    if len(card_encoding) != CARD_ENCODING_SIZE:
-         # This should ideally not happen if CARD_ENCODING_SIZE is calculated correctly
-         # Pad or truncate if necessary, though it indicates a mismatch
-         card_encoding = card_encoding[:CARD_ENCODING_SIZE] + [0.0] * (CARD_ENCODING_SIZE - len(card_encoding))
-
-    return card_encoding
-
-def encode_player(player: 'Player') -> list[float]:
+def encode_player(player: 'Player', cards: list[str]) -> list[float]:
     """Convert player information to a fixed-length vector"""
     # Player resources (trade, combat, health, deck size, discard pile size)
     player_resources = [
@@ -105,22 +49,19 @@ def encode_player(player: 'Player') -> list[float]:
         len(player.discard_pile) / 40.0
     ]
 
-    # Encode hand cards (variable -> fixed)
-    hand_encoding = []
-    for card in player.hand[:MAX_HAND]:
-        hand_encoding.extend(encode_card(card))
-    # Pad to fixed length
-    padding_needed = MAX_HAND - len(player.hand)
-    hand_encoding.extend([0.0] * (padding_needed * CARD_ENCODING_SIZE))
+    # Encode hand cards
+    hand_encoding = encode_card_presence(player.hand, cards)
+    
+    # Encode discard pile cards
+    discard_encoding = encode_card_presence(player.discard_pile, cards)
+
+    # Encode draw deck cards
+    deck_encoding = encode_card_presence(player.deck, cards)
 
     # Encode bases as well
-    bases_encoding = []
-    for base in player.bases[:MAX_BASES]:
-        bases_encoding.extend(encode_card(base))
-    padding_needed = MAX_BASES - len(player.bases)
-    bases_encoding.extend([0.0] * (padding_needed * CARD_ENCODING_SIZE))
+    bases_encoding = encode_card_presence(player.bases, cards)
 
-    return player_resources + hand_encoding + bases_encoding
+    return player_resources + hand_encoding + discard_encoding + deck_encoding + bases_encoding
 
 def encode_state(game_state: 'Game', is_current_player_training: bool, cards: list[str], available_actions: list['Action'] | None = None) -> torch.FloatTensor:
     """Convert variable-length game state to fixed-length tensor"""
@@ -143,18 +84,14 @@ def encode_state(game_state: 'Game', is_current_player_training: bool, cards: li
     state.append(is_first_player)
     
     # Encode trade row
-    trade_row_encoding = []
-    for card in game_state.trade_row[:MAX_TRADE_ROW]:
-        trade_row_encoding.extend(encode_card(card))
-    padding_needed = MAX_TRADE_ROW - len(game_state.trade_row)
-    trade_row_encoding.extend([0.0] * (padding_needed * CARD_ENCODING_SIZE))
+    trade_row_encoding = encode_card_presence(game_state.trade_row, cards)
     state.extend(trade_row_encoding)
 
     # Encode training player
-    state.extend(encode_player(training_player))
+    state.extend(encode_player(training_player, cards=cards))
 
     # Encode opponent player
-    state.extend(encode_player(opponent))
+    state.extend(encode_player(opponent, cards=cards))
 
     # Encode available actions for the training player in 1 hot format
     if available_actions is None:
