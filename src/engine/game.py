@@ -249,6 +249,12 @@ class Game:
                     break
 
         return False  # Turn continues
+    
+    def play(self):
+        self.start_game()
+        while not self.is_game_over:
+            self.next_step()
+        return self.get_winner()
 
     def end_game(self):
         self.is_game_over = True
