@@ -24,7 +24,8 @@ if TYPE_CHECKING:
 
 class Trainer:
     def __init__(self, episodes, episode_batch_size=100, lambda_param=0.999, 
-                 cards_path='data/cards.csv', model_file_path=None, min_exploration_rate=0.1):
+                 cards_path='data/cards.csv', model_file_path=None, 
+                 min_exploration_rate=0.1, initial_exploration_rate=1.0):
         """Initialize the Trainer with the specified parameters"""
         self.episodes = episodes
         self.episode_batch_size = episode_batch_size
@@ -39,7 +40,7 @@ class Trainer:
         exploration_decay_rate = calculate_exploration_decay_rate(episodes // episode_batch_size, min_exploration_rate, 0.8)
         self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, cards=self.card_names, 
                                         exploration_decay_rate=exploration_decay_rate, model_file_path=model_file_path, 
-                                        min_exploration_rate=min_exploration_rate)
+                                        min_exploration_rate=min_exploration_rate, initial_exploration_rate=initial_exploration_rate)
         self.opponent_agent = RandomAgent("RandomAgent")
     
     def train(self):
@@ -147,6 +148,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", type=int, default=100, help="Number of episodes to batch before training.")
     parser.add_argument("--lambda", type=float, default=0.999, dest="lambda_param", help="Lambda parameter for TD(λ) learning.")
     parser.add_argument("--min-exploration", type=float, default=0.1, help="Minimum exploration rate.")
+    parser.add_argument("--initial-exploration", type=float, default=1.0, help="Initial exploration rate.")
     parser.add_argument("--model", type=str, default=None, help="Path to the model file.")
     args = parser.parse_args()
 
@@ -156,5 +158,6 @@ if __name__ == "__main__":
         lambda_param=args.lambda_param,
         model_file_path=args.model,
         min_exploration_rate=args.min_exploration,
+        initial_exploration_rate=args.initial_exploration,
     )
     trainer.train()
