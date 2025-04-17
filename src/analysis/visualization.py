@@ -1,60 +1,51 @@
 import matplotlib.pyplot as plt
 from typing import List
 
-from src.nn.save_probability import calculate_save_probability
+from src.nn.memory_data import MemoryData
 
-def calculate_epsilon_values(num_episodes, initial_epsilon=0.995, decay_interval=5):
-    """Calculate epsilon values for each episode based on the decay schedule."""
-    epsilon_values = []
-    current_epsilon = initial_epsilon
+def plot_batch_win_percentage(memory: MemoryData):
+    """
+    Plot first player win percentage per batch and overlay epsilon progression per batch.
+    """
+    import matplotlib.pyplot as plt
 
-    for episode in range(num_episodes):
-        epsilon_values.append(current_epsilon)
-        if (episode + 1) % decay_interval == 0:
-            current_epsilon *= initial_epsilon
+    batch_winners = memory.batch_winners
+    batch_size = memory.batch_size
+    epsilon_prog = memory.epsilon_progression
 
-    return epsilon_values
+    batches = list(range(1, len(batch_winners) + 1))
+    first_player_win_percentages = []
+    for winner_dict in batch_winners:
+        first_id = list(winner_dict.keys())[0]
+        total = sum(winner_dict.values())
+        wins = winner_dict.get(first_id, 0)
+        pct = (wins / total) * 100 if total > 0 else 0
+        first_player_win_percentages.append(pct)
 
-def plot_win_rate_and_epsilon(episode_outcomes: List[int], chunk_size=100, initial_epsilon=0.995, decay_interval=5):
-    """Plot win rate over time and epsilon decay rate."""
-    chunks = []
-    rates = []
-
-    for i in range(0, len(episode_outcomes), chunk_size):
-        chunk = episode_outcomes[i:i+chunk_size]
-        if chunk:
-            win_rate = sum(chunk) / len(chunk)
-            chunk_num = i // chunk_size
-            chunks.append(chunk_num)
-            rates.append(win_rate)
-
-    save_probability = calculate_save_probability(len(episode_outcomes), 10000)
-
-    epsilon_values = calculate_epsilon_values(len(episode_outcomes), initial_epsilon, int(decay_interval * save_probability))
-    chunk_epsilon_values = [epsilon_values[min(i*chunk_size, len(epsilon_values)-1)] for i in chunks]
+    # Epsilon updated once per batch; use stored progression entries per batch
+    batch_epsilon = epsilon_prog[:len(batches)]
 
     fig, ax1 = plt.subplots(figsize=(12, 6))
-
-    color = 'tab:blue'
-    ax1.set_xlabel('Episode Chunks (each represents {} episodes)'.format(chunk_size))
-    ax1.set_ylabel('Win Rate', color=color)
-    ax1.plot(chunks, rates, marker='o', linestyle='-', color=color, label='Win Rate')
-    ax1.tick_params(axis='y', labelcolor=color)
-    ax1.set_ylim((0.0, 1.05))
+    color1 = 'tab:blue'
+    ax1.plot(batches, first_player_win_percentages, marker='o', color=color1, label='First Player Win %')
+    ax1.set_xlabel('Batch Number')
+    ax1.set_ylabel('Win Percentage (%)', color=color1)
+    ax1.tick_params(axis='y', labelcolor=color1)
+    ax1.set_ylim(0, 100)
 
     ax2 = ax1.twinx()
-    color = 'tab:red'
-    ax2.set_ylabel('Epsilon Value', color=color)
-    ax2.plot(chunks, chunk_epsilon_values, marker='x', linestyle='--', color=color, label='Epsilon')
-    ax2.tick_params(axis='y', labelcolor=color)
-    ax2.set_ylim((0.0, 1.05))
+    color2 = 'tab:red'
+    ax2.plot(batches, batch_epsilon, marker='x', linestyle='--', color=color2, label='Epsilon')
+    ax2.set_ylabel('Epsilon', color=color2)
+    ax2.tick_params(axis='y', labelcolor=color2)
+    ax2.set_ylim(0, 1)
 
-    plt.title('Win Rate and Exploration Epsilon Over Time')
-    ax1.grid(True, alpha=0.3)
-
+    # Combine legends
     lines1, labels1 = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
     ax1.legend(lines1 + lines2, labels1 + labels2, loc='best')
 
+    plt.title('First Player Win Percentage and Epsilon per Batch')
+    ax1.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
