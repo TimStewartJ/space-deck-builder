@@ -6,7 +6,7 @@ from src.engine.game import Game
 from src.nn.state_encoder import encode_state
 from src.utils.logger import set_verbose
 
-def worker_run_episode(episode_count, cards, card_names, first_agent, second_agent, first_agent_name, second_agent_name, lambda_param):
+def worker_run_episode(episode_count, cards, card_names, first_agent, second_agent, first_agent_name, second_agent_name, lambda_param, verbose=False):
     """
     Runs episodes in parallel.
 
@@ -25,7 +25,7 @@ def worker_run_episode(episode_count, cards, card_names, first_agent, second_age
             game_stats: The game statistics object.
             winner: Name of the winning agent.
     """
-    set_verbose(False)  # Disable verbose logging for training
+    set_verbose(verbose)
 
     experiences_list: list[tuple[list[Experience], GameStats, str | None]] = []  # List to store experiences for training
 

@@ -16,10 +16,11 @@ def main():
     parser.add_argument("--games", type=int, default=10, help="Number of games to simulate.")
     parser.add_argument("--model", type=str, required=True, help="Path to the neural agent model file.")
     parser.add_argument("--cards", type=str, default="data/cards.csv", help="Path to the cards csv file.")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging.")
     args = parser.parse_args()
 
     # Disable verbose logging during simulation
-    set_verbose(False)
+    set_verbose(args.verbose)
 
     # Load cards and extract card names
     cards = load_trade_deck_cards(args.cards, filter_sets=["Core Set"])
@@ -47,7 +48,8 @@ def main():
         second_agent=random_agent,
         first_agent_name=neural_agent.name,
         second_agent_name=random_agent.name,
-        lambda_param=lambda_param
+        lambda_param=lambda_param,
+        verbose=args.verbose,
     )
     # Initialize statistics
     wins = {neural_agent.name: 0, random_agent.name: 0}
