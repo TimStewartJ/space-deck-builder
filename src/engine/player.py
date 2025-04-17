@@ -18,9 +18,6 @@ class Player:
         self.trade = 0
         self.combat = 0
         self.authority_gained = 0
-        self.pending_actions: List[Action] = []  # Track actions awaiting player decisions
-        self.pending_actions_left = 0 # Track the amount of decisions left to make
-        self.pending_actions_mandatory = False # Track if the pending actions are mandatory
         # Support multiple sets of pending actions
         self.pending_action_sets: List[PendingActionSet] = []
         self.cards_drawn = 0  # Track the number of cards drawn

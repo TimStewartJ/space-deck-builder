@@ -249,7 +249,7 @@ class Game:
                         log(f"{self.current_player.name} scrapped {card.name} from trade row", v=True)
                         break
                 # If this was the last pending action, refresh the trade row
-                if self.current_player.pending_actions_left <= 0:
+                if len(self.current_player.pending_action_sets) <= 0:
                     self.fill_trade_row()
         elif action.type == ActionType.DISCARD_CARDS:
             # Discard card from hand
