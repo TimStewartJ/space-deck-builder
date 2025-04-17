@@ -60,6 +60,15 @@ class Effect:
                     return True
         return False
     
+    def all_child_effects_used(self):
+        """Check if all child effects have been used"""
+        if self.child_effects:
+            for effect in self.child_effects:
+                if not effect.all_child_effects_used():
+                    return False
+            return True
+        return self.applied
+    
     def apply(self, game: 'Game', player: 'Player', card=None):
         from src.engine.actions import Action, ActionType
         # If it has already been applied, do nothing
