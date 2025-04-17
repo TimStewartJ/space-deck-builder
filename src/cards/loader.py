@@ -7,7 +7,7 @@ from src.utils.logger import log
 from .card import Card
 from .effects import Effect
 
-def load_trade_deck_cards(file_path, filter_names=None, filter_sets=None):
+def load_trade_deck_cards(file_path='data/cards.csv', filter_names=None, filter_sets=['Core Set']) -> list[Card]:
     """
     Load cards from a CSV file with optional filtering by name and set.
     
