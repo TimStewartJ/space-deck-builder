@@ -114,7 +114,7 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
     # Add unused actions from played cards
     for card in player.played_cards:
         for effect in card.effects:
-            if not effect.applied:
+            if not effect.all_child_effects_used():
                 # Ensure faction allies are valid
                 if effect.faction_requirement:
                     faction_count = player.get_faction_ally_count(effect.faction_requirement)
@@ -124,7 +124,7 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                     # If it's an OR effect that hasn't been used yet, add all child effects
                     for child_effect in effect.child_effects:
                         actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=child_effect))
-                elif not effect.all_child_effects_used():
+                else:
                     actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=effect))
 
     # Always allow ending turn
