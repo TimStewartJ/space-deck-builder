@@ -20,7 +20,7 @@ def get_action_space_size(cards: list[str]) -> int:
         + cards_length    # BUY_CARD
         + 1               # ATTACK_BASE
         + 1               # ATTACK_PLAYER
-        + 1               # APPLY_EFFECT
+        + 2 * cards_length  # APPLY_EFFECT (card and scrap flag)
         + 3 * cards_length  # SCRAP_CARD (hand, discard, trade)
     )
     return size
@@ -72,9 +72,17 @@ def encode_action(action: Action | None, cards: list[str]) -> int:
         return current_act_index
     current_act_index += 1
     
-    if action.type == ActionType.APPLY_EFFECT:
-        return current_act_index
-    current_act_index += 1
+    # Encode APPLY_EFFECT: include card index and scrap effect flag
+    apply_effect_start = current_act_index
+    non_scrap_start = apply_effect_start
+    scrap_start = apply_effect_start + cards_length
+    if action.type == ActionType.APPLY_EFFECT and card_index is not None:
+        # Distinguish scrap effects
+        if action.card_effect and action.card_effect.is_scrap_effect:
+            return scrap_start + card_index
+        else:
+            return non_scrap_start + card_index
+    current_act_index += 2 * cards_length
 
     # Encode SCRAP_CARD
     scrap_hand_start_index = current_act_index
@@ -164,12 +172,26 @@ def decode_action(action_idx: int, available_actions: list[Action], cards: list[
             return attack_action
     current_act_index += 1
     
-    # Handle APPLY_EFFECT
-    if action_idx == current_act_index and action_by_type[ActionType.APPLY_EFFECT]:
-        effect_action = action_by_type[ActionType.APPLY_EFFECT][0]
-        if effect_action.card_id is not None:
-            return effect_action
-    current_act_index += 1
+    # Handle APPLY_EFFECT (card index + scrap flag)
+    apply_effect_start = current_act_index
+    if action_by_type[ActionType.APPLY_EFFECT]:
+        # Determine if in non-scrap or scrap range
+        card_idx = None; is_scrap = None
+        # Non-scrap effects range
+        if apply_effect_start <= action_idx < apply_effect_start + cards_length:
+            card_idx = action_idx - apply_effect_start
+            is_scrap = False
+        # Scrap effects range
+        elif apply_effect_start + cards_length <= action_idx < apply_effect_start + 2 * cards_length:
+            card_idx = action_idx - (apply_effect_start + cards_length)
+            is_scrap = True
+        # Match action by card and scrap flag
+        if card_idx is not None and 0 <= card_idx < len(cards):
+            card_name = cards[card_idx].name
+            for action in action_by_type[ActionType.APPLY_EFFECT]:
+                if action.card_id == card_name and action.card_effect and action.card_effect.is_scrap_effect == is_scrap:
+                    return action
+    current_act_index += 2 * cards_length
   
     # Handle SCRAP_CARD
     scrap_start_index = current_act_index
