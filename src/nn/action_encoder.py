@@ -13,7 +13,8 @@ def get_action_space_size(cards: list[str]) -> int:
     cards_length = len(cards)
     # Calculate size based on the ranges defined in encode_action
     size = (
-        1                 # END_TURN
+        1                 # Invalid Action
+        + 1               # END_TURN
         + 1               # SKIP_DECISION
         + cards_length    # PLAY_CARD
         + cards_length    # BUY_CARD
