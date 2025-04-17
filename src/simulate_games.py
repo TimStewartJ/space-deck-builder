@@ -14,7 +14,7 @@ from src.nn.parallel_worker import worker_run_episode
 def main():
     parser = argparse.ArgumentParser(description="Simulate games using the Neural Agent.")
     parser.add_argument("--games", type=int, default=10, help="Number of games to simulate.")
-    parser.add_argument("--model", type=str, required=True, help="Path to the neural agent model file.")
+    parser.add_argument("--model", type=str, help="Path to the neural agent model file.")
     parser.add_argument("--cards", type=str, default="data/cards.csv", help="Path to the cards csv file.")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging.")
     args = parser.parse_args()
@@ -29,13 +29,15 @@ def main():
     card_names = list(dict.fromkeys(card_names))
     card_names += ["Scout", "Viper"]
 
+    exploration = 0.0 if args.model else 1.0
+
     # Initialize the agents
     neural_agent = NeuralAgent("NeuralAgent",
                                learning_rate=0.001,
                                cards=card_names,
                                model_file_path=args.model,
-                               min_exploration_rate=0.0,
-                               initial_exploration_rate=0.0)
+                               min_exploration_rate=exploration,
+                               initial_exploration_rate=exploration)
     random_agent = RandomAgent("RandomAgent")
 
     lambda_param = 1.0  # Discount factor for reward updates
