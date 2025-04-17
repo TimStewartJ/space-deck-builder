@@ -124,8 +124,7 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                     # If it's an OR effect that hasn't been used yet, add all child effects
                     for child_effect in effect.child_effects:
                         actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=child_effect))
-                else:
-                    # If there are no other conditions, add effect directly
+                elif not effect.all_child_effects_used():
                     actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=effect))
 
     # Always allow ending turn
