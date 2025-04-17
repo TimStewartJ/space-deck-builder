@@ -1314,6 +1314,7 @@ Core Set,1,Defense Center,"{Gain 3 Authority} OR {Gain 2 Combat}
 Core Set,2,Embassy Yacht,"{Gain 3 Authority} {Gain 2 Trade}
 If you have two or more bases in play, draw two cards.",Ship,Trade Federation,3,,Trade Deck,
 Core Set,3,Federation Shuttle,"{Gain 2 Trade}
+<hr>
 {Trade Federation Ally}: {Gain 4 Authority}",Ship,Trade Federation,1,,Trade Deck,
 Core Set,1,Flagship,"{Gain 5 Combat}
 Draw a card.
