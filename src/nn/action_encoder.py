@@ -11,14 +11,17 @@ def get_action_space_size(cards: list[str]) -> int:
         The total number of possible encoded actions.
     """
     cards_length = len(cards)
-    
     # Calculate size based on the ranges defined in encode_action
-    # 1 (END_TURN) + 1 (SKIP_DECISION) + cards_length (PLAY_CARD) + cards_length (BUY_CARD) + 
-    # 1 (ATTACK_BASE) + 1 (ATTACK_PLAYER) + 1 (APPLY_EFFECT) + 
-    # 3 * cards_length (SCRAP_CARD from hand, discard, trade)
-    
-    size = 1 + 1 + cards_length + cards_length + 1 + 1 + 1 + (3 * cards_length)
-    
+    size = (
+        1                 # END_TURN
+        + 1               # SKIP_DECISION
+        + cards_length    # PLAY_CARD
+        + cards_length    # BUY_CARD
+        + 1               # ATTACK_BASE
+        + 1               # ATTACK_PLAYER
+        + 1               # APPLY_EFFECT
+        + 3 * cards_length  # SCRAP_CARD (hand, discard, trade)
+    )
     return size
 
 def encode_action(action: Action | None, cards: list[str]) -> int:
