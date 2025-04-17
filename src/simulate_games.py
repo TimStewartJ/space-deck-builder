@@ -2,12 +2,14 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 import torch
+import pickle
 from src.cards.loader import load_trade_deck_cards
 from src.ai.neural_agent import NeuralAgent
 from src.ai.random_agent import RandomAgent
 from src.engine.game import Game
 from src.utils.logger import log, set_verbose
 from src.utils.decay_rate_calculator import calculate_exploration_decay_rate
+from src.nn.parallel_worker import worker_run_episode
 
 def main():
     parser = argparse.ArgumentParser(description="Simulate games using the Neural Agent.")
@@ -35,28 +37,31 @@ def main():
                                initial_exploration_rate=0.0)
     random_agent = RandomAgent("RandomAgent")
 
+    lambda_param = 1.0  # Discount factor for reward updates
+    # Run episodes using the parallel worker
+    experiences_list = worker_run_episode(
+        episode_count=args.games,
+        cards=cards,
+        card_names=card_names,
+        first_agent=neural_agent,
+        second_agent=random_agent,
+        first_agent_name=neural_agent.name,
+        second_agent_name=random_agent.name,
+        lambda_param=lambda_param
+    )
+    # Initialize statistics
     wins = {neural_agent.name: 0, random_agent.name: 0}
     game_durations = []
-
-    for i in range(args.games):
-        start_time = datetime.now()
-        
-        # Create a new game with the available cards.
-        game = Game(cards)
-        
-        # Add players and assign agents
-        player1 = game.add_player(neural_agent.name)
-        player1.agent = neural_agent
-        player2 = game.add_player(random_agent.name)
-        player2.agent = random_agent
-        
-        # Play the game until it is over and get the winner's name.
-        winner = game.play()
-        
-        # Record the result
+    # Process each episode's results
+    for experiences, game_stats, winner in experiences_list:
         wins[winner] += 1
-        duration = (datetime.now() - start_time).total_seconds()
-        game_durations.append(duration)
+        # GameStats contains start and end times
+        game_durations.append(game_stats.get_game_duration())
+    # Persist experiences to disk
+    output_filename = Path(f"experiences_{args.games}_{datetime.now():%Y%m%d_%H%M%S}.pkl")
+    with open(output_filename, 'wb') as f:
+        pickle.dump(experiences_list, f)
+    log(f"Saved experiences to {output_filename}")
 
     total_time = sum(game_durations)
     average_time = total_time / args.games if args.games else 0
