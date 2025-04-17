@@ -182,7 +182,7 @@ class Effect:
         if self.is_scrap_effect:
             base = f"(Scrap required): {base}"
         if self.child_effects:
-            base += "| Child Effects: " + ", ".join(str(effect) for effect in self.child_effects)
+            base += "[ Child Effects: " + ", ".join(str(effect) for effect in self.child_effects) + " ] "
             return base
         base += f"{self.value}" if self.value else self.text
         base += f" from {self.card_targets}" if self.card_targets else ""

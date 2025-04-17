@@ -35,21 +35,29 @@ def parse_effect_text(text: str) -> Effect:
         faction_requirement_count = 2 if is_double else 1
         text = ally_match.group(3).strip()
     
-    # Parse common resource gains
-    trade_match = re.search(r"\{Gain (\d+) Trade\}", text)
-    if trade_match:
-        return Effect(CardEffectType.TRADE, int(trade_match.group(1)), text, 
-                     faction_requirement, is_scrap, is_ally, faction_requirement_count)
-        
-    combat_match = re.search(r"\{Gain (\d+) Combat\}", text)
-    if combat_match:
-        return Effect(CardEffectType.COMBAT, int(combat_match.group(1)), text,
-                     faction_requirement, is_scrap, is_ally, faction_requirement_count)
-    
-    healing_match = re.search(r"\{Gain (\d+) Authority\}", text)
-    if healing_match:
-        return Effect(CardEffectType.HEAL, int(healing_match.group(1)), text,
-                     faction_requirement, is_scrap, is_ally, faction_requirement_count)
+    # Parse common resource gains, allowing multiple on one line
+    gain_patterns = [
+        (CardEffectType.TRADE,   r"\{Gain (\d+) Trade\}"),
+        (CardEffectType.COMBAT,  r"\{Gain (\d+) Combat\}"),
+        (CardEffectType.HEAL,    r"\{Gain (\d+) Authority\}")
+    ]
+    children = []
+    for effect_type, pattern in gain_patterns:
+        for match in re.finditer(pattern, text):
+            amount = int(match.group(1))
+            segment = match.group(0)
+            children.append(
+                Effect(effect_type, amount, segment,
+                       faction_requirement, is_scrap, is_ally, faction_requirement_count)
+            )
+    if children:
+        if len(children) == 1:
+            return children[0]
+        return Effect(
+            CardEffectType.PARENT, 0, text,
+            child_effects=children,
+            is_scrap_effect=is_scrap
+        )
     
     # Parse scrap effects
     if text == "You may scrap a card in your hand or discard pile" or text == "Scrap a card in your hand or discard pile":
