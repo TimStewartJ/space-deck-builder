@@ -146,8 +146,17 @@ class Game:
                     # Attempt application of all other effects if they don't require decisions
                     for card in self.current_player.played_cards:
                         for effect in card.effects:
-                            if effect.effect_type in [CardEffectType.COMBAT, CardEffectType.TRADE, CardEffectType.HEAL, CardEffectType.DRAW, CardEffectType.TARGET_DISCARD]:
-                                # Attempt application
+                            if (
+                                effect.effect_type in [
+                                    CardEffectType.COMBAT,
+                                    CardEffectType.TRADE,
+                                    CardEffectType.HEAL,
+                                    CardEffectType.DRAW,
+                                    CardEffectType.TARGET_DISCARD,
+                                    CardEffectType.PARENT,
+                                ]
+                                and not effect.is_or_effect
+                            ):
                                 effect.apply(self, self.current_player, card)
                     break
         

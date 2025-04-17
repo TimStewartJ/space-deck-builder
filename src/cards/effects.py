@@ -31,24 +31,34 @@ class Effect:
     faction_requirement: Optional[str] = None
     is_scrap_effect: bool = False
     is_ally_effect: bool = False
+    is_or_effect: bool = False
     faction_requirement_count: int = 0
     child_effects: Optional[List['Effect']] = None
     card_targets: Optional[List[str]] = None
     
     def __init__(self, effect_type: CardEffectType, value: int = 0, text: str = "", 
                  faction_requirement: Optional[str] = None, is_scrap_effect: bool = False,
-                 is_ally_effect: bool = False, faction_requirement_count: int = 0, child_effects: Optional[List['Effect']] = None,
-                 card_targets: Optional[List[str]] = None):
+                 is_ally_effect: bool = False, faction_requirement_count: int = 0, is_or_effect: bool = False, 
+                 child_effects: Optional[List['Effect']] = None, card_targets: Optional[List[str]] = None):
         self.effect_type = effect_type
         self.value = value
         self.text = text
         self.faction_requirement = faction_requirement
         self.is_scrap_effect = is_scrap_effect
         self.is_ally_effect = is_ally_effect
+        self.is_or_effect = is_or_effect
         self.faction_requirement_count = faction_requirement_count if faction_requirement_count > 0 else (1 if faction_requirement else 0)
         self.applied = False
         self.child_effects = child_effects
         self.card_targets = card_targets
+
+    def any_child_effects_used(self):
+        """Check if any child effects have been used"""
+        if self.child_effects:
+            for effect in self.child_effects:
+                if effect.applied:
+                    return True
+        return False
     
     def apply(self, game: 'Game', player: 'Player', card=None):
         from src.engine.actions import Action, ActionType
@@ -153,7 +163,9 @@ class Effect:
         elif self.effect_type == CardEffectType.COMPLEX:
             self.handle_complex_effect(game, player, card)
         
-        self.applied = True
+        # parent effects should only be marked as applied if it is an OR effect
+        if self.effect_type != CardEffectType.PARENT:
+            self.applied = True
 
         # if the effect is a scrap effect, remove the card from the game
         if self.is_scrap_effect and card:
@@ -182,7 +194,7 @@ class Effect:
         if self.is_scrap_effect:
             base = f"(Scrap required): {base}"
         if self.child_effects:
-            base += "[ Child Effects: " + ", ".join(str(effect) for effect in self.child_effects) + " ] "
+            base += "[ Child Effects: " + (" OR " if self.is_or_effect else ", ").join(str(effect) for effect in self.child_effects) + " ] "
             return base
         base += f"{self.value}" if self.value else self.text
         base += f" from {self.card_targets}" if self.card_targets else ""

@@ -120,9 +120,13 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                     faction_count = player.get_faction_ally_count(effect.faction_requirement)
                     if faction_count > effect.faction_requirement_count:
                         actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=effect))
-                    continue
-                # If no faction requirement, add effect directly
-                actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=effect))
+                elif effect.is_or_effect and effect.child_effects and not effect.any_child_effects_used():
+                    # If it's an OR effect that hasn't been used yet, add all child effects
+                    for child_effect in effect.child_effects:
+                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=child_effect))
+                else:
+                    # If there are no other conditions, add effect directly
+                    actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=effect))
 
     # Always allow ending turn
     actions.append(Action(type=ActionType.END_TURN))

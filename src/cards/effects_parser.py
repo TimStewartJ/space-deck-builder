@@ -14,6 +14,15 @@ def parse_effect_text(text: str) -> Effect:
         is_scrap = True
         text = text.replace("{Scrap}:", "").strip()
 
+    # If this effect is an OR effect, we will parse it separately and add it as a child effect
+    # Split text by OR
+    or_split = [chunk for chunk in text.split("OR") if chunk.strip()]
+    if len(or_split) > 1:
+        child_effects = []
+        for effect_text in or_split:
+            child_effects.append(parse_effect_text(effect_text.strip()))
+        return Effect(CardEffectType.PARENT, 0, text, child_effects=child_effects, is_scrap_effect=is_scrap, is_or_effect=True)
+
     # if this effect has multiple effects, we will parse them separately and add them as child effects
     # Split text by both new line and period
     split_text = [chunk for chunk in re.split(r"[.\n]", text) if chunk.strip()]
