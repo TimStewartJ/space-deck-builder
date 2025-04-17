@@ -82,6 +82,16 @@ def parse_effect_text(text: str) -> Effect:
         return Effect(CardEffectType.TARGET_DISCARD, 1, text, faction_requirement, is_scrap,
                       is_ally, faction_requirement_count, card_targets=["opponent"])
 
+    # Parse special destroy base + scrap trade row effect
+    if text == "You may destroy target base and/or scrap a card in the trade row":
+        return Effect(CardEffectType.PARENT, 1, text, faction_requirement, is_scrap,
+                      is_ally, faction_requirement_count, child_effects=[
+                          Effect(CardEffectType.DESTROY_BASE, 1, "Destroy target base", faction_requirement, is_scrap,
+                                 is_ally, faction_requirement_count),
+                          Effect(CardEffectType.SCRAP, 1, "Scrap a card in the trade row", faction_requirement,
+                                 is_scrap, is_ally, faction_requirement_count, card_targets=["trade"])
+                      ])
+
     # Parse draw effects
     if text == "Draw a card":
         return Effect(CardEffectType.DRAW, 1, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)
