@@ -1,5 +1,6 @@
 import copy
 from typing import List
+from src.ai.agent import Agent
 from src.cards.effects import CardEffectType
 from src.utils.logger import log
 from src.cards.card import Card
@@ -114,19 +115,21 @@ class Game:
         """Execute a player's action and update game state"""
         log(f"{self.current_player.name} executing action: {action}", v=True)
 
-        # Check for pending actions. Decrement the pending action count
-        if self.current_player.pending_actions:
-            # Reset actions if the action is a skip decision
-            if action.type == ActionType.SKIP_DECISION:
-                self.current_player.reset_pending_actions()
-            # Otherwise remove the action from pending actions
-            # and decrement the count
+        # Handle pending action sets
+        pending_set = self.current_player.get_current_pending_set()
+        if pending_set:
+            # If skip decision and set is optional, skip this set
+            if action.type == ActionType.SKIP_DECISION and not pending_set.mandatory:
+                self.current_player.advance_pending_set()
             else:
-                self.current_player.pending_actions.remove(action)
-                self.current_player.pending_actions_left -= 1
-                if self.current_player.pending_actions_left <= 0:
-                    self.current_player.reset_pending_actions()
-        
+                # Remove action from current set and decrement count
+                if action in pending_set.actions:
+                    pending_set.actions.remove(action)
+                    pending_set.decisions_left -= 1
+                # Move to next set if done
+                if pending_set.decisions_left <= 0:
+                    self.current_player.advance_pending_set()
+
         if action.type == ActionType.END_TURN:
             return True  # End the turn
             
@@ -263,10 +266,10 @@ class Game:
         # Logic to determine the winner and end the game
         pass
 
-    def add_player(self, name: str):
+    def add_player(self, name: str, agent: 'Agent'):
         if len(self.players) < 4:  # Maximum 4 players
             from src.engine.player import Player
-            player = Player(name)
+            player = Player(name, agent)
             self.players.append(player)
             return player
         else:

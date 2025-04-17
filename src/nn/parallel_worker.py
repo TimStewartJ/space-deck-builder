@@ -35,10 +35,8 @@ def worker_run_episode(episode_count, cards, card_names, first_agent, second_age
         player2_name = second_agent_name
         
 
-        player1 = game.add_player(player1_name)
-        player1.agent = first_agent
-        player2 = game.add_player(player2_name)
-        player2.agent = second_agent
+        player1 = game.add_player(player1_name, first_agent)
+        player2 = game.add_player(player2_name, second_agent)
         game.start_game()
 
         # Initialize experiences as a list of tuples

@@ -50,6 +50,12 @@ class Action:
             return "End turn"
         return f"{self.type}"
 
+@dataclass
+class PendingActionSet:
+    actions: List[Action]
+    decisions_left: int
+    mandatory: bool
+
 def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
     """Return list of available actions for a player given the current game state"""
     actions = []
@@ -58,12 +64,13 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
     if game_state.current_player != player:
         return actions
 
-    # If there are any pending actions, those are the only actions that a player can do right now
-    if len(player.pending_actions) > 0:
-        for action in player.pending_actions:
-            actions.append(action)
+    # If there are pending action sets, handle current set
+    pending_set: Optional[PendingActionSet] = player.get_current_pending_set()
+    if pending_set:
+        for act in pending_set.actions:
+            actions.append(act)
         # If the pending actions are optional, add a skip action
-        if not player.pending_actions_mandatory:
+        if not pending_set.mandatory:
             actions.append(Action(type=ActionType.SKIP_DECISION))
         return actions
 

@@ -1,10 +1,10 @@
-from typing import List
+from typing import List, Optional
 from src.cards.card import Card
 from src.ai.agent import Agent
-from src.engine.actions import Action
+from src.engine.actions import ActionType, Action, get_available_actions, PendingActionSet
 
 class Player:
-    def __init__(self, name, agent=None):
+    def __init__(self, name, agent):
         self.name: str = name
         self.hand: List[Card] = []
         self.deck: List[Card] = []
@@ -21,6 +21,8 @@ class Player:
         self.pending_actions: List[Action] = []  # Track actions awaiting player decisions
         self.pending_actions_left = 0 # Track the amount of decisions left to make
         self.pending_actions_mandatory = False # Track if the pending actions are mandatory
+        # Support multiple sets of pending actions
+        self.pending_action_sets: List[PendingActionSet] = []
         self.cards_drawn = 0  # Track the number of cards drawn
         
     def draw_card(self):
@@ -58,9 +60,8 @@ class Player:
     
     def reset_pending_actions(self):
         """Reset pending actions"""
-        self.pending_actions = []
-        self.pending_actions_left = 0
-        self.pending_actions_mandatory = False
+        # Clear all pending action sets
+        self.pending_action_sets = []
     
     def reset_resources(self):
         """Reset resources at the start of turn"""
@@ -92,7 +93,27 @@ class Player:
     def shuffle_deck(self):
         import random
         random.shuffle(self.deck)
-        
+    
+    def add_pending_actions(self, actions: List[Action], decisions_left: int, mandatory: bool):
+        """Add a new set of pending actions"""
+        self.pending_action_sets.append(PendingActionSet(
+            actions=list(actions),
+            decisions_left=decisions_left,
+            mandatory=mandatory
+        ))
+
+    def get_current_pending_set(self) -> Optional[PendingActionSet]:
+        """Get the first pending action set"""
+        return self.pending_action_sets[0] if self.pending_action_sets else None
+
+    def advance_pending_set(self):
+        """Remove the completed pending action set and move to next"""
+        if self.pending_action_sets:
+            self.pending_action_sets.pop(0)
+
+    def skip_current_pending_set(self):
+        """Skip the current pending action set"""
+        self.advance_pending_set()
     
     def get_faction_ally_count(self, faction):
         """Count the number of cards of the specified faction in play"""
