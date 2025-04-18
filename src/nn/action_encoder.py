@@ -19,9 +19,9 @@ def get_action_space_size(cards: list[str]) -> int:
         + 1               # SKIP_DECISION
         + cards_length    # PLAY_CARD
         + cards_length    # BUY_CARD
-        + 1               # ATTACK_BASE
+        + cards_length    # ATTACK_BASE
         + 1               # ATTACK_PLAYER
-        + 1               # DESTROY_BASE
+        + cards_length    # DESTROY_BASE
         + 2 * cards_length  # APPLY_EFFECT (card and scrap flag)
         + 3 * cards_length  # SCRAP_CARD (hand, discard, trade)
         + cards_length      # DISCARD_CARDS (target discard)
@@ -65,20 +65,22 @@ def encode_action(action: Action | None, cards: list[str]) -> int:
     if action.type == ActionType.BUY_CARD:
         if card_index is not None:
             return current_act_index + card_index
+    current_act_index += cards_length  # end of BUY_CARD range
+
+    # Encode ATTACK_BASE per card index
+    if action.type == ActionType.ATTACK_BASE and card_index is not None:
+        return current_act_index + card_index
     current_act_index += cards_length
-    
-    if action.type == ActionType.ATTACK_BASE:
-        return current_act_index
-    current_act_index += 1
-    
+
+    # Encode ATTACK_PLAYER
     if action.type == ActionType.ATTACK_PLAYER:
         return current_act_index
     current_act_index += 1
 
-    # Support DESTROY_BASE
-    if action.type == ActionType.DESTROY_BASE:
-        return current_act_index
-    current_act_index += 1
+    # Encode DESTROY_BASE per card index
+    if action.type == ActionType.DESTROY_BASE and card_index is not None:
+        return current_act_index + card_index
+    current_act_index += cards_length
     
     # Encode APPLY_EFFECT: include card index and scrap effect flag
     apply_effect_start = current_act_index
@@ -175,13 +177,16 @@ def decode_action(action_idx: int, available_actions: list[Action], cards: list[
                     return action
     current_act_index += cards_length
 
-    # Handle ATTACK_BASE
-    if action_idx == current_act_index and action_by_type[ActionType.ATTACK_BASE]:
-        base_action = action_by_type[ActionType.ATTACK_BASE][0]
-        if base_action.target_id is not None:
-            return base_action
-    current_act_index += 1
-    
+    # Handle ATTACK_BASE per card
+    if current_act_index <= action_idx < current_act_index + cards_length and action_by_type[ActionType.ATTACK_BASE]:
+        card_idx = action_idx - current_act_index
+        card_name = cards[card_idx].name if card_idx < len(cards) else None
+        if card_name:
+            for action in action_by_type[ActionType.ATTACK_BASE]:
+                if action.card_id == card_name:
+                    return action
+    current_act_index += cards_length
+
     # Handle ATTACK_PLAYER
     if action_idx == current_act_index and action_by_type[ActionType.ATTACK_PLAYER]:
         attack_action = action_by_type[ActionType.ATTACK_PLAYER][0]
@@ -189,10 +194,15 @@ def decode_action(action_idx: int, available_actions: list[Action], cards: list[
             return attack_action
     current_act_index += 1
 
-    # Handle DESTROY_BASE
-    if action_idx == current_act_index and action_by_type[ActionType.DESTROY_BASE]:
-        return action_by_type[ActionType.DESTROY_BASE][0]
-    current_act_index += 1
+    # Handle DESTROY_BASE per card
+    if current_act_index <= action_idx < current_act_index + cards_length and action_by_type[ActionType.DESTROY_BASE]:
+        card_idx = action_idx - current_act_index
+        card_name = cards[card_idx].name if card_idx < len(cards) else None
+        if card_name:
+            for action in action_by_type[ActionType.DESTROY_BASE]:
+                if action.card_id == card_name:
+                    return action
+    current_act_index += cards_length
     
     # Handle APPLY_EFFECT (card index + scrap flag)
     apply_effect_start = current_act_index
