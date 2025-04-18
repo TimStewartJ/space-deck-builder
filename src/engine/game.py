@@ -136,6 +136,7 @@ class Game:
 
         # Handle pending action sets
         pending_set = self.current_player.get_current_pending_set()
+        pending_set_completed = False
         if pending_set:
             # If skip decision and set is optional, skip this set
             if action.type == ActionType.SKIP_DECISION and not pending_set.mandatory:
@@ -147,6 +148,7 @@ class Game:
                     pending_set.decisions_left -= 1
                 # Move to next set if done
                 if pending_set.decisions_left <= 0:
+                    pending_set_completed = True
                     self.current_player.advance_pending_set()
 
         if action.type == ActionType.END_TURN:
@@ -276,8 +278,8 @@ class Game:
                         self.trade_row.pop(i)
                         log(f"{self.current_player.name} scrapped {card.name} from trade row", v=True)
                         break
-                # If this was the last pending action, refresh the trade row
-                if len(self.current_player.pending_action_sets) <= 0:
+                # If this was the last pending action in the current set, refresh the trade row
+                if pending_set_completed <= 0:
                     self.fill_trade_row()
         elif action.type == ActionType.DISCARD_CARDS:
             # Discard card from hand
