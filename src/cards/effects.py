@@ -176,6 +176,9 @@ class Effect:
                 if c.name == card.name:
                     player.played_cards.remove(c)
                     break
+            # If this is an explorer, add it back to the explorer pile
+            if card.name == "Explorer":
+                game.explorer_pile.append(card)
 
     def handle_complex_effect(self, game: 'Game', player: 'Player', card):
         # Handle conditional card draw

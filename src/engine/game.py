@@ -281,6 +281,9 @@ class Game:
                 # If this was the last pending action in the current set, refresh the trade row
                 if pending_set_completed <= 0:
                     self.fill_trade_row()
+            # Return explorers to the explorer pile
+            if action.card_id == "Explorer" and action.card:
+                self.explorer_pile.append(action.card)
         elif action.type == ActionType.DISCARD_CARDS:
             # Discard card from hand
             self.stats.record_cards_discarded_from_hand(self.current_player.name, 1)
