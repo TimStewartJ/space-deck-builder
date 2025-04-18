@@ -29,7 +29,7 @@ class Trainer:
     def __init__(self, episodes, episode_batch_size=100, lambda_param=0.999, 
                  cards_path='data/cards.csv', model_file_path=None, 
                  min_exploration_rate=0.1, initial_exploration_rate=1.0,
-                 sample_size=None, memory_batches=None, self_play=False):
+                 sample_size=None, memory_batches=None, self_play=False, self_play_update_batches=1):
         """Initialize the Trainer with the specified parameters"""
         self.episodes = episodes
         self.episode_batch_size = episode_batch_size
@@ -51,6 +51,7 @@ class Trainer:
         # Maximum number of batches worth of experiences to keep in memory
         self.memory_batches = memory_batches
         self.self_play = self_play  # store self-play flag
+        self.self_play_update_batches = self_play_update_batches  # batches between opponent updates
     
     def train(self):
         set_verbose(False)  # Disable verbose logging for training
@@ -73,9 +74,9 @@ class Trainer:
         all_batch_winners = []
         epsilon_progression = []
 
-        for batch_start in range(0, self.episodes, self.episode_batch_size):
-            if self.self_play:
-                # use previous network as opponent
+        for batch_index, batch_start in enumerate(range(0, self.episodes, self.episode_batch_size)):
+            if self.self_play and (batch_index % self.self_play_update_batches == 0):
+                # use previous network as opponent at configured interval
                 self.opponent_agent = copy.deepcopy(self.neural_agent)
             batch_end = min(batch_start + self.episode_batch_size, self.episodes)
             log(f"Processing batch {batch_start + 1} to {batch_end}")
@@ -193,6 +194,7 @@ if __name__ == "__main__":
     parser.add_argument("--sample-size", type=int, default=None, help="Number of experiences to sample for training per batch.")
     parser.add_argument("--memory-batches", type=int, default=None, help="Number of batches worth of experiences to keep in memory.")
     parser.add_argument("--self-play", action="store_true", dest="self_play", help="Train against previous versions of the neural agent.")
+    parser.add_argument("--self-play-update-batches", type=int, default=1, dest="self_play_update_batches", help="Number of batches between opponent agent updates in self-play.")
     args = parser.parse_args()
 
     trainer = Trainer(
@@ -204,6 +206,7 @@ if __name__ == "__main__":
         initial_exploration_rate=args.initial_exploration,
         sample_size=args.sample_size,
         memory_batches=args.memory_batches,
-        self_play=args.self_play
+        self_play=args.self_play,
+        self_play_update_batches=args.self_play_update_batches
     )
     trainer.train()
