@@ -1,5 +1,6 @@
 from src.cards.card import Card
 from src.engine.actions import Action, ActionType
+from src.utils.logger import log
 
 def get_action_space_size(cards: list[str]) -> int:
     """Calculate the total size of the action space based on the encoding scheme.
@@ -22,6 +23,7 @@ def get_action_space_size(cards: list[str]) -> int:
         + 1               # ATTACK_PLAYER
         + 2 * cards_length  # APPLY_EFFECT (card and scrap flag)
         + 3 * cards_length  # SCRAP_CARD (hand, discard, trade)
+        + cards_length      # DISCARD_CARDS (target discard)
     )
     return size
 
@@ -100,6 +102,14 @@ def encode_action(action: Action | None, cards: list[str]) -> int:
                 
     current_act_index += 3 * cards_length # Increment for all three potential scrap sources
 
+    # Encode DISCARD_CARDS: target opponent discard by card index
+    discard_start_index = current_act_index
+    if action.type == ActionType.DISCARD_CARDS and card_index is not None:
+        return discard_start_index + card_index
+    current_act_index += cards_length
+
+    log(f"Invalid action: {action} with index {current_act_index}")
+
     # Default case
     return 0
 
@@ -121,7 +131,8 @@ def decode_action(action_idx: int, available_actions: list[Action], cards: list[
     action_by_type = {ActionType.END_TURN: [], ActionType.SKIP_DECISION: [],
                     ActionType.PLAY_CARD: [], ActionType.BUY_CARD: [],
                     ActionType.ATTACK_BASE: [], ActionType.ATTACK_PLAYER: [],
-                    ActionType.APPLY_EFFECT: [], ActionType.SCRAP_CARD: []}
+                    ActionType.APPLY_EFFECT: [], ActionType.SCRAP_CARD: [],
+                    ActionType.DISCARD_CARDS: []}
     
     for action in available_actions:
         if action.type in action_by_type:
@@ -220,6 +231,17 @@ def decode_action(action_idx: int, available_actions: list[Action], cards: list[
                     return action
     
     current_act_index += 3 * cards_length # Account for all three potential scrap sources
+
+    # Handle DISCARD_CARDS
+    discard_start_index = current_act_index
+    if discard_start_index <= action_idx < discard_start_index + cards_length and action_by_type[ActionType.DISCARD_CARDS]:
+        card_idx = action_idx - discard_start_index
+        card_name = cards[card_idx].name if card_idx < len(cards) else None
+        if card_name:
+            for action in action_by_type[ActionType.DISCARD_CARDS]:
+                if action.card_id == card_name and action.card_source == "opponent":
+                    return action
+    current_act_index += cards_length
 
     # Fallback: return first available action
     return available_actions[0]
