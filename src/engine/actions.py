@@ -46,6 +46,8 @@ class Action:
             return f"Scrap card: {self.card_id} from {self.card_source}"
         elif self.type == ActionType.DISCARD_CARDS:
             return f"Discard cards: {self.card_id} from {self.card_source}"
+        elif self.type == ActionType.DESTROY_BASE:
+            return f"Destroy base: {self.target_id}"
         elif self.type == ActionType.END_TURN:
             return "End turn"
         return f"{self.type}"
