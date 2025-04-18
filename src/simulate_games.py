@@ -27,7 +27,7 @@ def main():
     card_names = [card.name for card in cards]
     # Remove duplicates and add starter cards
     card_names = list(dict.fromkeys(card_names))
-    card_names += ["Scout", "Viper"]
+    card_names += ["Scout", "Viper", "Explorer"]
 
     exploration = 0.0 if args.model else 1.0
 

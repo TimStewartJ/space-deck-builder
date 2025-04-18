@@ -16,6 +16,7 @@ class Game:
         self.trade_deck = copy.deepcopy(cards) if cards else []
         self.card_names = card_names if card_names else []
         self.trade_row: List[Card] = []
+        self.explorer_pile: List[Card] = []
         self.is_running = False
         self.current_player: Player = None
         self.stats = GameStats()
@@ -26,6 +27,7 @@ class Game:
             raise ValueError("Cannot start game without cards")
         self.setup_players()
         self.setup_trade_row()
+        self.setup_explorer_pile()
         self.is_game_over = False
         self.is_running = True
         self.current_player = self.players[self.current_turn]
@@ -33,6 +35,20 @@ class Game:
     def setup_trade_row(self):
         self.shuffle_trade_deck()
         self.fill_trade_row()
+
+    def setup_explorer_pile(self):
+        # Create a pile of 5 Explorer cards
+        from src.cards.card import Card
+        from src.cards.effects import Effect
+        for _ in range(10):
+            explorer_card = Card("Explorer", 
+                                 len(self.card_names) - 1, 2, 
+                                 [
+                                     Effect(CardEffectType.TRADE, 2), 
+                                     Effect(CardEffectType.COMBAT, 2, 
+                                            is_scrap_effect=True)
+                                            ], "ship")
+            self.explorer_pile.append(explorer_card)
     
     def fill_trade_row(self):
         # Fill the trade row with 5 cards
@@ -105,6 +121,9 @@ class Game:
 
             # Increment turn counter and move onto next player
             self.stats.total_turns += 1
+            if self.stats.total_turns > 1000:
+                log("Game has exceeded 1000 turns, ending game.", v=True)
+                self.end_game()
             self.current_turn = (self.current_turn + 1) % len(self.players)
             self.current_player = self.players[self.current_turn]
 
@@ -166,6 +185,15 @@ class Game:
             log(f"{self.current_player.name} applied effect: {action.card_effect}", v=True)
                     
         elif action.type == ActionType.BUY_CARD:
+            # If the card is an explorer, take it from the explorer pile
+            if action.card_id == "Explorer":
+                if self.explorer_pile:
+                    card = self.explorer_pile.pop()
+                    self.current_player.trade -= card.cost
+                    self.current_player.discard_pile.append(card)
+                    self.stats.record_card_buy(self.current_player.name)
+                    log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
+                    return
             # Find the card in trade row
             for i, card in enumerate(self.trade_row):
                 if card.name == action.card_id and self.current_player.trade >= card.cost:

@@ -39,7 +39,7 @@ class Trainer:
         # Remove duplicates from card list
         self.card_names = list(dict.fromkeys(self.card_names))
         # Add starter cards to the list
-        self.card_names += ["Scout", "Viper"]
+        self.card_names += ["Scout", "Viper", "Explorer"]
         exploration_decay_rate = calculate_exploration_decay_rate(episodes // episode_batch_size, min_exploration_rate, 0.8, initial_rate=initial_exploration_rate)
         self.neural_agent = NeuralAgent("NeuralAgent", learning_rate=0.001, cards=self.card_names, 
                                         exploration_decay_rate=exploration_decay_rate, model_file_path=model_file_path, 
