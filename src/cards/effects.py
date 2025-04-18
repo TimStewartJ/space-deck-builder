@@ -143,13 +143,15 @@ class Effect:
                 for outpost in outposts:
                     pending_actions.append(Action(
                         ActionType.DESTROY_BASE,
-                        target_id=outpost.name
+                        target_id=outpost.name,
+                        card_id=outpost.name,
                     ))
             else:
                 for base in opponent.bases:
                     pending_actions.append(Action(
                         ActionType.DESTROY_BASE,
-                        target_id=base.name
+                        target_id=base.name,
+                        card_id=base.name,
                     ))
             if pending_actions:
                 opponent.add_pending_actions(pending_actions, self.value, False)

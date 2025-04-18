@@ -97,7 +97,8 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                         if outpost.defense and player.combat >= outpost.defense:
                             actions.append(Action(
                                 type=ActionType.ATTACK_BASE,
-                                target_id=outpost.name
+                                target_id=outpost.name,
+                                card_id=outpost.name,
                             ))
                 else:
                     # If no outposts, can attack other bases or player directly
@@ -105,7 +106,8 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                         if base.defense and player.combat >= base.defense:
                             actions.append(Action(
                                 type=ActionType.ATTACK_BASE,
-                                target_id=base.name
+                                target_id=base.name,
+                                card_id=base.name,
                             ))
                     # Can attack player directly only if no outposts
                     actions.append(Action(
