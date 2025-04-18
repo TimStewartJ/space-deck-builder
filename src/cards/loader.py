@@ -7,7 +7,7 @@ from src.utils.logger import log
 from .card import Card
 from .effects import Effect
 
-def load_trade_deck_cards(file_path='data/cards.csv', filter_names=None, filter_sets=['Core Set']) -> list[Card]:
+def load_trade_deck_cards(file_path='data/cards.csv', filter_names=None, filter_sets=['Core Set'], log_cards = True) -> list[Card]:
     """
     Load cards from a CSV file with optional filtering by name and set.
     
@@ -87,6 +87,7 @@ def load_trade_deck_cards(file_path='data/cards.csv', filter_names=None, filter_
                 
             # Add multiple copies based on Qty
             qty = int(row.get('Qty', 1))
-            log(f"[LOADER]: Adding {qty} copies of {card}")
+            if log_cards:
+                log(f"[LOADER]: Adding {qty} copies of {card}")
             cards.extend([card] * qty)
     return cards
