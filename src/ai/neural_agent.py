@@ -21,15 +21,17 @@ class NeuralNetwork(nn.Module):
     def __init__(self, input_size, output_size):
         super(NeuralNetwork, self).__init__()
         self.network = nn.Sequential(
-            nn.Linear(input_size, 1024),
+            nn.Linear(input_size, 1280),
             nn.ReLU(),
-            nn.Linear(1024, 1024),
+            nn.Linear(1280, 1280),
             nn.ReLU(),
-            nn.Linear(1024, 1024),
+            nn.Linear(1280, 1280),
             nn.ReLU(),
-            nn.Linear(1024, 512),
+            nn.Linear(1280, 1280),
             nn.ReLU(),
-            nn.Linear(512, output_size)
+            nn.Linear(1280, 1280),
+            nn.ReLU(),
+            nn.Linear(1280, output_size)
         )
         log(f"Neural Network initialized with input size: {input_size}, output size: {output_size}")
     
