@@ -91,6 +91,16 @@ def parse_effect_text(text: str) -> Effect:
                           Effect(CardEffectType.SCRAP, 1, "Scrap a card in the trade row", faction_requirement,
                                  is_scrap, is_ally, faction_requirement_count, card_targets=["trade"])
                       ])
+    
+    # Parse draw then scrap effect
+    if text == "Draw a card, then scrap a card from your hand":
+        return Effect(CardEffectType.PARENT, 1, text, faction_requirement, is_scrap,
+                      is_ally, faction_requirement_count, child_effects=[
+                          Effect(CardEffectType.DRAW, 1, "Draw a card", faction_requirement, is_scrap,
+                                 is_ally, faction_requirement_count),
+                          Effect(CardEffectType.SCRAP, 1, "Scrap a card from your hand", faction_requirement,
+                                 is_scrap, is_ally, faction_requirement_count, card_targets=["hand"], is_mandatory=True)
+                      ])
 
     # Parse draw effects
     if text == "Draw a card":

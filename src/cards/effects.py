@@ -32,6 +32,7 @@ class Effect:
     is_scrap_effect: bool = False
     is_ally_effect: bool = False
     is_or_effect: bool = False
+    is_mandatory: bool = False
     faction_requirement_count: int = 0
     child_effects: Optional[List['Effect']] = None
     card_targets: Optional[List[str]] = None
@@ -39,7 +40,8 @@ class Effect:
     def __init__(self, effect_type: CardEffectType, value: int = 0, text: str = "", 
                  faction_requirement: Optional[str] = None, is_scrap_effect: bool = False,
                  is_ally_effect: bool = False, faction_requirement_count: int = 0, is_or_effect: bool = False, 
-                 child_effects: Optional[List['Effect']] = None, card_targets: Optional[List[str]] = None):
+                 child_effects: Optional[List['Effect']] = None, card_targets: Optional[List[str]] = None,
+                 is_mandatory: bool = False):
         self.effect_type = effect_type
         self.value = value
         self.text = text
@@ -51,6 +53,7 @@ class Effect:
         self.applied = False
         self.child_effects = child_effects
         self.card_targets = card_targets
+        self.is_mandatory = is_mandatory
 
     def any_child_effects_used(self):
         """Check if any child effects have been used"""
@@ -115,7 +118,7 @@ class Effect:
                         card_source="trade"
                     ))
             if pending_actions:
-                player.add_pending_actions(pending_actions, self.value, False)
+                player.add_pending_actions(pending_actions, self.value, self.is_mandatory)
         elif self.effect_type == CardEffectType.TARGET_DISCARD:
             # Create an action for the target player to discard a card
             if self.card_targets and "opponent" in self.card_targets:
@@ -204,4 +207,6 @@ class Effect:
         base += f" from {self.card_targets}" if self.card_targets else ""
         if self.is_ally_effect and self.faction_requirement:
             base = f"{self.faction_requirement} Ally: {base}"
+        if self.is_mandatory:
+            base = f"{base} (Mandatory)"
         return base
