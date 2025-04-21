@@ -75,11 +75,16 @@ class Trainer:
         epsilon_progression = []
 
         for batch_index, batch_start in enumerate(range(0, self.episodes, self.episode_batch_size)):
-            if self.self_play and (batch_index % self.self_play_update_batches == 0):
-                # use previous network as opponent at configured interval
-                self.opponent_agent = copy.deepcopy(self.neural_agent)
             batch_end = min(batch_start + self.episode_batch_size, self.episodes)
-            log(f"Processing batch {batch_start + 1} to {batch_end}")
+            log(f"Processing batch {batch_index} which includes episodes {batch_start + 1} to {batch_end}")
+
+            training_start_index = 0 if self.memory_batches is None else self.memory_batches
+
+            if self.self_play and (batch_index % self.self_play_update_batches == 0) and batch_index > training_start_index:
+                # use previous network as opponent at configured interval
+                log(f"Updating opponent agent for batch {batch_index} to the previous agent...")
+                self.opponent_agent = copy.deepcopy(self.neural_agent)
+                self.opponent_agent.exploration_rate = 0.0
 
             # Count experiences in this batch for memory trimming
             batch_experiences_count = 0
@@ -125,8 +130,15 @@ class Trainer:
             log(f"Batch winners: {batch_winners}")
             all_batch_winners.append(batch_winners)
             batch_duration = (datetime.now() - batch_start_time).total_seconds()
-            log(f"Batch {batch_start + 1} took {batch_duration:.4f} seconds, average of {batch_duration / self.episode_batch_size:.4f} seconds per episode.")
-            epsilon_progression.append(self.neural_agent.exploration_rate)
+            log(
+                f"Batch {batch_index} took {batch_duration:.4f} seconds and "
+                f"{batch_experiences_count} experiences, average of "
+                f"{batch_duration / self.episode_batch_size:.4f} seconds and "
+                f"{batch_experiences_count / self.episode_batch_size:.4f} experiences per episode."
+            )
+            epsilon_progression.append(
+                self.neural_agent.exploration_rate
+            )
 
             # Trim experiences to only keep the last N batches worth
             if self.memory_batches is not None:
@@ -134,19 +146,14 @@ class Trainer:
                 if len(all_experiences) > max_exp:
                     del all_experiences[:len(all_experiences) - max_exp]
 
-            # Train the network after completing the batch
-            log(f"Training neural agent for batch {batch_start + 1} to {batch_end}...")
-            start_time = datetime.now()
-            experiences_to_train = random.sample(all_experiences, min(len(all_experiences), self.experiences_sample_size))
-            self.neural_agent.train(lambda_param=self.lambda_param, experiences=experiences_to_train)
-            end_time = datetime.now()
-            log(f"Training took {(end_time - start_time).total_seconds():.4f} seconds.")
-
-            # Save model periodically
-            if (batch_end) % (self.episodes // 10) == 0 and batch_end > 0:
-                log(f"Saving model at episode {batch_end}")
-                log(aggregate_stats.get_summary())
-                torch.save(self.neural_agent.model.state_dict(), f"models/neural_agent_{batch_end}.pth")
+            if batch_index > training_start_index:
+                # Train the network after completing the batch
+                log(f"Training neural agent for batch {batch_start + 1} to {batch_end}...")
+                start_time = datetime.now()
+                experiences_to_train = random.sample(all_experiences, min(len(all_experiences), self.experiences_sample_size))
+                self.neural_agent.train(lambda_param=self.lambda_param, experiences=experiences_to_train)
+                end_time = datetime.now()
+                log(f"Training took {(end_time - start_time).total_seconds():.4f} seconds.")
 
         training_time = (datetime.now() - training_start_time).total_seconds()
         log(f"Training completed in {training_time:.2f} seconds.")
