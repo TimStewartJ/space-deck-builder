@@ -66,9 +66,6 @@ class NeuralAgent(Agent):
         
         # Exploration-exploitation trade-off
         if np.random.random() < self.exploration_rate:
-            # if there is an end turn action, remove it from available actions
-            if len(available_actions) > 1:
-                available_actions = [action for action in available_actions if action.type != ActionType.END_TURN]
             action = random.choice(available_actions)
             log(f"Random action chosen: {action}", v=True)
             return action
