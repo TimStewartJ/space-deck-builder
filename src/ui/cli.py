@@ -191,11 +191,8 @@ class CLI:
                     self.game = Game(cards)
                     
                     # Add both players with their selected agents
-                    player1 = self.game.add_player(name1)
-                    player1.agent = agent1
-                    
-                    player2 = self.game.add_player(name2)
-                    player2.agent = agent2
+                    player1 = self.game.add_player(name1, agent1)
+                    player2 = self.game.add_player(name2, agent2)
                     
                     # Initialize pygame UI if enabled
                     if self.use_pygame:
@@ -219,10 +216,6 @@ class CLI:
 
                     # Record winner
                     winner = self.game.get_winner()
-                    if winner == "Player 1":
-                        self.win_stats[name1] += 1
-                    elif winner == "Player 2":
-                        self.win_stats[name2] += 1
 
                     # Update aggregate statistics
                     self._update_aggregate_stats()
