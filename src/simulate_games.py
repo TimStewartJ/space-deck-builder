@@ -16,6 +16,7 @@ def main():
     parser.add_argument("--games", type=int, default=10, help="Number of games to simulate.")
     parser.add_argument("--model", type=str, help="Path to the neural agent model file.")
     parser.add_argument("--cards", type=str, default="data/cards.csv", help="Path to the cards csv file.")
+    parser.add_argument("--self-play", action="store_true", help="Enable self-play mode.")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging.")
     args = parser.parse_args()
 
@@ -40,6 +41,12 @@ def main():
                                initial_exploration_rate=exploration)
     random_agent = RandomAgent("RandomAgent")
 
+    if args.self_play:
+        # Set the second agent to be the same as the first for self-play
+        second_agent = neural_agent
+    else:
+        second_agent = random_agent
+    
     lambda_param = 1.0  # Discount factor for reward updates
     # Run episodes using the parallel worker
     experiences_list = worker_run_episode(
@@ -47,7 +54,7 @@ def main():
         cards=cards,
         card_names=card_names,
         first_agent=neural_agent,
-        second_agent=random_agent,
+        second_agent=second_agent,
         first_agent_name=neural_agent.name,
         second_agent_name=random_agent.name,
         lambda_param=lambda_param,
