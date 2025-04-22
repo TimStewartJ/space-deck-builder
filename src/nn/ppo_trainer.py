@@ -64,12 +64,16 @@ def main():
                        batch_size=args.batch_size)
     opponent = RandomAgent("Rand")
 
+    total_time_spent_on_updates = 0.0
+    total_time_spent_on_episodes = 0.0
+
     for upd in range(1, args.updates + 1):
         start_time = time.time()
         log(f"Starting update {upd}/{args.updates}")
         # collect trajectories
         all_data = [run_episode(agent, opponent, cards, names)
                     for _ in range(args.episodes)]
+        total_time_spent_on_episodes += time.time() - start_time
         log(f"Finished {args.episodes} episodes in {time.time() - start_time:.2f}s.")
 
         # unpack & concat
@@ -90,6 +94,7 @@ def main():
         torch.save(agent.model.state_dict(),
                    f"models/ppo_agent_{ts}_upd{upd}.pth")
         duration = time.time() - start_time
+        total_time_spent_on_updates += duration
         log(f"Update {upd} complete in {duration:.2f}s.")
 
         # Evaluate performance over 50 games
@@ -110,6 +115,11 @@ def main():
         losses = eval_games - wins
         win_rate = wins / eval_games
         log(f"Evaluation after update {upd}: {wins}/{eval_games} wins, {losses} losses (win rate {win_rate:.2%}) in {time.time() - start_time:.2f}s.")
+
+    log(f"Total time spent on updates: {total_time_spent_on_updates:.2f}s")
+    log(f"\tAverage time per update: {total_time_spent_on_updates / args.updates:.2f}s")
+    log(f"Total time spent on episodes: {total_time_spent_on_episodes:.2f}s")
+    log(f"\tAverage time per episode: {total_time_spent_on_episodes / (args.updates * args.episodes):.2f}s")
 
     log("All updates finished.")
 
