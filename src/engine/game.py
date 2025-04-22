@@ -5,7 +5,7 @@ from src.cards.effects import CardEffectType
 from src.utils.logger import log
 from src.cards.card import Card
 from src.engine.player import Player
-from src.engine.actions import ActionType, Action, get_available_actions
+from src.engine.actions import ActionType, Action
 from src.engine.game_stats import GameStats
 
 class Game:
@@ -18,7 +18,7 @@ class Game:
         self.trade_row: List[Card] = []
         self.explorer_pile: List[Card] = []
         self.is_running = False
-        self.current_player: Player = None
+        self.current_player: Player = Player("none", Agent("none"))
         self.stats = GameStats()
         self.first_player_name = None
 
