@@ -132,6 +132,9 @@ class PPOAgent(Agent):
         return states, actions, old_lp, returns, advs
 
     def update(self, states, actions, old_lp, returns, advs):
+        actor_loss = 0.0
+        critic_loss = 0.0
+
         for _ in range(self.epochs):
             idxs = torch.randperm(len(states))
             for start in range(0, len(states), self.batch_size):
