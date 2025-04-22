@@ -2,6 +2,8 @@ import argparse
 import glob
 import os
 import torch
+import pickle
+from datetime import datetime
 from pathlib import Path
 from src.cards.loader import load_trade_deck_cards
 from src.engine.game import Game
@@ -47,6 +49,7 @@ def main():
         agent2 = PPOAgent("PPO_2", names, device=args.device, model_path=args.model2)
 
     wins1, wins2 = 0, 0
+    all_experiences = []
     for i in range(args.games):
         game = Game(cards)
         game.add_player(agent1.name, agent1)
@@ -60,6 +63,19 @@ def main():
             wins1 += 1
         elif winner == agent2.name:
             wins2 += 1
+        # Save PPOAgent transitions for player 1
+        if isinstance(agent1, PPOAgent):
+            batch = agent1.finish_batch()
+            # Convert tensors to cpu and numpy for pickling
+            cpu_batch = tuple(x.cpu().numpy() if hasattr(x, 'cpu') else x for x in batch)
+            all_experiences.append(cpu_batch)
+    # Save all experiences to a file after all games
+    if all_experiences:
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        exp_path = f"experiences_sim_{ts}.pkl"
+        with open(exp_path, 'wb') as f:
+            pickle.dump(all_experiences, f)
+        print(f"Saved PPOAgent experiences to {exp_path}")
     print(f"\nResults after {args.games} games:")
     print(f"{agent1.name} wins: {wins1}")
     print(f"{agent2.name} wins: {wins2}")
