@@ -1,6 +1,7 @@
 from src.cards.card import Card
 from src.engine.actions import Action, ActionType
 from src.utils.logger import log
+from src.cards.effects import Effect, CardEffectType
 
 def get_action_space_size(cards: list[str]) -> int:
     """Calculate the total size of the action space based on the encoding scheme.
@@ -121,148 +122,107 @@ def encode_action(action: Action | None, cards: list[str]) -> int:
     # Default case
     return 0
 
-def decode_action(action_idx: int, available_actions: list[Action], cards: list[Card]) -> Action:
-    """Convert a neural network action index back to a game Action object
-    
-    Parameters:
-    - action_idx: The output index from the neural network
-    - available_actions: List of valid actions for the current game state
-    
-    Returns the corresponding Action from available_actions that matches
-    the action_idx, or falls back to a default action if invalid.
+def decode_action(action_idx: int, card_names: list[str]) -> Action:
+    """Decode an action index into a new Action object, using only the index and card_names.
+    Args:
+        action_idx: The output index from the neural network
+        card_names: List of unique card names (used for index mapping, must match encode_action)
+    Returns:
+        A new Action object corresponding to the decoded index.
     """
-    # Bound check
-    if action_idx <= 0 or not available_actions:
-        return available_actions[0] if available_actions else Action(type=ActionType.END_TURN)
-    
-    # Create mappings of available actions by type
-    action_by_type = {ActionType.END_TURN: [], ActionType.SKIP_DECISION: [],
-                    ActionType.PLAY_CARD: [], ActionType.BUY_CARD: [],
-                    ActionType.ATTACK_BASE: [], ActionType.ATTACK_PLAYER: [],
-                    ActionType.APPLY_EFFECT: [], ActionType.SCRAP_CARD: [],
-                    ActionType.DISCARD_CARDS: [], ActionType.DESTROY_BASE: []}
-    
-    for action in available_actions:
-        if action.type in action_by_type:
-            action_by_type[action.type].append(action)
-    
-    # Handle END_TURN (index 1)
-    if action_idx == 1 and action_by_type[ActionType.END_TURN]:
-        return action_by_type[ActionType.END_TURN][0]
-    
-    # Handle SKIP_DECISION (index 2)
-    if action_idx == 2 and action_by_type[ActionType.SKIP_DECISION]:
-        return action_by_type[ActionType.SKIP_DECISION][0]
-    
-    current_act_index = 3
-    cards_length = len(cards)
+    from src.engine.actions import Action, ActionType
+    cards_length = len(card_names)
+    current_act_index = 1
 
-    # Handle PLAY_CARD
-    if current_act_index <= action_idx < current_act_index + cards_length and action_by_type[ActionType.PLAY_CARD]:
-        card_idx = action_idx - current_act_index
-        card_name = cards[card_idx].name if card_idx < len(cards) else None
-        if card_name:
-            for action in action_by_type[ActionType.PLAY_CARD]:
-                if action.card_id == card_name:
-                    return action
-    current_act_index += cards_length
+    # 0: Invalid Action
+    if action_idx <= 0:
+        return Action(type=ActionType.END_TURN)
 
-    # Handle BUY_CARD
-    if current_act_index <= action_idx < current_act_index + cards_length and action_by_type[ActionType.BUY_CARD]:
-        card_idx = action_idx - current_act_index
-        card_name = cards[card_idx].name if card_idx < len(cards) else None
-        if card_name:
-            for action in action_by_type[ActionType.BUY_CARD]:
-                if action.card_id == card_name:
-                    return action
-    current_act_index += cards_length
-
-    # Handle ATTACK_PLAYER
-    if action_idx == current_act_index and action_by_type[ActionType.ATTACK_PLAYER]:
-        attack_action = action_by_type[ActionType.ATTACK_PLAYER][0]
-        if attack_action.target_id is not None:
-            return attack_action
+    # END_TURN
+    if action_idx == current_act_index:
+        return Action(type=ActionType.END_TURN)
     current_act_index += 1
 
-    # Handle ATTACK_BASE per card
-    if current_act_index <= action_idx < current_act_index + cards_length and action_by_type[ActionType.ATTACK_BASE]:
+    # SKIP_DECISION
+    if action_idx == current_act_index:
+        return Action(type=ActionType.SKIP_DECISION)
+    current_act_index += 1
+
+    # PLAY_CARD
+    if current_act_index <= action_idx < current_act_index + cards_length:
         card_idx = action_idx - current_act_index
-        card_name = cards[card_idx].name if card_idx < len(cards) else None
-        if card_name:
-            for action in action_by_type[ActionType.ATTACK_BASE]:
-                if action.card_id == card_name:
-                    return action
+        if 0 <= card_idx < cards_length:
+            return Action(type=ActionType.PLAY_CARD, card_id=card_names[card_idx])
     current_act_index += cards_length
 
-    # Handle DESTROY_BASE per card
-    if current_act_index <= action_idx < current_act_index + cards_length and action_by_type[ActionType.DESTROY_BASE]:
+    # BUY_CARD
+    if current_act_index <= action_idx < current_act_index + cards_length:
         card_idx = action_idx - current_act_index
-        card_name = cards[card_idx].name if card_idx < len(cards) else None
-        if card_name:
-            for action in action_by_type[ActionType.DESTROY_BASE]:
-                if action.card_id == card_name:
-                    return action
+        if 0 <= card_idx < cards_length:
+            return Action(type=ActionType.BUY_CARD, card_id=card_names[card_idx])
     current_act_index += cards_length
 
-    # Handle APPLY_EFFECT (card index + scrap flag)
+    # ATTACK_PLAYER
+    if action_idx == current_act_index:
+        return Action(type=ActionType.ATTACK_PLAYER)
+    current_act_index += 1
+
+    # ATTACK_BASE
+    if current_act_index <= action_idx < current_act_index + cards_length:
+        card_idx = action_idx - current_act_index
+        if 0 <= card_idx < cards_length:
+            return Action(type=ActionType.ATTACK_BASE, card_id=card_names[card_idx])
+    current_act_index += cards_length
+
+    # DESTROY_BASE
+    if current_act_index <= action_idx < current_act_index + cards_length:
+        card_idx = action_idx - current_act_index
+        if 0 <= card_idx < cards_length:
+            return Action(type=ActionType.DESTROY_BASE, card_id=card_names[card_idx])
+    current_act_index += cards_length
+
+    # APPLY_EFFECT (non-scrap and scrap)
     apply_effect_start = current_act_index
-    if action_by_type[ActionType.APPLY_EFFECT]:
-        # Determine if in non-scrap or scrap range
-        card_idx = None; is_scrap = None
-        # Non-scrap effects range
-        if apply_effect_start <= action_idx < apply_effect_start + cards_length:
-            card_idx = action_idx - apply_effect_start
-            is_scrap = False
-        # Scrap effects range
-        elif apply_effect_start + cards_length <= action_idx < apply_effect_start + 2 * cards_length:
-            card_idx = action_idx - (apply_effect_start + cards_length)
-            is_scrap = True
-        # Match action by card and scrap flag
-        if card_idx is not None and 0 <= card_idx < len(cards):
-            card_name = cards[card_idx].name
-            for action in action_by_type[ActionType.APPLY_EFFECT]:
-                if action.card_id == card_name and action.card_effect and action.card_effect.is_scrap_effect == is_scrap:
-                    return action
+    # Non-scrap
+    if apply_effect_start <= action_idx < apply_effect_start + cards_length:
+        card_idx = action_idx - apply_effect_start
+        if 0 <= card_idx < cards_length:
+            return Action(type=ActionType.APPLY_EFFECT, card_id=card_names[card_idx], card_effect=Effect(effect_type=CardEffectType.DRAW, is_scrap_effect=False))
+    # Scrap
+    if apply_effect_start + cards_length <= action_idx < apply_effect_start + 2 * cards_length:
+        card_idx = action_idx - (apply_effect_start + cards_length)
+        if 0 <= card_idx < cards_length:
+            return Action(type=ActionType.APPLY_EFFECT, card_id=card_names[card_idx], card_effect=Effect(effect_type=CardEffectType.SCRAP, is_scrap_effect=True))
     current_act_index += 2 * cards_length
-  
-    # Handle SCRAP_CARD
-    scrap_start_index = current_act_index
-    card_idx = -1
-    expected_source = None
 
-    # Check hand source range
-    if scrap_start_index <= action_idx < scrap_start_index + cards_length:
-        card_idx = action_idx - scrap_start_index
-        expected_source = "hand"
-    # Check discard source range
-    elif scrap_start_index + cards_length <= action_idx < scrap_start_index + 2 * cards_length:
-        card_idx = action_idx - (scrap_start_index + cards_length)
-        expected_source = "discard"
-    # Check trade source range
-    elif scrap_start_index + 2 * cards_length <= action_idx < scrap_start_index + 3 * cards_length:
-        card_idx = action_idx - (scrap_start_index + 2 * cards_length)
-        expected_source = "trade"
+    # SCRAP_CARD (hand, discard, trade)
+    scrap_hand_start = current_act_index
+    scrap_discard_start = scrap_hand_start + cards_length
+    scrap_trade_start = scrap_discard_start + cards_length
+    # hand
+    if scrap_hand_start <= action_idx < scrap_hand_start + cards_length:
+        card_idx = action_idx - scrap_hand_start
+        if 0 <= card_idx < cards_length:
+            return Action(type=ActionType.SCRAP_CARD, card_id=card_names[card_idx], card_source="hand")
+    # discard
+    if scrap_discard_start <= action_idx < scrap_discard_start + cards_length:
+        card_idx = action_idx - scrap_discard_start
+        if 0 <= card_idx < cards_length:
+            return Action(type=ActionType.SCRAP_CARD, card_id=card_names[card_idx], card_source="discard")
+    # trade
+    if scrap_trade_start <= action_idx < scrap_trade_start + cards_length:
+        card_idx = action_idx - scrap_trade_start
+        if 0 <= card_idx < cards_length:
+            return Action(type=ActionType.SCRAP_CARD, card_id=card_names[card_idx], card_source="trade")
+    current_act_index += 3 * cards_length
 
-    if card_idx != -1 and expected_source and action_by_type[ActionType.SCRAP_CARD]:
-        card_name = cards[card_idx].name if card_idx < len(cards) else None
-        if card_name:
-            for action in action_by_type[ActionType.SCRAP_CARD]:
-                # Check if the action matches the card name and the expected source is allowed for this action
-                if action.card_id == card_name and expected_source in action.card_sources:
-                    return action
-    
-    current_act_index += 3 * cards_length # Account for all three potential scrap sources
-
-    # Handle DISCARD_CARDS
+    # DISCARD_CARDS (target discard by card index)
     discard_start_index = current_act_index
-    if discard_start_index <= action_idx < discard_start_index + cards_length and action_by_type[ActionType.DISCARD_CARDS]:
+    if discard_start_index <= action_idx < discard_start_index + cards_length:
         card_idx = action_idx - discard_start_index
-        card_name = cards[card_idx].name if card_idx < len(cards) else None
-        if card_name:
-            for action in action_by_type[ActionType.DISCARD_CARDS]:
-                if action.card_id == card_name and action.card_source == "opponent":
-                    return action
+        if 0 <= card_idx < cards_length:
+            return Action(type=ActionType.DISCARD_CARDS, card_id=card_names[card_idx], card_source="opponent")
     current_act_index += cards_length
 
-    # Fallback: return first available action
-    return available_actions[0]
+    # Fallback: return END_TURN
+    return Action(type=ActionType.END_TURN)
