@@ -3,6 +3,8 @@ from datetime import datetime
 from pathlib import Path
 import torch
 import time
+import copy
+import random
 
 from src.cards.card import Card
 from src.ai.agent import Agent
@@ -78,6 +80,9 @@ def main():
                        model_path=model_path)
     opponent = RandomAgent("Rand")
 
+    # Keep a record of all past agent iterations
+    past_agents = []
+
     total_time_spent_on_updates = 0.0
     total_time_spent_on_episodes = 0.0
     total_time_spent_on_eval = 0.0
@@ -107,6 +112,20 @@ def main():
         total_time_spent_on_updates += duration_update
         log(f"Update {upd} complete in {duration_update:.2f}s.")
 
+        # Save a deep copy of the agent after update
+        past_agent = copy.deepcopy(agent)
+        past_agent.clear_buffers()
+        # Update the name of the agent to include the update number
+        past_agent.name = f"PPO_{upd}"
+        past_agents.append(past_agent)
+
+        # Set opponent to a randomly chosen past agent (excluding current agent)
+        if len(past_agents) > 1:
+            opponent = random.choice(past_agents[:-1])
+        else:
+            opponent = RandomAgent("Rand")
+        log(f"Opponent set to {opponent.name}.")
+
         # save checkpoint per update
         ts = datetime.now().strftime("%m%d_%H%M")
         Path("models").mkdir(exist_ok=True)
@@ -115,6 +134,7 @@ def main():
         log(f"Checkpoint saved.")
 
         # Evaluate performance over 50 games
+        log(f"Evaluating performance of {agent.name} vs {opponent.name}...")
         start_time = time.time()
         eval_games = 50
         wins = 0
