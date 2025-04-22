@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from typing import TYPE_CHECKING, List, Optional
-import numpy as np
+import time
 from src.ai.agent import Agent
 from src.engine.actions import get_available_actions
 from src.nn.state_encoder import encode_state, get_state_size
@@ -83,7 +83,6 @@ class PPOAgent(Agent):
         self.num_decisions = 0
 
     def make_decision(self, game_state: 'Game'):
-        import time
         start_time = time.perf_counter()
         available = get_available_actions(game_state, game_state.current_player)
         state = encode_state(
