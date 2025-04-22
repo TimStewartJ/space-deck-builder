@@ -2,19 +2,15 @@ import argparse
 from datetime import datetime
 from pathlib import Path
 import torch
-import random
 import time
 
 from src.cards.card import Card
 from src.ai.agent import Agent
-from src.nn.state_encoder import encode_state
-from src.engine.actions import get_available_actions
 from src.cards.loader import load_trade_deck_cards
 from src.engine.game import Game
 from src.ai.ppo_agent import PPOAgent
 from src.ai.random_agent import RandomAgent
 from src.utils.logger import log, set_verbose
-from typing import Tuple
 
 def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card], card_names: list[str]):
     game = Game(cards)
@@ -84,15 +80,17 @@ def main():
 
     total_time_spent_on_updates = 0.0
     total_time_spent_on_episodes = 0.0
+    total_time_spent_on_eval = 0.0
 
     for upd in range(1, args.updates + 1):
-        start_time = time.time()
         log(f"Starting update {upd}/{args.updates}")
         # collect trajectories
+        start_time = time.time()
         all_data = [run_episode(agent, opponent, cards, names)
                     for _ in range(args.episodes)]
-        total_time_spent_on_episodes += time.time() - start_time
-        log(f"Finished {args.episodes} episodes in {time.time() - start_time:.2f}s.")
+        duration_episodes = time.time() - start_time
+        total_time_spent_on_episodes += duration_episodes
+        log(f"Finished {args.episodes} episodes in {duration_episodes:.2f}s.")
 
         # unpack & concat
         S, A, OL, R, Adv = zip(*all_data)
@@ -105,15 +103,16 @@ def main():
         # perform PPO update
         start_time = time.time()
         agent.update(states, actions, old_lp, returns, advs)
+        duration_update = time.time() - start_time
+        total_time_spent_on_updates += duration_update
+        log(f"Update {upd} complete in {duration_update:.2f}s.")
 
         # save checkpoint per update
         ts = datetime.now().strftime("%m%d_%H%M")
         Path("models").mkdir(exist_ok=True)
         torch.save(agent.model.state_dict(),
                    f"models/ppo_agent_{ts}_upd{upd}.pth")
-        duration = time.time() - start_time
-        total_time_spent_on_updates += duration
-        log(f"Update {upd} complete in {duration:.2f}s.")
+        log(f"Checkpoint saved.")
 
         # Evaluate performance over 50 games
         start_time = time.time()
@@ -132,13 +131,13 @@ def main():
         agent.clear_buffers()
         losses = eval_games - wins
         win_rate = wins / eval_games
-        log(f"Evaluation after update {upd}: {wins}/{eval_games} wins, {losses} losses (win rate {win_rate:.2%}) in {time.time() - start_time:.2f}s.")
+        duration_eval = time.time() - start_time
+        total_time_spent_on_eval += duration_eval
+        log(f"Evaluation after update {upd}: {wins}/{eval_games} wins, {losses} losses (win rate {win_rate:.2%}) in {duration_eval:.2f}s.")
 
-    log(f"Total time spent on updates: {total_time_spent_on_updates:.2f}s")
-    log(f"\tAverage time per update: {total_time_spent_on_updates / args.updates:.2f}s")
-    log(f"Total time spent on episodes: {total_time_spent_on_episodes:.2f}s")
-    log(f"\tAverage time per episode: {total_time_spent_on_episodes / (args.updates * args.episodes):.2f}s")
-
+    log(f"Total time spent on episodes: {total_time_spent_on_episodes:.2f}s\n\tAverage per update: {total_time_spent_on_episodes / args.updates:.2f}s")
+    log(f"Total time spent on PPO updates: {total_time_spent_on_updates:.2f}s\n\tAverage per update: {total_time_spent_on_updates / args.updates:.2f}s")
+    log(f"Total time spent on evaluation: {total_time_spent_on_eval:.2f}s\n\tAverage per update: {total_time_spent_on_eval / args.updates:.2f}s")
     log("All updates finished.")
 
 if __name__ == "__main__":
