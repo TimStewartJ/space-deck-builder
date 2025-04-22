@@ -37,19 +37,22 @@ class Game:
         self.fill_trade_row()
 
     def setup_explorer_pile(self):
-        # Create a pile of 5 Explorer cards
+        # Create a pile of 10 Explorer cards
         from src.cards.card import Card
-        from src.cards.effects import Effect
+        from src.cards.effects import Effect, CardEffectType
+
         for _ in range(10):
-            explorer_card = Card("Explorer", 
-                                 len(self.card_names) - 1, 2, 
-                                 [
-                                     Effect(CardEffectType.TRADE, 2), 
-                                     Effect(CardEffectType.COMBAT, 2, 
-                                            is_scrap_effect=True)
-                                            ], "ship")
+            explorer_card = Card(
+                "Explorer",
+                len(self.card_names) - 1,
+                2,
+                [
+                    Effect(CardEffectType.TRADE, 2),
+                    Effect(CardEffectType.COMBAT, 2, is_scrap_effect=True),
+                ],
+                "ship",
+            )
             self.explorer_pile.append(explorer_card)
-    
     def fill_trade_row(self):
         # Fill the trade row with 5 cards
         while len(self.trade_row) < 5 and self.trade_deck:
@@ -97,15 +100,30 @@ class Game:
         for _ in range(2):
             starting_deck.append(Card("Viper", len(self.card_names) - 1, 0, [Effect(CardEffectType.COMBAT, 1)], "ship"))
         return starting_deck
+    
+    def step(self, action: Action):
+        # Remember who acted
+        actor = self.current_player
+        # Execute the action & advance
+        self.next_step(action)
+        done = self.is_game_over
+        # Simple win/loss reward
+        if done:
+            winner = self.get_winner()
+            reward = 1.0 if actor.name == winner else -1.0
+        else:
+            reward = 0.0
+        return reward, done
 
-    def next_step(self):
+    def next_step(self, action: Action | None = None):
         if self.is_game_over:
             return
         
         turn_ended = False
 
-        # Get player decision (through UI or AI)
-        action = self.current_player.make_decision(self)
+        if action is None:
+            # Get player decision (through UI or AI)
+            action = self.current_player.make_decision(self)
 
         log(f"Getting action for {self.current_player.name}", v=True)
 
