@@ -48,6 +48,7 @@ def main():
     parser.add_argument("--clip-eps",    type=float, default=0.2)
     parser.add_argument("--epochs",      type=int,   default=4)
     parser.add_argument("--batch-size",  type=int,   default=64)
+    parser.add_argument("--device",      type=str,   default="cuda", help="Device to run ML (cuda or cpu)")
     args = parser.parse_args()
 
     set_verbose(False)
@@ -61,7 +62,8 @@ def main():
                        lam=args.lam,
                        clip_eps=args.clip_eps,
                        epochs=args.epochs,
-                       batch_size=args.batch_size)
+                       batch_size=args.batch_size,
+                       device=args.device)
     opponent = RandomAgent("Rand")
 
     total_time_spent_on_updates = 0.0
