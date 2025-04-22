@@ -78,7 +78,13 @@ class PPOAgent(Agent):
         self.values = []
         self.dones = []
 
+        # decision timing
+        self.total_decision_time = 0.0
+        self.num_decisions = 0
+
     def make_decision(self, game_state: 'Game'):
+        import time
+        start_time = time.perf_counter()
         available = get_available_actions(game_state, game_state.current_player)
         state = encode_state(
             game_state, is_current_player_training=True,
@@ -105,6 +111,11 @@ class PPOAgent(Agent):
         self.log_probs.append(logp.detach())
         self.values.append(value.detach())
         self.dones.append(False)
+
+        # timing
+        elapsed = time.perf_counter() - start_time
+        self.total_decision_time += elapsed
+        self.num_decisions += 1
 
         return action
 
@@ -179,3 +190,13 @@ class PPOAgent(Agent):
         self.rewards = []
         self.values = []
         self.dones = []
+
+    def get_average_decision_time(self, reset: bool = True):
+        if self.num_decisions == 0:
+            avg = 0.0
+        else:
+            avg = self.total_decision_time / self.num_decisions
+        if reset:
+            self.total_decision_time = 0.0
+            self.num_decisions = 0
+        return avg

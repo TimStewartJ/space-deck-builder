@@ -139,6 +139,9 @@ def main():
     log(f"Total time spent on PPO updates: {total_time_spent_on_updates:.2f}s\n\tAverage per update: {total_time_spent_on_updates / args.updates:.2f}s")
     log(f"Total time spent on evaluation: {total_time_spent_on_eval:.2f}s\n\tAverage per update: {total_time_spent_on_eval / args.updates:.2f}s")
     log("All updates finished.")
+    # Log average decision time per decision
+    avg_decision_time = agent.get_average_decision_time()
+    log(f"Average PPOAgent decision time: {avg_decision_time:.6f} seconds per decision.")
 
 if __name__ == "__main__":
     main()
