@@ -12,7 +12,7 @@ from src.ai.ppo_agent import PPOAgent
 from src.ai.random_agent import RandomAgent
 from src.utils.logger import log, set_verbose
 
-def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card], card_names: list[str]):
+def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card]):
     game = Game(cards)
     game.add_player(agent.name, agent)
     game.add_player(opponent.name, opponent)
@@ -86,7 +86,7 @@ def main():
         log(f"Starting update {upd}/{args.updates}")
         # collect trajectories
         start_time = time.time()
-        all_data = [run_episode(agent, opponent, cards, names)
+        all_data = [run_episode(agent, opponent, cards)
                     for _ in range(args.episodes)]
         duration_episodes = time.time() - start_time
         total_time_spent_on_episodes += duration_episodes
