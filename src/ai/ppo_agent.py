@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, Optional
 import numpy as np
 from src.ai.agent import Agent
 from src.engine.actions import get_available_actions
@@ -48,7 +48,8 @@ class PPOAgent(Agent):
         clip_eps: float = 0.2,
         epochs: int = 4,
         batch_size: int = 64,
-        device: str = "cuda"
+        device: str = "cuda",
+        model_path: Optional[str] = None
     ):
         super().__init__(name)
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
@@ -64,6 +65,9 @@ class PPOAgent(Agent):
         self.action_dim = get_action_space_size(cards)
         log(f"State size: {self.state_dim}, Action size: {self.action_dim}")
         self.model = PPOActorCritic(self.state_dim, self.action_dim).to(self.device)
+        if model_path:
+            log(f"Loading PPO model from {model_path}")
+            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
 
         # rollout buffers

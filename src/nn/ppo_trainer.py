@@ -49,7 +49,21 @@ def main():
     parser.add_argument("--epochs",      type=int,   default=4)
     parser.add_argument("--batch-size",  type=int,   default=64)
     parser.add_argument("--device",      type=str,   default="cuda", help="Device to run ML (cuda or cpu)")
+    parser.add_argument("--model-path",  type=str,   default=None, help="Path to a pretrained PPO model to load")
+    parser.add_argument("--load-latest-model", action="store_true", help="If set, load the latest PPO model from the models directory if available.")
     args = parser.parse_args()
+
+    # Determine model path if --load-latest-model is set and --model-path is not provided
+    model_path = args.model_path
+    if args.load_latest_model and not model_path:
+        import glob, os
+        model_files = glob.glob(os.path.join("models", "ppo_agent_*.pth"))
+        if model_files:
+            model_files.sort(key=os.path.getmtime, reverse=True)
+            model_path = model_files[0]
+            log(f"Auto-loading latest PPO model: {model_path}")
+        else:
+            log("No PPO model found in models directory to auto-load.")
 
     set_verbose(False)
     cards = load_trade_deck_cards(args.cards_path, filter_sets=["Core Set"], log_cards=False)
@@ -64,7 +78,8 @@ def main():
                        clip_eps=args.clip_eps,
                        epochs=args.epochs,
                        batch_size=args.batch_size,
-                       device=args.device)
+                       device=args.device,
+                       model_path=model_path)
     opponent = RandomAgent("Rand")
 
     total_time_spent_on_updates = 0.0
