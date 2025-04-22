@@ -52,7 +52,8 @@ def main():
     args = parser.parse_args()
 
     set_verbose(False)
-    cards = load_trade_deck_cards(args.cards_path, filter_sets=["Core Set"])
+    cards = load_trade_deck_cards(args.cards_path, filter_sets=["Core Set"], log_cards=False)
+    # Create list of unique card names
     names = [c.name for c in cards]
     names = list(dict.fromkeys(names)) + ["Scout","Viper","Explorer"]
 

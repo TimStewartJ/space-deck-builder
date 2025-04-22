@@ -88,7 +88,7 @@ class PPOAgent(Agent):
 
         dist = torch.distributions.Categorical(torch.softmax(logits, -1))
         act_idx = dist.sample().item()
-        logp = dist.log_prob(torch.tensor(act_idx, device=self.device))
+        logp: torch.Tensor = dist.log_prob(torch.tensor(act_idx, device=self.device))
 
         # decode back to Action
         action = next(a for a in available if encode_action(a, cards=self.cards) == act_idx)
