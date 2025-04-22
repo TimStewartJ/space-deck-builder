@@ -26,15 +26,16 @@ def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card], card_names:
         current_player = game.current_player
         # Determine if the current player is the training agent
         is_agent = current_player.name == agent.name
-        reward, done = game.step()
+        done = game.step()
+        reward = 0.0
+        if done:
+            if game.get_winner() == agent.name:
+                reward = 1.0
+            else:
+                reward = -1.0
         if is_agent:
             agent.store_reward(reward, done)
-    # bootstrap value for last state
-    _, next_value = agent.model(
-        encode_state(game, True, card_names, get_available_actions(game, game.current_player))
-        .to(agent.device)
-    )
-    return agent.finish_batch(next_value)
+    return agent.finish_batch()
 
 def main():
     parser = argparse.ArgumentParser("PPO Trainer")
@@ -80,6 +81,7 @@ def main():
         advs     = torch.cat(Adv)
 
         # perform PPO update
+        start_time = time.time()
         agent.update(states, actions, old_lp, returns, advs)
 
         # save checkpoint per update
@@ -100,10 +102,9 @@ def main():
             game.add_player(opponent.name, opponent)
             game.start_game()
             done = False
-            last_reward = 0
             while not done:
-                last_reward, done = game.step()
-            if last_reward > 0:
+                done = game.step()
+            if game.get_winner() == agent.name:
                 wins += 1
         agent.clear_buffers()
         losses = eval_games - wins

@@ -107,13 +107,7 @@ class Game:
         # Execute the action & advance
         self.next_step(action)
         done = self.is_game_over
-        # Simple win/loss reward
-        if done:
-            winner = self.get_winner()
-            reward = 1.0 if actor.name == winner else -1.0
-        else:
-            reward = 0.0
-        return reward, done
+        return done
 
     def next_step(self, action: Action | None = None):
         if self.is_game_over:

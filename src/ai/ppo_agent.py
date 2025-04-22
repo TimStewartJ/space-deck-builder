@@ -104,11 +104,11 @@ class PPOAgent(Agent):
         self.rewards.append(reward)
         self.dones[-1] = done
 
-    def finish_batch(self, next_value: torch.Tensor):
+    def finish_batch(self):
         # compute GAE & returns
         returns, advs = [], []
         gae = 0.0
-        vals = self.values + [next_value]
+        vals = self.values + [torch.Tensor([0.0], device=self.device)]  # add terminal value
         for step in reversed(range(len(self.rewards))):
             delta = (
                 self.rewards[step]
