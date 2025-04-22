@@ -60,6 +60,7 @@ class PPOAgent(Agent):
 
         self.state_dim = get_state_size(cards)
         self.action_dim = get_action_space_size(cards)
+        log(f"State size: {self.state_dim}, Action size: {self.action_dim}")
         self.model = PPOActorCritic(self.state_dim, self.action_dim).to(self.device)
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
 
@@ -161,3 +162,12 @@ class PPOAgent(Agent):
                 self.optimizer.step()
 
         log(f"PPO update done. Actor loss {actor_loss:.3f}  Critic loss {critic_loss:.3f}")
+
+    def clear_buffers(self):
+        """Clear all rollout buffers."""
+        self.states = []
+        self.actions = []
+        self.log_probs = []
+        self.rewards = []
+        self.values = []
+        self.dones = []

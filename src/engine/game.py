@@ -101,7 +101,7 @@ class Game:
             starting_deck.append(Card("Viper", len(self.card_names) - 1, 0, [Effect(CardEffectType.COMBAT, 1)], "ship"))
         return starting_deck
     
-    def step(self, action: Action):
+    def step(self, action: Action | None = None):
         # Remember who acted
         actor = self.current_player
         # Execute the action & advance
