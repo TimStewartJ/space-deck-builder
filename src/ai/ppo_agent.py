@@ -17,19 +17,19 @@ class PPOActorCritic(nn.Module):
         super().__init__()
         # actor head
         self.actor = nn.Sequential(
-            nn.Linear(state_dim, 256),
+            nn.Linear(state_dim, 1024),
             nn.Tanh(),
-            nn.Linear(256, 256),
+            nn.Linear(1024, 512),
             nn.Tanh(),
-            nn.Linear(256, action_dim)
+            nn.Linear(512, action_dim)
         )
         # critic head
         self.critic = nn.Sequential(
-            nn.Linear(state_dim, 256),
+            nn.Linear(state_dim, 1024),
             nn.Tanh(),
-            nn.Linear(256, 256),
+            nn.Linear(1024, 512),
             nn.Tanh(),
-            nn.Linear(256, 1)
+            nn.Linear(512, 1)
         )
 
     def forward(self, x: torch.Tensor):
@@ -48,9 +48,11 @@ class PPOAgent(Agent):
         clip_eps: float = 0.2,
         epochs: int = 4,
         batch_size: int = 64,
+        device: str = "cuda"
     ):
         super().__init__(name)
-        self.device = torch.device("cpu")
+        self.device = torch.device(device if torch.cuda.is_available() else "cpu")
+        log(f"Using device: {self.device}")
         self.gamma = gamma
         self.lam = lam
         self.clip_eps = clip_eps
@@ -108,7 +110,7 @@ class PPOAgent(Agent):
         # compute GAE & returns
         returns, advs = [], []
         gae = 0.0
-        vals = self.values + [torch.Tensor([0.0], device=self.device)]  # add terminal value
+        vals = self.values + [torch.tensor([0.0], device=self.device)]  # add terminal value
         for step in reversed(range(len(self.rewards))):
             delta = (
                 self.rewards[step]
