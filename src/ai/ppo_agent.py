@@ -32,7 +32,7 @@ class PPOActorCritic(nn.Module):
             nn.Linear(512, 1)
         )
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         logits = self.actor(x)
         value = self.critic(x).squeeze(-1)
         return logits, value
@@ -81,6 +81,8 @@ class PPOAgent(Agent):
             cards=self.cards, available_actions=available
         ).to(self.device)
 
+        logits: torch.Tensor
+        value: torch.Tensor
         logits, value = self.model(state)
         # mask out unavailable
         mask = state[-self.action_dim:]
