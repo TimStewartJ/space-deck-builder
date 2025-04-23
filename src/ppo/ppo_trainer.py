@@ -163,7 +163,7 @@ def main():
         duration_eval = time.time() - start_time
         total_time_spent_on_eval += duration_eval
         log(f"Evaluation after update {upd}: {wins}/{eval_games} wins, {losses} losses (win rate {win_rate:.2%}) in {duration_eval:.2f}s.")
-        log(f"Average steps per game: {sum(steps) / len(steps):.2f}, avg time per step {duration_eval/sum(steps):.2f} seconds.")
+        log(f"Average steps per game: {sum(steps) / len(steps):.2f}, avg time per step {duration_eval/sum(steps):.6f} seconds.")
 
     log(f"Total time spent on episodes: {total_time_spent_on_episodes:.2f}s\n\tAverage per update: {total_time_spent_on_episodes / args.updates:.2f}s")
     log(f"Total time spent on PPO updates: {total_time_spent_on_updates:.2f}s\n\tAverage per update: {total_time_spent_on_updates / args.updates:.2f}s")
