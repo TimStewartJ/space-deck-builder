@@ -50,15 +50,15 @@ def run_episode_worker(state_dict, agent_kwargs, cards, seed):
 
 def main():
     parser = argparse.ArgumentParser("PPO Trainer")
-    parser.add_argument("--episodes",    type=int,   default=1000)
-    parser.add_argument("--updates",     type=int,   default=10)
+    parser.add_argument("--episodes",    type=int,   default=1024)
+    parser.add_argument("--updates",     type=int,   default=8)
     parser.add_argument("--cards-path",  type=str,   default="data/cards.csv")
     parser.add_argument("--lr",          type=float, default=3e-4)
     parser.add_argument("--gamma",       type=float, default=0.99)
     parser.add_argument("--lam",         type=float, default=0.95)
     parser.add_argument("--clip-eps",    type=float, default=0.2)
     parser.add_argument("--epochs",      type=int,   default=4)
-    parser.add_argument("--batch-size",  type=int,   default=64)
+    parser.add_argument("--batch-size",  type=int,   default=256)
     parser.add_argument("--device",      type=str,   default="cuda", help="Device to run ML (cuda or cpu)")
     parser.add_argument("--model-path",  type=str,   default=None, help="Path to a pretrained PPO model to load")
     parser.add_argument("--load-latest-model", action="store_true", help="If set, load the latest PPO model from the models directory if available.")
@@ -152,7 +152,7 @@ def main():
         agent.update(states, actions, old_lp, returns, advs)
         duration_update = time.time() - start_time
         total_time_spent_on_updates += duration_update
-        log(f"Update {upd} complete in {duration_update:.2f}s.")
+        log(f"Update {upd} complete in {duration_update:.2f}s. State size: {states.shape}")
 
         # Save a deep copy of the agent after update
         past_agent = copy.deepcopy(agent)
@@ -168,13 +168,6 @@ def main():
             else:
                 opponent = RandomAgent("Rand")
             log(f"Opponent set to {opponent.name}.")
-
-        # save checkpoint per update
-        ts = datetime.now().strftime("%m%d_%H%M")
-        Path("models").mkdir(exist_ok=True)
-        torch.save(agent.model.state_dict(),
-                   f"models/ppo_agent_{ts}_upd{upd}.pth")
-        log(f"Checkpoint saved.")
 
         # Evaluate performance over 50 games
         log(f"Evaluating performance of {agent.name} vs {opponent.name}...")
@@ -200,6 +193,13 @@ def main():
         total_time_spent_on_eval += duration_eval
         log(f"Evaluation after update {upd}: {wins}/{eval_games} wins, {losses} losses (win rate {win_rate:.2%}) in {duration_eval:.2f}s.")
         log(f"Average steps per game: {sum(steps) / len(steps):.2f}, avg time per step {duration_eval/sum(steps):.6f} seconds.")
+
+        # save checkpoint per update
+        ts = datetime.now().strftime("%m%d_%H%M")
+        Path("models").mkdir(exist_ok=True)
+        torch.save(agent.model.state_dict(),
+                   f"models/ppo_agent_{ts}_upd{upd}_wins{wins}.pth")
+        log(f"Checkpoint saved.")
 
     log(f"Total time spent on episodes: {total_time_spent_on_episodes:.2f}s\n\tAverage per update: {total_time_spent_on_episodes / args.updates:.2f}s")
     log(f"Total time spent on PPO updates: {total_time_spent_on_updates:.2f}s\n\tAverage per update: {total_time_spent_on_updates / args.updates:.2f}s")
