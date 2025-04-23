@@ -49,10 +49,14 @@ class PPOAgent(Agent):
         epochs: int = 4,
         batch_size: int = 64,
         device: str = "cuda",
+        main_device: str = "cuda",
+        simulation_device: str = "cpu",
         model_path: Optional[str] = None
     ):
         super().__init__(name)
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
+        self.main_device = torch.device(main_device if torch.cuda.is_available() else "cpu")
+        self.simulation_device = torch.device(simulation_device if torch.cuda.is_available() else "cpu")
         log(f"Using device: {self.device}")
         self.gamma = gamma
         self.lam = lam
@@ -83,6 +87,9 @@ class PPOAgent(Agent):
         self.num_decisions = 0
 
     def make_decision(self, game_state: 'Game'):
+        self.device = self.simulation_device
+        self.model.to(self.simulation_device)
+
         start_time = time.perf_counter()
         available = get_available_actions(game_state, game_state.current_player)
         state = encode_state(
@@ -123,6 +130,8 @@ class PPOAgent(Agent):
         self.dones[-1] = done
 
     def finish_batch(self):
+        self.device = self.main_device
+        self.model.to(self.main_device)
         # compute GAE & returns
         returns, advs = [], []
         gae = 0.0
@@ -138,15 +147,14 @@ class PPOAgent(Agent):
             returns.insert(0, gae + vals[step])
 
         # to tensors
-        states   = torch.stack(self.states)
+        states   = torch.stack(self.states).to(self.device)
         actions  = torch.tensor(self.actions, dtype=torch.int64, device=self.device)
-        old_lp   = torch.stack(self.log_probs)
+        old_lp   = torch.stack(self.log_probs).to(self.device)
         returns  = torch.tensor(returns, dtype=torch.float32, device=self.device)
         advs     = torch.tensor(advs, dtype=torch.float32, device=self.device)
 
         # clear buffers
-        self.states, self.actions, self.log_probs = [], [], []
-        self.rewards, self.values, self.dones      = [], [], []
+        self.clear_buffers()
 
         return states, actions, old_lp, returns, advs
 

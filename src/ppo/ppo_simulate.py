@@ -38,7 +38,7 @@ def main():
     if not model1_path:
         raise RuntimeError("No PPO model found for player 1.")
     log(f"Loading PPO model for player 1 from {model1_path}")
-    agent1 = PPOAgent("PPO_1", names, device=args.device, model_path=model1_path)
+    agent1 = PPOAgent("PPO_1", names, model_path=model1_path)
 
     # Player 2: PPO agent or random agent
     if args.player2_random or not args.model2:
@@ -46,7 +46,7 @@ def main():
         log("Player 2 set to RandomAgent.")
     else:
         log(f"Loading PPO model for player 2 from {args.model2}")
-        agent2 = PPOAgent("PPO_2", names, device=args.device, model_path=args.model2)
+        agent2 = PPOAgent("PPO_2", names, model_path=args.model2)
 
     wins1, wins2 = 0, 0
     all_experiences = []

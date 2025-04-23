@@ -49,6 +49,8 @@ def main():
     parser.add_argument("--device",      type=str,   default="cuda", help="Device to run ML (cuda or cpu)")
     parser.add_argument("--model-path",  type=str,   default=None, help="Path to a pretrained PPO model to load")
     parser.add_argument("--load-latest-model", action="store_true", help="If set, load the latest PPO model from the models directory if available.")
+    parser.add_argument("--main-device", type=str, default="cuda", help="Device for training/updates (cuda or cpu)")
+    parser.add_argument("--simulation-device", type=str, default="cpu", help="Device for episode simulation (cpu or cuda)")
     args = parser.parse_args()
 
     # Determine model path if --load-latest-model is set and --model-path is not provided
@@ -76,7 +78,8 @@ def main():
                        clip_eps=args.clip_eps,
                        epochs=args.epochs,
                        batch_size=args.batch_size,
-                       device=args.device,
+                       main_device=args.main_device,
+                       simulation_device=args.simulation_device,
                        model_path=model_path)
     opponent = RandomAgent("Rand")
 
@@ -91,8 +94,9 @@ def main():
         log(f"Starting update {upd}/{args.updates}")
         # collect trajectories
         start_time = time.time()
+
         all_data = [run_episode(agent, opponent, cards)
-                    for _ in range(args.episodes)]
+                for _ in range(args.episodes)]
         duration_episodes = time.time() - start_time
         total_time_spent_on_episodes += duration_episodes
         log(f"Finished {args.episodes} episodes in {duration_episodes:.2f}s.")
