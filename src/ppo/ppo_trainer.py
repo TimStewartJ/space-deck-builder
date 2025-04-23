@@ -38,15 +38,41 @@ def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card]):
     return agent.finish_batch()
 
 def run_episode_worker(state_dict, agent_kwargs, cards, seed):
-    import random
     random.seed(seed)
     set_verbose(False)
+
     # Reconstruct agent with same weights
     agent = PPOAgent("PPO", **agent_kwargs)
     agent.model.load_state_dict(state_dict)
     # Always use a random opponent in worker
     opponent = RandomAgent("Rand")
     return run_episode(agent, opponent, cards)
+
+def run_eval_game_worker(agent_state_dict, agent_kwargs, opponent_type, opponent_state_dict, opponent_kwargs, cards, seed):
+    random.seed(seed)
+    set_verbose(False)
+
+    # Reconstruct agent
+    agent = PPOAgent("PPO", **agent_kwargs)
+    agent.model.load_state_dict(agent_state_dict)
+    # Reconstruct opponent
+    if opponent_type == "ppo":
+        opponent = PPOAgent("Opp", **opponent_kwargs)
+        opponent.model.load_state_dict(opponent_state_dict)
+    else:
+        opponent = RandomAgent("Rand")
+
+    # Play one game
+    game = Game(cards)
+    game.add_player(agent.name, agent)
+    game.add_player(opponent.name, opponent)
+    game.start_game()
+    done = False
+    while not done:
+        done = game.step()
+    win = 1 if game.get_winner() == agent.name else 0
+    steps = len(agent.states)
+    return win, steps
 
 def main():
     parser = argparse.ArgumentParser("PPO Trainer")
@@ -168,23 +194,49 @@ def main():
                 opponent = RandomAgent("Rand")
             log(f"Opponent set to {opponent.name}.")
 
-        # Evaluate performance over 50 games
+        # Evaluate performance
         log(f"Evaluating performance of {agent.name} vs {opponent.name}...")
         start_time = time.time()
-        eval_games = 50
-        wins = 0
-        steps = []
-        for _ in range(eval_games):
-            game = Game(cards)
-            game.add_player(agent.name, agent)
-            game.add_player(opponent.name, opponent)
-            game.start_game()
-            done = False
-            while not done:
-                done = game.step()
-            steps.append(len(agent.states))
-            if game.get_winner() == agent.name:
-                wins += 1
+        eval_games = 100
+        # Prepare concurrent evaluation
+        eval_state_dict = agent.model.cpu().state_dict()
+        eval_agent_kwargs = {
+            "card_names": card_names,
+            "lr": args.lr,
+            "gamma": args.gamma,
+            "lam": args.lam,
+            "clip_eps": args.clip_eps,
+            "device": args.simulation_device,
+            "main_device": args.main_device,
+            "simulation_device": args.simulation_device,
+            "log_debug": False,
+        }
+        if isinstance(opponent, PPOAgent):
+            opponent_type = "ppo"
+            opponent_state_dict = opponent.model.cpu().state_dict()
+            opponent_kwargs = eval_agent_kwargs.copy()
+        else:
+            opponent_type = "random"
+            opponent_state_dict = None
+            opponent_kwargs = {}
+        seeds = [random.randint(0, 1_000_000_000) for _ in range(eval_games)]
+        with ProcessPoolExecutor(max_workers=args.workers) as executor:
+            futures = [
+                executor.submit(
+                    run_eval_game_worker,
+                    eval_state_dict,
+                    eval_agent_kwargs,
+                    opponent_type,
+                    opponent_state_dict,
+                    opponent_kwargs,
+                    cards,
+                    s
+                )
+                for s in seeds
+            ]
+            results = [f.result() for f in futures]
+        wins = sum(w for w, _ in results)
+        steps = [s for _, s in results]
         agent.clear_buffers()
         losses = eval_games - wins
         win_rate = wins / eval_games
