@@ -31,6 +31,7 @@ def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card]):
                 reward = 1.0
             else:
                 reward = -1.0
+                agent.make_last_reward_negative()
         if is_agent:
             agent.store_reward(reward, done)
     return agent.finish_batch()

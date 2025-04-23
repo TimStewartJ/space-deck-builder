@@ -19,17 +19,21 @@ class PPOActorCritic(nn.Module):
         self.actor = nn.Sequential(
             nn.Linear(state_dim, 1024),
             nn.Tanh(),
-            nn.Linear(1024, 512),
+            nn.Linear(1024, 1024),
             nn.Tanh(),
-            nn.Linear(512, action_dim)
+            nn.Linear(1024, 1024),
+            nn.Tanh(),
+            nn.Linear(1024, action_dim)
         )
         # critic head
         self.critic = nn.Sequential(
             nn.Linear(state_dim, 1024),
             nn.Tanh(),
-            nn.Linear(1024, 512),
+            nn.Linear(1024, 1024),
             nn.Tanh(),
-            nn.Linear(512, 1)
+            nn.Linear(1024, 1024),
+            nn.Tanh(),
+            nn.Linear(1024, 1)
         )
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -128,6 +132,11 @@ class PPOAgent(Agent):
     def store_reward(self, reward: float, done: bool):
         self.rewards.append(reward)
         self.dones[-1] = done
+
+    def make_last_reward_negative(self):
+        """Make the last reward negative to indicate end of episode."""
+        if self.rewards:
+            self.rewards[-1] = -1.0
 
     def finish_batch(self):
         self.device = self.main_device
