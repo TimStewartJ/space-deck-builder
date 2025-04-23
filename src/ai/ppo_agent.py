@@ -45,7 +45,7 @@ class PPOAgent(Agent):
     def __init__(
         self,
         name: str,
-        cards: List[str],
+        card_names: List[str],
         lr: float = 3e-4,
         gamma: float = 0.99,
         lam: float = 0.95,
@@ -55,23 +55,27 @@ class PPOAgent(Agent):
         device: str = "cuda",
         main_device: str = "cuda",
         simulation_device: str = "cpu",
-        model_path: Optional[str] = None
+        model_path: Optional[str] = None,
+        log_debug: bool = False,
     ):
         super().__init__(name)
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
         self.main_device = torch.device(main_device if torch.cuda.is_available() else "cpu")
         self.simulation_device = torch.device(simulation_device if torch.cuda.is_available() else "cpu")
-        log(f"Using device: {self.device}")
         self.gamma = gamma
         self.lam = lam
         self.clip_eps = clip_eps
         self.epochs = epochs
         self.batch_size = batch_size
-        self.cards = cards
+        self.cards = card_names
 
-        self.state_dim = get_state_size(cards)
-        self.action_dim = get_action_space_size(cards)
-        log(f"State size: {self.state_dim}, Action size: {self.action_dim}")
+        self.state_dim = get_state_size(card_names)
+        self.action_dim = get_action_space_size(card_names)
+
+        if log_debug:
+            log(f"State size: {self.state_dim}, Action size: {self.action_dim}")
+            log(f"Using device: {self.device}")
+
         self.model = PPOActorCritic(self.state_dim, self.action_dim).to(self.device)
         if model_path:
             log(f"Loading PPO model from {model_path}")
@@ -172,6 +176,8 @@ class PPOAgent(Agent):
         return states, actions, old_lp, returns, advs
 
     def update(self, states, actions, old_lp, returns, advs):
+        self.device = self.main_device
+        self.model.to(self.main_device)
         actor_loss = 0.0
         critic_loss = 0.0
 

@@ -5,6 +5,7 @@ import torch
 import time
 import copy
 import random
+from concurrent.futures import ProcessPoolExecutor
 
 from src.cards.card import Card
 from src.ai.agent import Agent
@@ -36,6 +37,17 @@ def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card]):
             agent.store_reward(reward, done)
     return agent.finish_batch()
 
+def run_episode_worker(state_dict, agent_kwargs, cards, seed):
+    import random
+    random.seed(seed)
+    set_verbose(False)
+    # Reconstruct agent with same weights
+    agent = PPOAgent("PPO", **agent_kwargs)
+    agent.model.load_state_dict(state_dict)
+    # Always use a random opponent in worker
+    opponent = RandomAgent("Rand")
+    return run_episode(agent, opponent, cards)
+
 def main():
     parser = argparse.ArgumentParser("PPO Trainer")
     parser.add_argument("--episodes",    type=int,   default=1000)
@@ -53,6 +65,7 @@ def main():
     parser.add_argument("--main-device", type=str, default="cuda", help="Device for training/updates (cuda or cpu)")
     parser.add_argument("--simulation-device", type=str, default="cpu", help="Device for episode simulation (cpu or cuda)")
     parser.add_argument("--self-play", action="store_true", help="If set, the agent will play against itself instead of a random agent.")
+    parser.add_argument("--workers", type=int, default=8, help="Number of parallel processes for episodes")
     args = parser.parse_args()
 
     # Determine model path if --load-latest-model is set and --model-path is not provided
@@ -70,10 +83,10 @@ def main():
     set_verbose(False)
     cards = load_trade_deck_cards(args.cards_path, filter_sets=["Core Set"], log_cards=False)
     # Create list of unique card names
-    names = [c.name for c in cards]
-    names = list(dict.fromkeys(names)) + ["Scout","Viper","Explorer"]
+    card_names = [c.name for c in cards]
+    card_names = list(dict.fromkeys(card_names)) + ["Scout","Viper","Explorer"]
 
-    agent    = PPOAgent("PPO", names,
+    agent    = PPOAgent("PPO", card_names,
                        lr=args.lr,
                        gamma=args.gamma,
                        lam=args.lam,
@@ -91,14 +104,36 @@ def main():
     total_time_spent_on_updates = 0.0
     total_time_spent_on_episodes = 0.0
     total_time_spent_on_eval = 0.0
+    overall_start_time = time.perf_counter()
 
     for upd in range(1, args.updates + 1):
         log(f"Starting update {upd}/{args.updates}")
         # collect trajectories
         start_time = time.time()
 
-        all_data = [run_episode(agent, opponent, cards)
-                for _ in range(args.episodes)]
+        # Parallel episode rollouts
+        # Get model params from cpu
+        state_dict   = agent.model.cpu().state_dict()
+        agent_kwargs = {
+            "card_names": card_names,
+            "lr": args.lr,
+            "gamma": args.gamma,
+            "lam": args.lam,
+            "clip_eps": args.clip_eps,
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "device": args.simulation_device,
+            "main_device": args.main_device,
+            "simulation_device": args.simulation_device,
+            "model_path": model_path,
+            "log_debug": False,
+        }
+        # Generate random seeds for reproducibility
+        seeds = [random.randint(0, 1_000_000_000) for _ in range(args.episodes)]
+        with ProcessPoolExecutor(max_workers=args.workers) as executor:
+            futures = [executor.submit(run_episode_worker, state_dict, agent_kwargs, cards, s)
+                       for s in seeds]
+            all_data = [f.result() for f in futures]
         duration_episodes = time.time() - start_time
         total_time_spent_on_episodes += duration_episodes
         log(f"Finished {args.episodes} episodes in {duration_episodes:.2f}s.")
@@ -172,6 +207,7 @@ def main():
     # Log average decision time per decision
     avg_decision_time = agent.get_average_decision_time()
     log(f"Average PPOAgent decision time: {avg_decision_time:.6f} seconds per decision.")
+    log(f"Overall time spent: {time.perf_counter() - overall_start_time:.2f}s")
 
 if __name__ == "__main__":
     main()
