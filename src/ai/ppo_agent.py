@@ -144,8 +144,8 @@ class PPOAgent(Agent):
             self.dones[-1] = True
 
     def finish_batch(self):
-        self.device = self.main_device
-        self.model.to(self.main_device)
+        self.device = self.simulation_device
+        self.model.to(self.device)
         # compute GAE & returns
         returns, advs = [], []
         gae = 0.0

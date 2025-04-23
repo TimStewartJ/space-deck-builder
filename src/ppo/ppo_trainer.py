@@ -140,11 +140,12 @@ def main():
 
         # unpack & concat
         S, A, OL, R, Adv = zip(*all_data)
-        states   = torch.cat(S)
-        actions  = torch.cat(A)
-        old_lp   = torch.cat(OL)
-        returns  = torch.cat(R)
-        advs     = torch.cat(Adv)
+        agent.device = agent.main_device  # Set device back to main device for training
+        states   = torch.cat(S).to(agent.device)
+        actions  = torch.cat(A).to(agent.device)
+        old_lp   = torch.cat(OL).to(agent.device)
+        returns  = torch.cat(R).to(agent.device)
+        advs     = torch.cat(Adv).to(agent.device)
 
         # perform PPO update
         start_time = time.time()
