@@ -81,7 +81,7 @@ def main():
     opponent = RandomAgent("Rand")
 
     # Keep a record of all past agent iterations
-    past_agents = []
+    past_agents: list[Agent] = [opponent]  # Start with the random agent as the first opponent
 
     total_time_spent_on_updates = 0.0
     total_time_spent_on_episodes = 0.0
