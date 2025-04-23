@@ -59,6 +59,7 @@ def main():
     parser.add_argument("--clip-eps",    type=float, default=0.2)
     parser.add_argument("--epochs",      type=int,   default=4)
     parser.add_argument("--batch-size",  type=int,   default=256)
+    parser.add_argument("--entropy",     type=float, default=0.01, help="Entropy bonus coefficient for PPO")
     parser.add_argument("--device",      type=str,   default="cuda", help="Device to run ML (cuda or cpu)")
     parser.add_argument("--model-path",  type=str,   default=None, help="Path to a pretrained PPO model to load")
     parser.add_argument("--load-latest-model", action="store_true", help="If set, load the latest PPO model from the models directory if available.")
@@ -93,6 +94,7 @@ def main():
                        clip_eps=args.clip_eps,
                        epochs=args.epochs,
                        batch_size=args.batch_size,
+                       entropy_coef=args.entropy,
                        main_device=args.main_device,
                        simulation_device=args.simulation_device,
                        model_path=model_path)
@@ -120,12 +122,9 @@ def main():
             "gamma": args.gamma,
             "lam": args.lam,
             "clip_eps": args.clip_eps,
-            "epochs": args.epochs,
-            "batch_size": args.batch_size,
             "device": args.simulation_device,
             "main_device": args.main_device,
             "simulation_device": args.simulation_device,
-            "model_path": model_path,
             "log_debug": False,
         }
         # Generate random seeds for reproducibility

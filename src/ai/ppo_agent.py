@@ -52,6 +52,7 @@ class PPOAgent(Agent):
         clip_eps: float = 0.2,
         epochs: int = 4,
         batch_size: int = 64,
+        entropy_coef: float = 0.01,
         device: str = "cuda",
         main_device: str = "cuda",
         simulation_device: str = "cpu",
@@ -67,6 +68,7 @@ class PPOAgent(Agent):
         self.clip_eps = clip_eps
         self.epochs = epochs
         self.batch_size = batch_size
+        self.entropy_coef = entropy_coef
         self.cards = card_names
 
         self.state_dim = get_state_size(card_names)
@@ -200,7 +202,8 @@ class PPOAgent(Agent):
                 s2 = torch.clamp(ratio, 1-self.clip_eps, 1+self.clip_eps) * A  # Clipped surrogate objective
                 actor_loss = -torch.min(s1, s2).mean()  # PPO actor loss (policy update)
                 critic_loss = nn.MSELoss()(vals, R)     # Critic loss (value function update)
-                loss = actor_loss + 0.5*critic_loss     # Total loss (weighted sum)
+                entropy = dist.entropy().mean()         # entropy bonus term
+                loss = actor_loss + 0.5*critic_loss - self.entropy_coef * entropy  # include entropy bonus
 
                 self.optimizer.zero_grad()
                 loss.backward()
