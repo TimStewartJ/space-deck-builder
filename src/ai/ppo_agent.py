@@ -137,6 +137,7 @@ class PPOAgent(Agent):
         """Make the last reward negative to indicate end of episode."""
         if self.rewards:
             self.rewards[-1] = -1.0
+            self.dones[-1] = True
 
     def finish_batch(self):
         self.device = self.main_device
@@ -145,15 +146,18 @@ class PPOAgent(Agent):
         returns, advs = [], []
         gae = 0.0
         vals = self.values + [torch.tensor([0.0], device=self.device)]  # add terminal value
+        # Compute Generalized Advantage Estimation (GAE) and returns
         for step in reversed(range(len(self.rewards))):
+            # Temporal difference error (delta)
             delta = (
-                self.rewards[step]
-                + self.gamma * vals[step + 1] * (1 - self.dones[step])
-                - vals[step]
+                self.rewards[step]                           # immediate reward at this step
+                + self.gamma * vals[step + 1] * (1 - self.dones[step])  # discounted next value if not done
+                - vals[step]                                 # subtract current value estimate
             )
+            # GAE calculation
             gae = delta + self.gamma * self.lam * (1 - self.dones[step]) * gae
-            advs.insert(0, gae)
-            returns.insert(0, gae + vals[step])
+            advs.insert(0, gae)  # Insert advantage at the beginning
+            returns.insert(0, gae + vals[step])  # Return = advantage + value
 
         # to tensors
         states   = torch.stack(self.states).to(self.device)
@@ -172,25 +176,25 @@ class PPOAgent(Agent):
         critic_loss = 0.0
 
         for _ in range(self.epochs):
-            idxs = torch.randperm(len(states))
+            idxs = torch.randperm(len(states))  # Shuffle indices for mini-batch SGD
             for start in range(0, len(states), self.batch_size):
-                b = idxs[start:start+self.batch_size]
-                s = states[b]
-                a = actions[b]
-                olp = old_lp[b]
-                R = returns[b]
-                A = advs[b]
+                b = idxs[start:start+self.batch_size]  # Indices for current batch
+                s = states[b]        # Batch of states
+                a = actions[b]       # Batch of actions
+                olp = old_lp[b]      # Batch of old log probabilities
+                R = returns[b]       # Batch of returns (discounted rewards)
+                A = advs[b]          # Batch of advantages
 
-                logits, vals = self.model(s)
-                dist = torch.distributions.Categorical(torch.softmax(logits, -1))
-                nl = dist.log_prob(a)
-                ratio = (nl - olp).exp()
+                logits, vals = self.model(s)  # Forward pass: get action logits and value estimates
+                dist = torch.distributions.Categorical(torch.softmax(logits, -1))  # Action distribution
+                nl = dist.log_prob(a)  # New log probabilities for taken actions
+                ratio = (nl - olp).exp()  # Probability ratio for PPO objective
 
-                s1 = ratio * A
-                s2 = torch.clamp(ratio, 1-self.clip_eps, 1+self.clip_eps) * A
-                actor_loss = -torch.min(s1, s2).mean()
-                critic_loss = nn.MSELoss()(vals, R)
-                loss = actor_loss + 0.5*critic_loss
+                s1 = ratio * A  # Unclipped surrogate objective
+                s2 = torch.clamp(ratio, 1-self.clip_eps, 1+self.clip_eps) * A  # Clipped surrogate objective
+                actor_loss = -torch.min(s1, s2).mean()  # PPO actor loss (policy update)
+                critic_loss = nn.MSELoss()(vals, R)     # Critic loss (value function update)
+                loss = actor_loss + 0.5*critic_loss     # Total loss (weighted sum)
 
                 self.optimizer.zero_grad()
                 loss.backward()
