@@ -51,6 +51,7 @@ def main():
     parser.add_argument("--load-latest-model", action="store_true", help="If set, load the latest PPO model from the models directory if available.")
     parser.add_argument("--main-device", type=str, default="cuda", help="Device for training/updates (cuda or cpu)")
     parser.add_argument("--simulation-device", type=str, default="cpu", help="Device for episode simulation (cpu or cuda)")
+    parser.add_argument("--self-play", action="store_true", help="If set, the agent will play against itself instead of a random agent.")
     args = parser.parse_args()
 
     # Determine model path if --load-latest-model is set and --model-path is not provided
@@ -124,11 +125,12 @@ def main():
         past_agents.append(past_agent)
 
         # Set opponent to a randomly chosen past agent (excluding current agent)
-        if len(past_agents) > 1:
-            opponent = random.choice(past_agents[:-1])
-        else:
-            opponent = RandomAgent("Rand")
-        log(f"Opponent set to {opponent.name}.")
+        if args.self_play:
+            if len(past_agents) > 1:
+                opponent = random.choice(past_agents[:-1])
+            else:
+                opponent = RandomAgent("Rand")
+            log(f"Opponent set to {opponent.name}.")
 
         # save checkpoint per update
         ts = datetime.now().strftime("%m%d_%H%M")
