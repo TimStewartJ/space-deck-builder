@@ -125,6 +125,19 @@ def main():
                        main_device=args.main_device,
                        simulation_device=args.simulation_device,
                        model_path=model_path)
+    # Log the parameter size of the model
+    num_params = sum(p.numel() for p in agent.model.parameters() if p.requires_grad)
+    # Get input and output size of the actor model
+    actor = agent.model.actor
+    # Try to infer input and output size from the first and last layers
+    try:
+        first_layer = actor[0]
+        last_layer = actor[-1]
+        input_size = first_layer.in_features if hasattr(first_layer, 'in_features') else "Unknown"
+        output_size = last_layer.out_features if hasattr(last_layer, 'out_features') else "Unknown"
+    except Exception:
+        input_size = output_size = "Unknown"
+    log(f"Model has {num_params / 1_000_000:.2f}M parameters. Actor input size: {input_size}, output size: {output_size}.")
     opponent = RandomAgent("Rand")
 
     # Keep a record of all past agent iterations
