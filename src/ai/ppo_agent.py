@@ -88,9 +88,9 @@ class PPOAgent(Agent):
         self.states = []
         self.actions = []
         self.log_probs = []
-        self.rewards = []
-        self.values = []
-        self.dones = []
+        self.rewards: list[float] = []
+        self.values: list[torch.Tensor] = []
+        self.dones: list[bool] = []
 
         # decision timing
         self.total_decision_time = 0.0
@@ -149,9 +149,11 @@ class PPOAgent(Agent):
         self.device = self.simulation_device
         self.model.to(self.device)
         # compute GAE & returns
-        returns, advs = [], []
+        returns: list[torch.Tensor] = []
+        advs: list[torch.Tensor] = []
+        # Initialize GAE to 0.0
         gae = 0.0
-        vals = self.values + [torch.tensor([0.0], device=self.device)]  # add terminal value
+        vals = self.values + [torch.tensor(0.0, device=self.device)]  # add terminal value
         # Compute Generalized Advantage Estimation (GAE) and returns
         for step in reversed(range(len(self.rewards))):
             # Temporal difference error (delta)
@@ -169,19 +171,24 @@ class PPOAgent(Agent):
         states   = torch.stack(self.states).to(self.device)
         actions  = torch.tensor(self.actions, dtype=torch.int64, device=self.device)
         old_lp   = torch.stack(self.log_probs).to(self.device)
-        returns  = torch.tensor(returns, dtype=torch.float32, device=self.device)
-        advs     = torch.tensor(advs, dtype=torch.float32, device=self.device)
+        returnsTensor  = torch.stack(returns).to(self.device)
+        advsTensor     = torch.stack(advs).to(self.device)
+        advsTensor = (advsTensor - advsTensor.mean()) / (advsTensor.std(unbiased=False) + 1e-8) # normalize advantages
 
         # clear buffers
         self.clear_buffers()
 
-        return states, actions, old_lp, returns, advs
+        return states, actions, old_lp, returnsTensor, advsTensor
 
     def update(self, states, actions, old_lp, returns, advs):
         self.device = self.main_device
         self.model.to(self.main_device)
-        actor_loss = 0.0
-        critic_loss = 0.0
+
+        actor_loss_sum  = 0.0
+        critic_loss_sum = 0.0
+        ratio_sum       = 0.0
+        entropy_sum     = 0.0
+        batch_count     = 0
 
         for _ in range(self.epochs):
             idxs = torch.randperm(len(states))  # Shuffle indices for mini-batch SGD
@@ -209,7 +216,30 @@ class PPOAgent(Agent):
                 loss.backward()
                 self.optimizer.step()
 
-        log(f"PPO update done. Actor loss {actor_loss:.3f}  Critic loss {critic_loss:.3f}")
+                # accumulate for averages
+                actor_loss_sum  += actor_loss.item()
+                critic_loss_sum += critic_loss.item()
+                ratio_sum       += ratio.mean().item()
+                entropy_sum     += entropy.item()
+                batch_count     += 1
+
+        # compute true averages
+        if batch_count > 0:
+            avg_actor   = actor_loss_sum  / batch_count
+            avg_critic  = critic_loss_sum / batch_count
+            avg_ratio   = ratio_sum       / batch_count
+            avg_entropy = entropy_sum     / batch_count
+        else:
+            avg_actor = avg_critic = avg_ratio = avg_entropy = 0.0
+
+        # final diagnostic log
+        log(
+            f"PPO update done. "
+            f"Avg actor loss: {avg_actor:.3f}, "
+            f"Avg critic loss: {avg_critic:.3f}, "
+            f"Mean ratio: {avg_ratio:.3f}, "
+            f"Mean entropy: {avg_entropy:.3f}"
+        )
 
     def clear_buffers(self):
         """Clear all rollout buffers."""
