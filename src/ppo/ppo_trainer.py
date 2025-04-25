@@ -13,7 +13,7 @@ from src.cards.loader import load_trade_deck_cards
 from src.engine.game import Game
 from src.ai.ppo_agent import PPOAgent
 from src.ai.random_agent import RandomAgent
-from src.utils.logger import log, set_verbose
+from src.utils.logger import log, set_disabled, set_verbose
 
 def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card]):
     game = Game(cards)
@@ -39,7 +39,8 @@ def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card]):
 
 def run_episode_worker(state_dict, agent_kwargs, cards, seed):
     random.seed(seed)
-    set_verbose(False)
+    torch.manual_seed(seed)
+    set_disabled(True)
 
     # Reconstruct agent with same weights
     agent = PPOAgent("PPO", **agent_kwargs)
@@ -50,7 +51,7 @@ def run_episode_worker(state_dict, agent_kwargs, cards, seed):
 
 def run_eval_game_worker(agent_state_dict, agent_kwargs, opponent_type, opponent_state_dict, opponent_kwargs, cards, seed):
     random.seed(seed)
-    set_verbose(False)
+    set_disabled(True)
 
     # Reconstruct agent
     agent = PPOAgent("PPO", **agent_kwargs)
