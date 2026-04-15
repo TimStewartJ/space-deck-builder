@@ -141,7 +141,7 @@ def build_action_context(
                                             card=card, card_id=card.name)
                     can_buy = True
 
-    # BUY Explorer
+    # BUY Explorer — reference the last explorer (top of pile)
     if game.explorer_pile and player.trade >= game.explorer_pile[0].cost:
         ci = card_index_map.get("Explorer")
         if ci is not None:
@@ -149,7 +149,7 @@ def build_action_context(
             if not mask[idx]:
                 mask[idx] = True
                 resolvers[idx] = Action(type=ActionType.BUY_CARD,
-                                        card=game.explorer_pile[0],
+                                        card=game.explorer_pile[-1],
                                         card_id="Explorer")
                 can_buy = True
 
@@ -170,7 +170,8 @@ def build_action_context(
                                 resolvers[idx] = Action(
                                     type=ActionType.ATTACK_BASE,
                                     target_id=outpost.name,
-                                    card_id=outpost.name)
+                                    card_id=outpost.name,
+                                    card=outpost)
             else:
                 for base in opponent.bases:
                     if not base.is_outpost() and base.defense and player.combat >= base.defense:
@@ -182,7 +183,8 @@ def build_action_context(
                                 resolvers[idx] = Action(
                                     type=ActionType.ATTACK_BASE,
                                     target_id=base.name,
-                                    card_id=base.name)
+                                    card_id=base.name,
+                                    card=base)
                 # ATTACK_PLAYER
                 mask[IDX_ATTACK_PLAYER] = True
                 resolvers[IDX_ATTACK_PLAYER] = Action(

@@ -101,6 +101,7 @@ class Effect:
                     pending_actions.append(Action(
                         ActionType.SCRAP_CARD,
                         card_id=target.name,
+                        card=target,
                         card_source="discard"
                     ))
             if self.card_targets and "hand" in self.card_targets:
@@ -108,6 +109,7 @@ class Effect:
                     pending_actions.append(Action(
                         ActionType.SCRAP_CARD,
                         card_id=target.name,
+                        card=target,
                         card_source="hand"
                     ))
             if self.card_targets and "trade" in self.card_targets:
@@ -115,6 +117,7 @@ class Effect:
                     pending_actions.append(Action(
                         ActionType.SCRAP_CARD,
                         card_id=target.name,
+                        card=target,
                         card_source="trade"
                     ))
             if pending_actions:
@@ -130,6 +133,7 @@ class Effect:
                     action = Action(
                         ActionType.DISCARD_CARDS,
                         card_id=target.name,
+                        card=target,
                         card_source="opponent"
                     )
                     pending_actions.append(action)
@@ -148,6 +152,7 @@ class Effect:
                     ActionType.DESTROY_BASE,
                     target_id=base.name,
                     card_id=base.name,
+                    card=base,
                 ))
             if pending_actions:
                 player.add_pending_actions(pending_actions, self.value, False)

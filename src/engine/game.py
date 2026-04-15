@@ -9,6 +9,22 @@ from src.engine.player import Player
 from src.engine.actions import ActionType, Action
 from src.engine.game_stats import GameStats
 
+
+def _pending_action_matches(pending: Action, executed: Action) -> bool:
+    """Check if an executed action semantically matches a pending action.
+
+    Compares only the fields relevant for pending action identity
+    (type, card_id, card_source, target_id), ignoring object references
+    like card= that may differ between legacy and new-style callers.
+    """
+    return (
+        pending.type == executed.type
+        and pending.card_id == executed.card_id
+        and pending.card_source == executed.card_source
+        and pending.target_id == executed.target_id
+    )
+
+
 class Game:
     def __init__(self, cards=None, card_names: list[str] | None = None,
                  game_config: GameConfig | None = None,
@@ -169,60 +185,76 @@ class Game:
         
     
     def execute_action(self, action: Action):
-        """Execute a player's action and update game state"""
+        """Execute a player's action and update game state.
+        
+        Uses direct card references (action.card) for O(1) resolution
+        when available, falling back to name-based scanning for legacy
+        callers that don't set card refs.
+        """
         _log_enabled = not _logger.disabled
         if _log_enabled:
             log(f"{self.current_player.name} executing action: {action}", v=True)
 
-        # Handle pending action sets
+        # Handle pending action sets — use identity first, then semantic match
         pending_set = self.current_player.get_current_pending_set()
         pending_set_completed = False
         if pending_set:
-            # If skip decision and set is optional, skip this set
             if action.type == ActionType.SKIP_DECISION and not pending_set.mandatory:
                 self.current_player.advance_pending_set()
             else:
-                # Remove action from current set and decrement count
-                if action in pending_set.actions:
-                    pending_set.actions.remove(action)
-                    pending_set.decisions_left -= 1
-                # Move to next set if done
+                # Remove by identity first (fast path for action context resolvers),
+                # then by semantic match (type + card_id + source/target) for legacy
+                removed = False
+                for idx, pending_action in enumerate(pending_set.actions):
+                    if pending_action is action or _pending_action_matches(pending_action, action):
+                        pending_set.actions.pop(idx)
+                        pending_set.decisions_left -= 1
+                        removed = True
+                        break
                 if pending_set.decisions_left <= 0:
                     pending_set_completed = True
                     self.current_player.advance_pending_set()
 
         if action.type == ActionType.END_TURN:
-            return True  # End the turn
-            
+            return True
+
         elif action.type == ActionType.PLAY_CARD:
-            # Find the card in player's hand
-            for card in self.current_player.hand:
-                if card.name == action.card_id:
-                    self.current_player.play_card(card)
-                    self.stats.record_card_play(self.current_player.name)
-                    if _log_enabled:
-                        log(f"{self.current_player.name} played {card.name}", v=True)
-                    # Auto-apply simple resource effects across all played cards.
-                    # Skip scrap effects (must be explicitly chosen), OR effects
-                    # (require a choice), and ally effects (surfaced as APPLY_EFFECT actions).
-                    for pc in list(self.current_player.played_cards):
-                        for effect in pc.effects:
-                            if (
-                                effect.effect_type in (
-                                    CardEffectType.COMBAT,
-                                    CardEffectType.TRADE,
-                                    CardEffectType.HEAL,
-                                    CardEffectType.DRAW,
-                                    CardEffectType.TARGET_DISCARD,
-                                    CardEffectType.PARENT,
-                                )
-                                and not effect.is_or_effect
-                                and not effect.is_scrap_effect
-                                and not effect.faction_requirement
-                            ):
-                                effect.apply(self, self.current_player, pc)
-                    break
-        
+            # Use direct card reference when available
+            card = action.card
+            if card is not None and card in self.current_player.hand:
+                self.current_player.play_card(card)
+            else:
+                # Fallback: scan by name for legacy callers
+                card = None
+                for c in self.current_player.hand:
+                    if c.name == action.card_id:
+                        card = c
+                        self.current_player.play_card(c)
+                        break
+            if card is not None:
+                self.stats.record_card_play(self.current_player.name)
+                if _log_enabled:
+                    log(f"{self.current_player.name} played {card.name}", v=True)
+                # Auto-apply simple resource effects across all played cards.
+                # Skip scrap effects (must be explicitly chosen), OR effects
+                # (require a choice), and ally effects (surfaced as APPLY_EFFECT actions).
+                for pc in list(self.current_player.played_cards):
+                    for effect in pc.effects:
+                        if (
+                            effect.effect_type in (
+                                CardEffectType.COMBAT,
+                                CardEffectType.TRADE,
+                                CardEffectType.HEAL,
+                                CardEffectType.DRAW,
+                                CardEffectType.TARGET_DISCARD,
+                                CardEffectType.PARENT,
+                            )
+                            and not effect.is_or_effect
+                            and not effect.is_scrap_effect
+                            and not effect.faction_requirement
+                        ):
+                            effect.apply(self, self.current_player, pc)
+
         elif action.type == ActionType.APPLY_EFFECT and action.card_effect is not None:
             # Resolve source card for scrap-from-play effects
             source_card = action.card
@@ -234,9 +266,36 @@ class Game:
             action.card_effect.apply(self, self.current_player, source_card)
             if _log_enabled:
                 log(f"{self.current_player.name} applied effect: {action.card_effect}", v=True)
-                    
+
         elif action.type == ActionType.BUY_CARD:
-            # If the card is an explorer, take it from the explorer pile
+            card = action.card
+            if card is not None:
+                # Direct reference path — check if it's an explorer or trade row card
+                if self.explorer_pile and card is self.explorer_pile[-1]:
+                    self.explorer_pile.pop()
+                    self.current_player.trade -= card.cost
+                    self.current_player.discard_pile.append(card)
+                    self.stats.record_card_buy(self.current_player.name)
+                    if _log_enabled:
+                        log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
+                    return False
+                # Find in trade row by identity
+                for i, tr_card in enumerate(self.trade_row):
+                    if tr_card is card:
+                        self.current_player.trade -= card.cost
+                        self.current_player.discard_pile.append(card)
+                        self.stats.record_card_buy(self.current_player.name)
+                        if _log_enabled:
+                            log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
+                        self.trade_row.pop(i)
+                        if self.trade_deck:
+                            new_card = self.trade_deck.pop()
+                            self.trade_row.append(new_card)
+                            self.stats.trade_row_refreshes += 1
+                            if _log_enabled:
+                                log(f"Added {new_card.name} to trade row", v=True)
+                        return False
+            # Fallback: name-based scan for legacy callers
             if action.card_id == "Explorer":
                 if self.explorer_pile:
                     card = self.explorer_pile.pop()
@@ -245,8 +304,7 @@ class Game:
                     self.stats.record_card_buy(self.current_player.name)
                     if _log_enabled:
                         log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
-                    return
-            # Find the card in trade row
+                    return False
             for i, card in enumerate(self.trade_row):
                 if card.name == action.card_id and self.current_player.trade >= card.cost:
                     self.current_player.trade -= card.cost
@@ -255,7 +313,6 @@ class Game:
                     if _log_enabled:
                         log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
                     self.trade_row.pop(i)
-                    # Replace card in trade row
                     if self.trade_deck:
                         new_card = self.trade_deck.pop()
                         self.trade_row.append(new_card)
@@ -263,86 +320,130 @@ class Game:
                         if _log_enabled:
                             log(f"Added {new_card.name} to trade row", v=True)
                     break
-        
+
         elif action.type == ActionType.ATTACK_BASE:
-            # Find target base
-            for player in self.players:
-                if player != self.current_player:
-                    for base in player.bases:
-                        if base.name == action.target_id and base.defense and self.current_player.combat >= base.defense:
-                            self.current_player.combat -= base.defense
-                            player.bases.remove(base)
-                            player.discard_pile.append(base)
+            # Use direct card reference when available
+            target_base = action.card
+            if target_base is not None:
+                for player in self.players:
+                    if player is not self.current_player and target_base in player.bases:
+                        if target_base.defense and self.current_player.combat >= target_base.defense:
+                            self.current_player.combat -= target_base.defense
+                            player.bases.remove(target_base)
+                            player.discard_pile.append(target_base)
                             self.stats.record_base_destroy(self.current_player.name)
                             if _log_enabled:
-                                log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
-                            break
+                                log(f"{self.current_player.name} destroyed {player.name}'s {target_base.name}", v=True)
+                        break
+            else:
+                # Fallback: name-based scan
+                for player in self.players:
+                    if player != self.current_player:
+                        for base in player.bases:
+                            if base.name == action.target_id and base.defense and self.current_player.combat >= base.defense:
+                                self.current_player.combat -= base.defense
+                                player.bases.remove(base)
+                                player.discard_pile.append(base)
+                                self.stats.record_base_destroy(self.current_player.name)
+                                if _log_enabled:
+                                    log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
+                                break
 
         elif action.type == ActionType.DESTROY_BASE:
-            # Destroy base
-            for player in self.players:
-                if player != self.current_player:
-                    for base in player.bases:
-                        if base.name == action.target_id:
-                            self.stats.record_base_destroy(self.current_player.name)
-                            player.bases.remove(base)
-                            player.discard_pile.append(base)
-                            if _log_enabled:
-                                log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
-                            break
+            # Use direct card reference when available
+            target_base = action.card
+            if target_base is not None:
+                for player in self.players:
+                    if player is not self.current_player and target_base in player.bases:
+                        self.stats.record_base_destroy(self.current_player.name)
+                        player.bases.remove(target_base)
+                        player.discard_pile.append(target_base)
+                        if _log_enabled:
+                            log(f"{self.current_player.name} destroyed {player.name}'s {target_base.name}", v=True)
+                        break
+            else:
+                # Fallback: name-based scan
+                for player in self.players:
+                    if player != self.current_player:
+                        for base in player.bases:
+                            if base.name == action.target_id:
+                                self.stats.record_base_destroy(self.current_player.name)
+                                player.bases.remove(base)
+                                player.discard_pile.append(base)
+                                if _log_enabled:
+                                    log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
+                                break
 
         elif action.type == ActionType.ATTACK_PLAYER:
-            # Attack player directly
-            for player in self.players:
-                if player != self.current_player and player.name == action.target_id:
-                    # Only allow attacking if no outposts present
-                    if not any(b.is_outpost() for b in player.bases):
-                        damage = self.current_player.combat
-                        player.health -= damage
-                        self.current_player.combat = 0
-                        self.stats.record_damage(self.current_player.name, damage)
-                        if _log_enabled:
-                            log(f"{self.current_player.name} attacked {player.name} for {damage} damage", v=True)
-                        # Check for game over
-                        if player.health <= 0:
-                            if _log_enabled:
-                                log(f"{player.name} has been defeated!", v=True)
-                            self.is_game_over = True
-                            self.stats.end_game(self.current_player.name)
+            # Find target by target_id, fall back to sole opponent in 2-player
+            target = None
+            if action.target_id:
+                for player in self.players:
+                    if player is not self.current_player and player.name == action.target_id:
+                        target = player
                         break
-        
+            if target is None:
+                target = self.get_opponent(self.current_player)
+            if target is not None:
+                if not any(b.is_outpost() for b in target.bases):
+                    damage = self.current_player.combat
+                    target.health -= damage
+                    self.current_player.combat = 0
+                    self.stats.record_damage(self.current_player.name, damage)
+                    if _log_enabled:
+                        log(f"{self.current_player.name} attacked {target.name} for {damage} damage", v=True)
+                    if target.health <= 0:
+                        if _log_enabled:
+                            log(f"{target.name} has been defeated!", v=True)
+                        self.is_game_over = True
+                        self.stats.end_game(self.current_player.name)
+
         elif action.type == ActionType.SCRAP_CARD and action.card_source is not None:
             self.stats.record_card_scrap(self.current_player.name, action.card_source)
+            target_card = action.card
             if action.card_source == 'hand':
-                # Scrap card from hand
-                for card in self.current_player.hand:
-                    if card.name == action.card_id:
-                        self.current_player.hand.remove(card)
-                        if _log_enabled:
-                            log(f"{self.current_player.name} scrapped {card.name} from hand", v=True)
-                        break
+                if target_card is not None and target_card in self.current_player.hand:
+                    self.current_player.hand.remove(target_card)
+                else:
+                    for card in self.current_player.hand:
+                        if card.name == action.card_id:
+                            target_card = card
+                            self.current_player.hand.remove(card)
+                            break
+                if _log_enabled and target_card:
+                    log(f"{self.current_player.name} scrapped {target_card.name} from hand", v=True)
             elif action.card_source == 'discard':
-                # Scrap card from discard pile
-                for card in self.current_player.discard_pile:
-                    if card.name == action.card_id:
-                        self.current_player.discard_pile.remove(card)
-                        if _log_enabled:
-                            log(f"{self.current_player.name} scrapped {card.name} from discard pile", v=True)
-                        break
+                if target_card is not None and target_card in self.current_player.discard_pile:
+                    self.current_player.discard_pile.remove(target_card)
+                else:
+                    for card in self.current_player.discard_pile:
+                        if card.name == action.card_id:
+                            target_card = card
+                            self.current_player.discard_pile.remove(card)
+                            break
+                if _log_enabled and target_card:
+                    log(f"{self.current_player.name} scrapped {target_card.name} from discard pile", v=True)
             elif action.card_source == 'trade':
-                # Scrap card from trade row
-                for i, card in enumerate(self.trade_row):
-                    if card.name == action.card_id:
-                        self.trade_row.pop(i)
-                        if _log_enabled:
-                            log(f"{self.current_player.name} scrapped {card.name} from trade row", v=True)
-                        break
+                if target_card is not None:
+                    for i, card in enumerate(self.trade_row):
+                        if card is target_card:
+                            self.trade_row.pop(i)
+                            break
+                else:
+                    for i, card in enumerate(self.trade_row):
+                        if card.name == action.card_id:
+                            target_card = card
+                            self.trade_row.pop(i)
+                            break
+                if _log_enabled and target_card:
+                    log(f"{self.current_player.name} scrapped {target_card.name} from trade row", v=True)
                 # Refill trade row after all scraps from the pending set are done
                 if not pending_set or pending_set_completed:
                     self.fill_trade_row()
             # Return explorers to the explorer pile
-            if action.card_id == "Explorer" and action.card:
-                self.explorer_pile.append(action.card)
+            if target_card and target_card.name == "Explorer":
+                self.explorer_pile.append(target_card)
+
         elif action.type == ActionType.DISCARD_CARDS:
             # Determine target: opponent's hand if forced discard, else current player
             if action.card_source == "opponent":
@@ -356,13 +457,19 @@ class Game:
                 target_hand = self.current_player.hand
                 target_discard = self.current_player.discard_pile
                 self.stats.record_cards_discarded_from_hand(self.current_player.name, 1)
-            for card in target_hand:
-                if card.name == action.card_id:
-                    target_hand.remove(card)
-                    target_discard.append(card)
-                    if _log_enabled:
-                        log(f"{self.current_player.name} discarded {card.name} from {'opponent' if action.card_source == 'opponent' else 'hand'}", v=True)
-                    break
+            target_card = action.card
+            if target_card is not None and target_card in target_hand:
+                target_hand.remove(target_card)
+                target_discard.append(target_card)
+            else:
+                for card in target_hand:
+                    if card.name == action.card_id:
+                        target_card = card
+                        target_hand.remove(card)
+                        target_discard.append(card)
+                        break
+            if _log_enabled and target_card:
+                log(f"{self.current_player.name} discarded {target_card.name} from {'opponent' if action.card_source == 'opponent' else 'hand'}", v=True)
 
         return False  # Turn continues
     
