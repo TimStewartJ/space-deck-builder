@@ -14,18 +14,18 @@ class PPOActorCritic(nn.Module):
         self.num_cards = num_cards
         self.action_dim = action_dim
 
-        # small location embedding
+        # Card zone locations for embedding lookup
         self.locations = [
             'trade_row',
             'train_hand','train_disc','train_deck','train_bases',
-            'opp_hand',  'opp_disc',  'opp_deck',  'opp_bases'
+            'opp_unseen', 'opp_disc', 'opp_bases'
         ]
         # per-card location embeddings: num_locations * num_cards vectors
         # self.loc_emb = nn.Embedding(len(self.locations) * self.num_cards, card_emb_dim)
         self.loc_emb = nn.Embedding(self.num_cards, card_emb_dim)
 
-        # numeric dims unchanged
-        self.numeric_dim = 4 + 5 + 5
+        # numeric: 4 flags + 5 training resources + 6 opponent resources
+        self.numeric_dim = 4 + 5 + 6
         combined_dim = self.numeric_dim + len(self.locations)*card_emb_dim*num_cards
 
         self.actor = nn.Sequential(

@@ -139,7 +139,7 @@ def encode_state(game_state: 'Game', is_current_player_training: bool, cards: li
     # Training player
     offset = encode_player_into(training_player, num_cards, card_index_map, state, offset)
 
-    # Opponent
-    offset = encode_player_into(opponent, num_cards, card_index_map, state, offset)
+    # Opponent (asymmetric encoding — hand and deck merged into unseen zone)
+    offset = encode_opponent_into(opponent, num_cards, card_index_map, state, offset)
 
     return torch.from_numpy(state)
