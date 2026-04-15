@@ -98,57 +98,43 @@ def main(argv=None):
 def _run_train(args):
     """Construct configs from CLI args and delegate to the trainer."""
     from src.config import DataConfig, PPOConfig, RunConfig, DeviceConfig
-    from src.ppo.ppo_trainer import main as trainer_main
+    from src.ppo.ppo_trainer import train
 
-    # The trainer's main() parses its own args, so we invoke it directly.
-    # Re-dispatch via sys.argv so the existing trainer argparse works.
-    import sys
-    sys.argv = ["ppo_trainer"]
-    for attr, flag in [
-        ("episodes", "--episodes"), ("updates", "--updates"),
-        ("cards_path", "--cards-path"), ("lr", "--lr"),
-        ("gamma", "--gamma"), ("lam", "--lam"),
-        ("clip_eps", "--clip-eps"), ("epochs", "--epochs"),
-        ("batch_size", "--batch-size"), ("entropy", "--entropy"),
-        ("device", "--device"), ("main_device", "--main-device"),
-        ("simulation_device", "--simulation-device"),
-        ("eval_every", "--eval-every"), ("eval_games", "--eval-games"),
-    ]:
-        val = getattr(args, attr, None)
-        if val is not None:
-            sys.argv.extend([flag, str(val)])
-    if args.self_play:
-        sys.argv.append("--self-play")
-    if args.model_path:
-        sys.argv.extend(["--model-path", args.model_path])
-    if args.load_latest_model:
-        sys.argv.append("--load-latest-model")
-    trainer_main()
+    data_cfg = DataConfig(cards_path=args.cards_path)
+    ppo_cfg = PPOConfig(
+        lr=args.lr, gamma=args.gamma, lam=args.lam,
+        clip_eps=args.clip_eps, epochs=args.epochs,
+        batch_size=args.batch_size, entropy_coef=args.entropy,
+    )
+    run_cfg = RunConfig(
+        episodes=args.episodes, updates=args.updates,
+        eval_every=args.eval_every, eval_games=args.eval_games,
+        self_play=args.self_play,
+    )
+    dev_cfg = DeviceConfig(
+        device=args.device, main_device=args.main_device,
+        simulation_device=args.simulation_device,
+    )
+    train(data_cfg, ppo_cfg, run_cfg, dev_cfg,
+          model_path=args.model_path,
+          load_latest=args.load_latest_model)
 
 
 def _run_simulate(args):
-    """Delegate to the simulator."""
-    from src.ppo.ppo_simulate import main as simulate_main
-    import sys
-    sys.argv = ["ppo_simulate"]
-    for attr, flag in [
-        ("cards_path", "--cards-path"), ("device", "--device"),
-        ("games", "--games"),
-    ]:
-        val = getattr(args, attr, None)
-        if val is not None:
-            sys.argv.extend([flag, str(val)])
-    if args.model1:
-        sys.argv.extend(["--model1", args.model1])
-    if args.model2:
-        sys.argv.extend(["--model2", args.model2])
-    if args.player2_random:
-        sys.argv.append("--player2-random")
-    simulate_main()
+    """Construct configs and delegate to the simulator."""
+    from src.config import DataConfig, SimConfig
+    from src.ppo.ppo_simulate import simulate
+
+    data_cfg = DataConfig(cards_path=args.cards_path)
+    sim_cfg = SimConfig(games=args.games, player2_random=args.player2_random)
+    simulate(data_cfg, sim_cfg,
+             model1_path=args.model1,
+             model2_path=args.model2,
+             device=args.device)
 
 
 def _run_benchmark(args):
-    """Delegate to the benchmark script."""
+    """Delegate to the benchmark function."""
     from scripts.benchmark import benchmark
     benchmark(
         num_episodes=args.episodes,

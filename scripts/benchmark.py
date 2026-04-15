@@ -120,13 +120,3 @@ def benchmark(num_episodes=64, device="cpu", mode="both", workers=4):
         print(f"Steps/sec:     {total_steps / elapsed:.1f}")
         print(f"Episodes/sec:  {num_episodes / elapsed:.2f}")
         print(f"Device:        cpu (per-worker)")
-
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--episodes", type=int, default=128)
-    parser.add_argument("--device", type=str, default="cpu")
-    parser.add_argument("--mode", type=str, default="both", choices=["sequential", "batched", "parallel", "both"])
-    parser.add_argument("--workers", type=int, default=4)
-    args = parser.parse_args()
-    benchmark(args.episodes, args.device, args.mode, args.workers)

@@ -17,48 +17,16 @@ from src.ppo.batch_runner import BatchRunner
 from src.utils.logger import log, set_disabled, set_verbose
 
 
-def main():
-    parser = argparse.ArgumentParser("PPO Trainer")
-    parser.add_argument("--episodes",    type=int,   default=1024)
-    parser.add_argument("--updates",     type=int,   default=4)
-    parser.add_argument("--cards-path",  type=str,   default="data/cards.csv")
-    parser.add_argument("--lr",          type=float, default=3e-4)
-    parser.add_argument("--gamma",       type=float, default=0.995)
-    parser.add_argument("--lam",         type=float, default=0.99)
-    parser.add_argument("--clip-eps",    type=float, default=0.3)
-    parser.add_argument("--epochs",      type=int,   default=4)
-    parser.add_argument("--batch-size",  type=int,   default=1024)
-    parser.add_argument("--entropy",     type=float, default=0.025, help="Entropy bonus coefficient for PPO")
-    parser.add_argument("--device",      type=str,   default="cuda", help="Device to run ML (cuda or cpu)")
-    parser.add_argument("--model-path",  type=str,   default=None, help="Path to a pretrained PPO model to load")
-    parser.add_argument("--load-latest-model", action="store_true", help="If set, load the latest PPO model from the models directory if available.")
-    parser.add_argument("--main-device", type=str, default="cuda", help="Device for training/updates (cuda or cpu)")
-    parser.add_argument("--simulation-device", type=str, default="cpu", help="Device for episode simulation (cpu or cuda)")
-    parser.add_argument("--self-play", action="store_true", help="If set, the agent will play against itself instead of a random agent.")
-    parser.add_argument("--eval-every", type=int, default=5, help="Run evaluation every N updates (always evals on last update)")
-    parser.add_argument("--eval-games", type=int, default=100, help="Number of evaluation games per eval round")
-    args = parser.parse_args()
-
-    # Build config objects from CLI args
-    data_cfg = DataConfig(cards_path=args.cards_path)
-    ppo_cfg = PPOConfig(
-        lr=args.lr, gamma=args.gamma, lam=args.lam,
-        clip_eps=args.clip_eps, epochs=args.epochs,
-        batch_size=args.batch_size, entropy_coef=args.entropy,
-    )
-    run_cfg = RunConfig(
-        episodes=args.episodes, updates=args.updates,
-        eval_every=args.eval_every, eval_games=args.eval_games,
-        self_play=args.self_play,
-    )
-    dev_cfg = DeviceConfig(
-        device=args.device, main_device=args.main_device,
-        simulation_device=args.simulation_device,
-    )
-
-    # Determine model path if --load-latest-model is set and --model-path is not provided
-    model_path = args.model_path
-    if args.load_latest_model and not model_path:
+def train(
+    data_cfg: DataConfig,
+    ppo_cfg: PPOConfig,
+    run_cfg: RunConfig,
+    dev_cfg: DeviceConfig,
+    model_path: str | None = None,
+    load_latest: bool = False,
+):
+    """Run PPO training with the given configuration."""
+    if load_latest and not model_path:
         import glob, os
         model_files = glob.glob(os.path.join(data_cfg.models_dir, "ppo_agent_*.pth"))
         if model_files:
@@ -208,12 +176,9 @@ def main():
 
     log(f"Total time spent on episodes: {total_time_spent_on_episodes:.2f}s\n\tAverage per update: {total_time_spent_on_episodes / run_cfg.updates:.2f}s")
     log(f"Total time spent on PPO updates: {total_time_spent_on_updates:.2f}s\n\tAverage per update: {total_time_spent_on_updates / run_cfg.updates:.2f}s")
-    log(f"Total time spent on evaluation: {total_time_spent_on_eval:.2f}s\n\tAverage per update: {total_time_spent_on_eval / args.updates:.2f}s")
+    log(f"Total time spent on evaluation: {total_time_spent_on_eval:.2f}s\n\tAverage per update: {total_time_spent_on_eval / run_cfg.updates:.2f}s")
     log("All updates finished.")
     # Log average decision time per decision
     avg_decision_time = agent.get_average_decision_time()
     log(f"Average PPOAgent decision time: {avg_decision_time:.6f} seconds per decision.")
     log(f"Overall time spent: {time.perf_counter() - overall_start_time:.2f}s")
-
-if __name__ == "__main__":
-    main()
