@@ -121,25 +121,25 @@ def build_action_context(
 
     # PLAY_CARD: each card in hand
     for card in player.hand:
-        ci = card_index_map.get(card.name)
+        ci = card.index
         if ci is not None:
             idx = OFF_PLAY + ci
             if not mask[idx]:
                 mask[idx] = True
                 resolvers[idx] = Action(type=ActionType.PLAY_CARD,
-                                        card=card, card_id=card.name)
+                                        card=card, card_id=ci)
                 has_meaningful = True
 
     # BUY_CARD: affordable cards in trade row
     for card in game.trade_row:
         if player.trade >= card.cost:
-            ci = card_index_map.get(card.name)
+            ci = card.index
             if ci is not None:
                 idx = OFF_BUY + ci
                 if not mask[idx]:
                     mask[idx] = True
                     resolvers[idx] = Action(type=ActionType.BUY_CARD,
-                                            card=card, card_id=card.name)
+                                            card=card, card_id=ci)
                     can_buy = True
 
     # BUY Explorer — reference the last explorer (top of pile)
@@ -151,7 +151,7 @@ def build_action_context(
                 mask[idx] = True
                 resolvers[idx] = Action(type=ActionType.BUY_CARD,
                                         card=game.explorer_pile[-1],
-                                        card_id="Explorer")
+                                        card_id=ci)
                 can_buy = True
 
     # ATTACK actions (combat > 0)
@@ -163,34 +163,34 @@ def build_action_context(
             if outposts:
                 for outpost in outposts:
                     if outpost.defense and player.combat >= outpost.defense:
-                        ci = card_index_map.get(outpost.name)
+                        ci = outpost.index
                         if ci is not None:
                             idx = OFF_ATTACK_BASE + ci
                             if not mask[idx]:
                                 mask[idx] = True
                                 resolvers[idx] = Action(
                                     type=ActionType.ATTACK_BASE,
-                                    target_id=outpost.name,
-                                    card_id=outpost.name,
+                                    target_id=ci,
+                                    card_id=ci,
                                     card=outpost)
             else:
                 for base in opponent.bases:
                     if not base.is_outpost() and base.defense and player.combat >= base.defense:
-                        ci = card_index_map.get(base.name)
+                        ci = base.index
                         if ci is not None:
                             idx = OFF_ATTACK_BASE + ci
                             if not mask[idx]:
                                 mask[idx] = True
                                 resolvers[idx] = Action(
                                     type=ActionType.ATTACK_BASE,
-                                    target_id=base.name,
-                                    card_id=base.name,
+                                    target_id=ci,
+                                    card_id=ci,
                                     card=base)
                 # ATTACK_PLAYER
                 mask[IDX_ATTACK_PLAYER] = True
                 resolvers[IDX_ATTACK_PLAYER] = Action(
                     type=ActionType.ATTACK_PLAYER,
-                    target_id=opponent.name)
+                    target_id=game.players.index(opponent))
                 has_meaningful = True
 
     # APPLY_EFFECT: unused effects on played cards and bases
@@ -201,7 +201,7 @@ def build_action_context(
             continue
         seen_cards.add(card_obj_id)
 
-        ci = card_index_map.get(card.name)
+        ci = card.index
         if ci is None:
             continue
 
@@ -239,7 +239,7 @@ def _set_effect_mask(mask, resolvers, card_idx, card, effect,
     if not mask[idx]:
         mask[idx] = True
         resolvers[idx] = Action(type=ActionType.APPLY_EFFECT,
-                                card_id=card.name, card=card,
+                                card_id=card_idx, card=card,
                                 card_effect=effect)
 
 
@@ -252,9 +252,9 @@ def _encode_action_index(action, card_index_map, num_cards,
     """Compute the encoded index for a pending Action directly.
 
     Mirrors the encoding scheme in action_encoder.encode_action() but
-    avoids creating intermediate objects or doing string lookups.
+    avoids creating intermediate objects. card_id is already an int index.
     """
-    ci = card_index_map.get(action.card_id) if action.card_id else None
+    ci = action.card_id
 
     if action.type == ActionType.END_TURN:
         return END_TURN_INDEX

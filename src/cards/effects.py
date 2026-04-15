@@ -1,5 +1,4 @@
 from enum import Enum
-import re
 from typing import TYPE_CHECKING, List, Optional
 from dataclasses import dataclass
 
@@ -34,7 +33,12 @@ class CardEffectType(Enum):
     PARENT = "parent"  # For effects that are parent effects
     TARGET_DISCARD = "target_discard"  # For effects that make the target player discard cards
     DESTROY_BASE = "destroy_base"  # For effects that destroy bases
-    COMPLEX = "complex"  # For complex effects that require special handling
+    COMPLEX = "complex"  # Unimplemented effects (kept for documentation only)
+    # Precompiled complex effects — no runtime text parsing needed
+    DRAW_PER_FACTION = "draw_per_faction"  # Draw a card for each card of a faction in play
+    CONDITIONAL_DRAW = "conditional_draw"  # Draw N if condition met (e.g. "two or more bases")
+    SCRAP_FROM_HAND_DISCARD = "scrap_from_hand_discard"  # Scrap up to N from hand/discard with draw-on-complete
+    DISCARD_DRAW = "discard_draw"  # Discard up to N, then draw that many
 
 class CardTargetType(Enum):
     HAND = "hand"
@@ -59,7 +63,7 @@ class Effect:
                  faction_requirement: Optional[str] = None, is_scrap_effect: bool = False,
                  is_ally_effect: bool = False, faction_requirement_count: int = 0, is_or_effect: bool = False, 
                  child_effects: Optional[List['Effect']] = None, card_targets: Optional[List[str]] = None,
-                 is_mandatory: bool = False):
+                 is_mandatory: bool = False, faction_target: Optional[str] = None):
         self.effect_type = effect_type
         self.value = value
         self.text = text
@@ -72,6 +76,8 @@ class Effect:
         self.child_effects = child_effects
         self.card_targets = card_targets
         self.is_mandatory = is_mandatory
+        # Target faction for DRAW_PER_FACTION (distinct from faction_requirement which gates ally abilities)
+        self.faction_target = faction_target
 
     def any_child_effects_used(self):
         """Check if any child effects have been used"""
@@ -118,7 +124,7 @@ class Effect:
                 for target in player.discard_pile:
                     pending_actions.append(Action(
                         ActionType.SCRAP_CARD,
-                        card_id=target.name,
+                        card_id=target.index,
                         card=target,
                         card_source=CardSource.DISCARD
                     ))
@@ -126,7 +132,7 @@ class Effect:
                 for target in player.hand:
                     pending_actions.append(Action(
                         ActionType.SCRAP_CARD,
-                        card_id=target.name,
+                        card_id=target.index,
                         card=target,
                         card_source=CardSource.HAND
                     ))
@@ -134,7 +140,7 @@ class Effect:
                 for target in game.trade_row:
                     pending_actions.append(Action(
                         ActionType.SCRAP_CARD,
-                        card_id=target.name,
+                        card_id=target.index,
                         card=target,
                         card_source=CardSource.TRADE
                     ))
@@ -150,7 +156,7 @@ class Effect:
                 for target in opponent.hand:
                     action = Action(
                         ActionType.DISCARD_CARDS,
-                        card_id=target.name,
+                        card_id=target.index,
                         card=target,
                         card_source=CardSource.OPPONENT
                     )
@@ -168,8 +174,8 @@ class Effect:
             for base in opponent.bases:
                 pending_actions.append(Action(
                     ActionType.DESTROY_BASE,
-                    target_id=base.name,
-                    card_id=base.name,
+                    target_id=base.index,
+                    card_id=base.index,
                     card=base,
                 ))
             if pending_actions:
@@ -180,8 +186,61 @@ class Effect:
             if self.child_effects:
                 for effect in self.child_effects:
                     effect.apply(game, player, card)
+
+        elif self.effect_type == CardEffectType.DRAW_PER_FACTION:
+            # Draw a card for each card of the specified faction in play
+            faction = self.faction_target.lower() if self.faction_target else ""
+            count = sum(1 for c in player.played_cards
+                        if _faction_matches(c.faction, faction))
+            for _ in range(count):
+                player.draw_card()
+
+        elif self.effect_type == CardEffectType.CONDITIONAL_DRAW:
+            # Draw N cards if condition is met (e.g. "bases_ge_2")
+            condition_met = False
+            if self.text == "bases_ge_2":
+                condition_met = len(player.bases) >= 2
+            if condition_met:
+                for _ in range(self.value):
+                    player.draw_card()
+                    game.stats.record_card_draw(player.name)
+
+        elif self.effect_type == CardEffectType.SCRAP_FROM_HAND_DISCARD:
+            # Scrap up to N cards from hand/discard with draw-on-complete
+            pending_actions = []
+            for target in player.hand:
+                pending_actions.append(Action(
+                    ActionType.SCRAP_CARD, card_id=target.index,
+                    card=target, card_source=CardSource.HAND
+                ))
+            for target in player.discard_pile:
+                pending_actions.append(Action(
+                    ActionType.SCRAP_CARD, card_id=target.index,
+                    card=target, card_source=CardSource.DISCARD
+                ))
+            if pending_actions:
+                player.add_pending_actions(
+                    pending_actions, self.value, mandatory=False,
+                    on_complete_draw=True
+                )
+
+        elif self.effect_type == CardEffectType.DISCARD_DRAW:
+            # Discard up to N cards, then draw that many
+            pending_actions = []
+            for target in player.hand:
+                pending_actions.append(Action(
+                    ActionType.DISCARD_CARDS, card_id=target.index,
+                    card=target, card_source=CardSource.SELF
+                ))
+            if pending_actions:
+                player.add_pending_actions(
+                    pending_actions, self.value, mandatory=False,
+                    on_complete_draw=True
+                )
+
         elif self.effect_type == CardEffectType.COMPLEX:
-            self.handle_complex_effect(game, player, card)
+            # Unimplemented complex effects — silently skip
+            pass
         
         # parent effects should only be marked as applied if it is an OR effect
         if self.effect_type != CardEffectType.PARENT:
@@ -202,70 +261,6 @@ class Effect:
             if card.name == "Explorer":
                 game.explorer_pile.append(card)
 
-    def handle_complex_effect(self, game: 'Game', player: 'Player', card):
-        from src.engine.actions import Action, ActionType, CardSource
-
-        # "Draw a card for each <Faction> card that you've played this turn"
-        draw_match = re.search(r"Draw a card for each (\w+) card", self.text)
-        if draw_match:
-            faction = draw_match.group(1).lower()
-            count = sum(1 for c in player.played_cards
-                        if _faction_matches(c.faction, faction))
-            for _ in range(count):
-                player.draw_card()
-            return
-
-        # "If you have two or more bases in play, draw two cards" (Embassy Yacht)
-        if "two or more bases in play" in self.text.lower():
-            if len(player.bases) >= 2:
-                for _ in range(2):
-                    player.draw_card()
-                    game.stats.record_card_draw(player.name)
-            return
-
-        # "Scrap up to two cards from your hand and/or discard pile" (Brain World)
-        scrap_up_to = re.search(r"Scrap up to (\w+) cards? from your hand and/or discard pile", self.text)
-        if scrap_up_to:
-            count_word = scrap_up_to.group(1)
-            count_map = {"one": 1, "two": 2, "three": 3}
-            max_scrap = count_map.get(count_word, int(count_word) if count_word.isdigit() else 1)
-            pending_actions = []
-            for target in player.hand:
-                pending_actions.append(Action(
-                    ActionType.SCRAP_CARD, card_id=target.name,
-                    card=target, card_source=CardSource.HAND
-                ))
-            for target in player.discard_pile:
-                pending_actions.append(Action(
-                    ActionType.SCRAP_CARD, card_id=target.name,
-                    card=target, card_source=CardSource.DISCARD
-                ))
-            if pending_actions:
-                player.add_pending_actions(
-                    pending_actions, max_scrap, mandatory=False,
-                    on_complete_draw=True
-                )
-            return
-
-        # "discard up to two cards, then draw that many cards" (Recycling Station)
-        discard_draw = re.search(r"discard up to (\w+) cards?, then draw that many", self.text)
-        if discard_draw:
-            count_word = discard_draw.group(1)
-            count_map = {"one": 1, "two": 2, "three": 3}
-            max_discard = count_map.get(count_word, int(count_word) if count_word.isdigit() else 1)
-            pending_actions = []
-            for target in player.hand:
-                pending_actions.append(Action(
-                    ActionType.DISCARD_CARDS, card_id=target.name,
-                    card=target, card_source=CardSource.SELF
-                ))
-            if pending_actions:
-                player.add_pending_actions(
-                    pending_actions, max_discard, mandatory=False,
-                    on_complete_draw=True
-                )
-            return
-
     def clone(self) -> 'Effect':
         """Create a lightweight copy with fresh mutable state.
         
@@ -284,6 +279,7 @@ class Effect:
             child_effects=[c.clone() for c in self.child_effects] if self.child_effects else None,
             card_targets=list(self.card_targets) if self.card_targets else None,
             is_mandatory=self.is_mandatory,
+            faction_target=self.faction_target,
         )
 
     def reset(self):

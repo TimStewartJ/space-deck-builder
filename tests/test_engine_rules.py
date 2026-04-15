@@ -484,7 +484,7 @@ class TestB4TradeRowScrapRefresh:
         initial_row_size = len(game.trade_row)
 
         scrap_action = Action(type=ActionType.SCRAP_CARD,
-                              card_id="Target", card_source=CardSource.TRADE)
+                              card_id=1, card=target, card_source=CardSource.TRADE)
         game.execute_action(scrap_action)
 
         # Row should have refilled with the filler card
@@ -576,10 +576,10 @@ class TestC2DestroyBase:
         effect.apply(game, p1, None)
 
         pending = p1.get_current_pending_set()
-        target_names = [a.target_id for a in pending.actions]
+        target_cards = [a.card for a in pending.actions]
         # Both should be targetable
-        assert "EnemyOutpost" in target_names
-        assert "EnemyBase" in target_names
+        assert outpost in target_cards
+        assert base in target_cards
 
     def test_destroy_base_removes_from_opponent_bases(self):
         """Executing DESTROY_BASE should remove the base from opponent."""
@@ -610,9 +610,8 @@ class TestD1EmbassyYacht:
         base2 = _make_base(name="Base2", effects=[])
         p1.bases.extend([base1, base2])
 
-        # Create Embassy Yacht's COMPLEX child effect
-        yacht_effect = Effect(CardEffectType.COMPLEX, 0,
-                              text="If you have two or more bases in play, draw two cards")
+        # Create Embassy Yacht's CONDITIONAL_DRAW effect
+        yacht_effect = Effect(CardEffectType.CONDITIONAL_DRAW, 2, text="bases_ge_2")
         # Give the player cards to draw
         p1.deck.extend([Card("D1", 0, 0, [], "ship"), Card("D2", 1, 0, [], "ship")])
         initial_hand = len(p1.hand)
@@ -628,8 +627,7 @@ class TestD1EmbassyYacht:
         p1.deck.extend([Card("D1", 0, 0, [], "ship"), Card("D2", 1, 0, [], "ship")])
         initial_hand = len(p1.hand)
 
-        yacht_effect = Effect(CardEffectType.COMPLEX, 0,
-                              text="If you have two or more bases in play, draw two cards")
+        yacht_effect = Effect(CardEffectType.CONDITIONAL_DRAW, 2, text="bases_ge_2")
         yacht_effect.apply(game, p1, None)
 
         assert len(p1.hand) == initial_hand
@@ -639,8 +637,7 @@ class TestD1EmbassyYacht:
         p1.deck.append(Card("D1", 0, 0, [], "ship"))
         initial_hand = len(p1.hand)
 
-        yacht_effect = Effect(CardEffectType.COMPLEX, 0,
-                              text="If you have two or more bases in play, draw two cards")
+        yacht_effect = Effect(CardEffectType.CONDITIONAL_DRAW, 2, text="bases_ge_2")
         yacht_effect.apply(game, p1, None)
 
         assert len(p1.hand) == initial_hand
@@ -654,13 +651,12 @@ class TestD1EmbassyYacht:
                     Effect(CardEffectType.TRADE, 2),
                     Effect(CardEffectType.HEAL, 3),
                 ]),
-                Effect(CardEffectType.COMPLEX, 0,
-                       text="If you have two or more bases in play, draw two cards"),
+                Effect(CardEffectType.CONDITIONAL_DRAW, 2, text="bases_ge_2"),
             ]),
         ], "ship", faction="Trade Federation")
         p1.hand.append(yacht)
 
-        play_action = Action(type=ActionType.PLAY_CARD, card=yacht, card_id=yacht.name)
+        play_action = Action(type=ActionType.PLAY_CARD, card=yacht, card_id=yacht.index)
         game.execute_action(play_action)
 
         # Resources always apply, no bases → no draw
@@ -678,8 +674,7 @@ class TestD2BlobWorldFactionSafety:
         p1.played_cards.append(multi)
         p1.deck.append(Card("D1", 1, 0, [], "ship"))
 
-        blob_world_effect = Effect(CardEffectType.COMPLEX, 0,
-                                   text="Draw a card for each Blob card that you've played this turn")
+        blob_world_effect = Effect(CardEffectType.DRAW_PER_FACTION, 0, faction_target="Blob")
         blob_world_effect.apply(game, p1, None)
 
         # Multi-faction card with "Blob" should count
@@ -693,8 +688,7 @@ class TestD2BlobWorldFactionSafety:
         p1.played_cards.extend([blob1, blob2])
         p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
 
-        blob_world_effect = Effect(CardEffectType.COMPLEX, 0,
-                                   text="Draw a card for each Blob card that you've played this turn")
+        blob_world_effect = Effect(CardEffectType.DRAW_PER_FACTION, 0, faction_target="Blob")
         blob_world_effect.apply(game, p1, None)
 
         assert len(p1.hand) == 2
@@ -707,8 +701,7 @@ class TestD2BlobWorldFactionSafety:
         p1.deck.append(Card("D1", 1, 0, [], "ship"))
         initial_hand = len(p1.hand)
 
-        blob_world_effect = Effect(CardEffectType.COMPLEX, 0,
-                                   text="Draw a card for each Blob card that you've played this turn")
+        blob_world_effect = Effect(CardEffectType.DRAW_PER_FACTION, 0, faction_target="Blob")
         blob_world_effect.apply(game, p1, None)
 
         assert len(p1.hand) == initial_hand
@@ -718,7 +711,7 @@ class TestD3RecyclingStation:
     """D3: Recycling Station discard-then-draw via pending action completion."""
 
     def _make_recycling_station_effect(self):
-        return Effect(CardEffectType.COMPLEX, 0,
+        return Effect(CardEffectType.DISCARD_DRAW, 2,
                       text="discard up to two cards, then draw that many cards")
 
     def test_discard_two_draw_two(self):
@@ -812,7 +805,7 @@ class TestD4BrainWorld:
     """D4: Brain World scrap-then-draw via pending action completion."""
 
     def _make_brain_world_effect(self):
-        return Effect(CardEffectType.COMPLEX, 0,
+        return Effect(CardEffectType.SCRAP_FROM_HAND_DISCARD, 2,
                       text="Scrap up to two cards from your hand and/or discard pile")
 
     def test_scrap_two_draw_two(self):
