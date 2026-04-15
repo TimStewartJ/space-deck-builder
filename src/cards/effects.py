@@ -7,6 +7,19 @@ if TYPE_CHECKING:
     from src.engine.player import Player
     from src.engine.game import Game
 
+
+def _faction_matches(card_faction, target: str) -> bool:
+    """Check if a card's faction field matches a target faction (case-insensitive).
+
+    Handles both single-faction strings and multi-faction lists.
+    Returns False for None/empty factions.
+    """
+    if not card_faction:
+        return False
+    if isinstance(card_faction, list):
+        return any(f.lower() == target for f in card_faction)
+    return card_faction.lower() == target
+
 class CardEffectType(Enum):
     COMBAT = "combat"
     TRADE = "trade"
@@ -183,13 +196,23 @@ class Effect:
                 game.explorer_pile.append(card)
 
     def handle_complex_effect(self, game: 'Game', player: 'Player', card):
-        # Handle conditional card draw
+        # "Draw a card for each <Faction> card that you've played this turn"
         draw_match = re.search(r"Draw a card for each (\w+) card", self.text)
         if draw_match:
             faction = draw_match.group(1).lower()
-            count = sum(1 for c in player.played_cards if c.faction and c.faction.lower() == faction)
+            count = sum(1 for c in player.played_cards
+                        if _faction_matches(c.faction, faction))
             for _ in range(count):
                 player.draw_card()
+            return
+
+        # "If you have two or more bases in play, draw two cards" (Embassy Yacht)
+        if "two or more bases in play" in self.text.lower():
+            if len(player.bases) >= 2:
+                for _ in range(2):
+                    player.draw_card()
+                    game.stats.record_card_draw(player.name)
+            return
 
     def clone(self) -> 'Effect':
         """Create a lightweight copy with fresh mutable state.

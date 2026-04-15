@@ -595,3 +595,120 @@ class TestC2DestroyBase:
 
         assert base not in p2.bases
         assert base in p2.discard_pile
+
+
+# ── Work Unit D: COMPLEX Effects ─────────────────────────────────────────────
+
+
+class TestD1EmbassyYacht:
+    """D1: Embassy Yacht draws 2 cards when player has 2+ bases in play."""
+
+    def test_draws_two_with_two_bases(self):
+        game, p1, _ = _make_game_with_players()
+        # Put two bases in play
+        base1 = _make_base(name="Base1", effects=[])
+        base2 = _make_base(name="Base2", effects=[])
+        p1.bases.extend([base1, base2])
+
+        # Create Embassy Yacht's COMPLEX child effect
+        yacht_effect = Effect(CardEffectType.COMPLEX, 0,
+                              text="If you have two or more bases in play, draw two cards")
+        # Give the player cards to draw
+        p1.deck.extend([Card("D1", 0, 0, [], "ship"), Card("D2", 1, 0, [], "ship")])
+        initial_hand = len(p1.hand)
+
+        yacht_effect.apply(game, p1, None)
+
+        assert len(p1.hand) == initial_hand + 2
+
+    def test_no_draw_with_one_base(self):
+        game, p1, _ = _make_game_with_players()
+        base1 = _make_base(name="Base1", effects=[])
+        p1.bases.append(base1)
+        p1.deck.extend([Card("D1", 0, 0, [], "ship"), Card("D2", 1, 0, [], "ship")])
+        initial_hand = len(p1.hand)
+
+        yacht_effect = Effect(CardEffectType.COMPLEX, 0,
+                              text="If you have two or more bases in play, draw two cards")
+        yacht_effect.apply(game, p1, None)
+
+        assert len(p1.hand) == initial_hand
+
+    def test_no_draw_with_zero_bases(self):
+        game, p1, _ = _make_game_with_players()
+        p1.deck.append(Card("D1", 0, 0, [], "ship"))
+        initial_hand = len(p1.hand)
+
+        yacht_effect = Effect(CardEffectType.COMPLEX, 0,
+                              text="If you have two or more bases in play, draw two cards")
+        yacht_effect.apply(game, p1, None)
+
+        assert len(p1.hand) == initial_hand
+
+    def test_trade_and_authority_always_apply(self):
+        """Embassy Yacht's resource effects fire regardless of base count."""
+        game, p1, _ = _make_game_with_players()
+        yacht = Card("Embassy Yacht", 0, 3, [
+            Effect(CardEffectType.PARENT, 0, child_effects=[
+                Effect(CardEffectType.PARENT, 0, child_effects=[
+                    Effect(CardEffectType.TRADE, 2),
+                    Effect(CardEffectType.HEAL, 3),
+                ]),
+                Effect(CardEffectType.COMPLEX, 0,
+                       text="If you have two or more bases in play, draw two cards"),
+            ]),
+        ], "ship", faction="Trade Federation")
+        p1.hand.append(yacht)
+
+        play_action = Action(type=ActionType.PLAY_CARD, card=yacht, card_id=yacht.name)
+        game.execute_action(play_action)
+
+        # Resources always apply, no bases → no draw
+        assert p1.trade == 2
+        assert p1.health == 50 + 3
+
+
+class TestD2BlobWorldFactionSafety:
+    """D2: Blob World's faction counting must handle list factions."""
+
+    def test_list_faction_no_crash(self):
+        """Multi-faction cards in played_cards shouldn't crash Blob World."""
+        game, p1, _ = _make_game_with_players()
+        multi = Card("DualShip", 0, 1, [], "ship", faction=["Blob", "Star Empire"])
+        p1.played_cards.append(multi)
+        p1.deck.append(Card("D1", 1, 0, [], "ship"))
+
+        blob_world_effect = Effect(CardEffectType.COMPLEX, 0,
+                                   text="Draw a card for each Blob card that you've played this turn")
+        blob_world_effect.apply(game, p1, None)
+
+        # Multi-faction card with "Blob" should count
+        assert len(p1.hand) == 1
+
+    def test_string_faction_still_works(self):
+        """Single string factions should continue to work."""
+        game, p1, _ = _make_game_with_players()
+        blob1 = Card("BlobShip", 0, 1, [], "ship", faction="Blob")
+        blob2 = Card("BlobShip2", 1, 1, [], "ship", faction="Blob")
+        p1.played_cards.extend([blob1, blob2])
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        blob_world_effect = Effect(CardEffectType.COMPLEX, 0,
+                                   text="Draw a card for each Blob card that you've played this turn")
+        blob_world_effect.apply(game, p1, None)
+
+        assert len(p1.hand) == 2
+
+    def test_non_matching_faction_not_counted(self):
+        """Non-Blob factions should not trigger draws."""
+        game, p1, _ = _make_game_with_players()
+        se = Card("SEShip", 0, 1, [], "ship", faction="Star Empire")
+        p1.played_cards.append(se)
+        p1.deck.append(Card("D1", 1, 0, [], "ship"))
+        initial_hand = len(p1.hand)
+
+        blob_world_effect = Effect(CardEffectType.COMPLEX, 0,
+                                   text="Draw a card for each Blob card that you've played this turn")
+        blob_world_effect.apply(game, p1, None)
+
+        assert len(p1.hand) == initial_hand
