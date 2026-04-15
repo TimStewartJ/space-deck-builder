@@ -19,6 +19,23 @@ class Card:
     def is_outpost(self):
         return self.card_type == "outpost"
             
+    def clone(self) -> 'Card':
+        """Create a lightweight copy with fresh effect state.
+        
+        Shares immutable fields (name, cost, etc.) by reference but creates
+        new Effect objects so mutable applied-state is independent per game.
+        """
+        return Card(
+            name=self.name,
+            index=self.index,
+            cost=self.cost,
+            effects=[e.clone() for e in self.effects],
+            card_type=self.card_type,
+            defense=self.defense,
+            faction=list(self.faction) if isinstance(self.faction, list) else self.faction,
+            set=self.set,
+        )
+
     def reset_effects(self):
         """Reset all effects at end of turn"""
         for effect in self.effects:

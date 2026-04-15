@@ -1,5 +1,4 @@
 import re
-import copy
 import csv
 from typing import List
 
@@ -92,5 +91,5 @@ def load_trade_deck_cards(file_path='data/cards.csv', filter_names=None, filter_
                 log(f"[LOADER]: Adding {qty} copies of {card}")
             cards.append(card)
             for _ in range(qty - 1):
-                cards.append(copy.deepcopy(card))
+                cards.append(card.clone())
     return cards

@@ -192,9 +192,32 @@ class Effect:
             for _ in range(count):
                 player.draw_card()
 
+    def clone(self) -> 'Effect':
+        """Create a lightweight copy with fresh mutable state.
+        
+        Shares immutable config fields by reference but creates new Effect
+        objects with applied=False and independently cloned child_effects.
+        """
+        return Effect(
+            effect_type=self.effect_type,
+            value=self.value,
+            text=self.text,
+            faction_requirement=self.faction_requirement,
+            is_scrap_effect=self.is_scrap_effect,
+            is_ally_effect=self.is_ally_effect,
+            faction_requirement_count=self.faction_requirement_count,
+            is_or_effect=self.is_or_effect,
+            child_effects=[c.clone() for c in self.child_effects] if self.child_effects else None,
+            card_targets=list(self.card_targets) if self.card_targets else None,
+            is_mandatory=self.is_mandatory,
+        )
+
     def reset(self):
-        """Reset the effect's applied status at the end of turn"""
+        """Reset the effect's applied status at the end of turn, including child effects"""
         self.applied = False
+        if self.child_effects:
+            for child in self.child_effects:
+                child.reset()
         
     def __str__(self):
         base = f"{self.effect_type.name.capitalize()}: "

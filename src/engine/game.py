@@ -1,4 +1,3 @@
-import copy
 from typing import List
 from src.ai.agent import Agent
 from src.cards.effects import CardEffectType
@@ -13,7 +12,7 @@ class Game:
         self.players: List[Player] = []
         self.current_turn = 0
         self.is_game_over = False
-        self.trade_deck = copy.deepcopy(cards) if cards else []
+        self.trade_deck = [card.clone() for card in cards] if cards else []
         self.card_names = card_names if card_names else []
         self.trade_row: List[Card] = []
         self.explorer_pile: List[Card] = []
