@@ -115,10 +115,12 @@ def encode_opponent_into(player: 'Player', num_cards: int, card_index_map: dict[
 
     return offset
 
-def encode_state(game_state: 'Game', is_current_player_training: bool, cards: list[str], available_actions: list['Action'], card_index_map: dict[str, int] = None, state_buf: np.ndarray = None) -> torch.FloatTensor:
+def encode_state(game_state: 'Game', is_current_player_training: bool, cards: list[str], available_actions: list['Action'] = None, card_index_map: dict[str, int] = None, state_buf: np.ndarray = None, can_buy: bool = None, has_actions: bool = None) -> torch.FloatTensor:
     """Convert game state to fixed-length tensor.
     
     If state_buf is provided, it is zeroed and reused to avoid allocation.
+    Accepts pre-computed can_buy/has_actions flags to avoid scanning
+    available_actions. Falls back to scanning if flags are not provided.
     """
     num_cards = len(cards)
 
@@ -139,14 +141,20 @@ def encode_state(game_state: 'Game', is_current_player_training: bool, cards: li
 
     offset = 0
 
-    # Flags
+    # Flags — use pre-computed booleans if provided, else fall back to scanning
     state[offset] = 1.0 if is_current_player_training else 0.0
     offset += 1
     state[offset] = 1.0 if game_state.first_player_name == training_player.name else 0.0
     offset += 1
-    state[offset] = 1.0 if any(a.type == ActionType.BUY_CARD for a in available_actions) else 0.0
+    if can_buy is not None:
+        state[offset] = 1.0 if can_buy else 0.0
+    else:
+        state[offset] = 1.0 if (available_actions and any(a.type == ActionType.BUY_CARD for a in available_actions)) else 0.0
     offset += 1
-    state[offset] = 1.0 if any(a.type in (ActionType.ATTACK_PLAYER, ActionType.PLAY_CARD) for a in available_actions) else 0.0
+    if has_actions is not None:
+        state[offset] = 1.0 if has_actions else 0.0
+    else:
+        state[offset] = 1.0 if (available_actions and any(a.type in (ActionType.ATTACK_PLAYER, ActionType.PLAY_CARD) for a in available_actions)) else 0.0
     offset += 1
 
     # Trade row

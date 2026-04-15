@@ -13,6 +13,7 @@ from src.cards.card import Card
 from src.cards.registry import CardRegistry
 from src.encoding.state_encoder import encode_state, get_state_size
 from src.encoding.action_encoder import encode_action, get_action_space_size
+from src.encoding.action_context import build_action_context, ActionContext
 from src.ppo.rollout_buffer import RolloutBuffer
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.utils.logger import log, set_disabled
@@ -62,6 +63,8 @@ class BatchRunner:
         # Pre-allocate reusable numpy buffer for state encoding
         self._state_size = get_state_size(card_names)
         self._state_buf = np.zeros(self._state_size, dtype=np.float32)
+        # Pre-allocate reusable bool buffer for action mask generation
+        self._mask_buf = np.zeros(action_dim, dtype=bool)
 
     def run_episodes(self, num_episodes: int) -> tuple:
         """Run num_episodes games and return aggregated rollout data.
@@ -111,12 +114,10 @@ class BatchRunner:
                         games[i] = None
                         buffers[i] = None
 
-            # Step 3: Collect pending PPO decisions
+            # Step 3: Collect pending PPO decisions using unified action context
             pending_indices: list[int] = []
             pending_states: list[torch.Tensor] = []
-            pending_available: list[list] = []
-            pending_encoded: list[list[int]] = []
-            pending_meaningful: list[bool] = []
+            pending_contexts: list[ActionContext] = []
 
             for i in range(self.num_concurrent):
                 if games[i] is None or games[i].is_game_over:
@@ -125,35 +126,39 @@ class BatchRunner:
                 if player.name != self.training_agent_name:
                     continue
 
-                available = get_available_actions(games[i], player)
-                encoded_actions = [encode_action(a, cards=self.card_names, card_index_map=self.card_index_map) for a in available]
-                has_meaningful = any(
-                    a.type in (ActionType.ATTACK_PLAYER, ActionType.PLAY_CARD)
-                    for a in available
+                ctx = build_action_context(
+                    games[i], player, self.card_index_map,
+                    self.action_dim, mask_buf=self._mask_buf,
                 )
                 state = encode_state(
                     games[i], is_current_player_training=True,
-                    cards=self.card_names, available_actions=available,
+                    cards=self.card_names,
                     card_index_map=self.card_index_map,
                     state_buf=self._state_buf,
+                    can_buy=ctx.can_buy,
+                    has_actions=ctx.has_meaningful,
                 )
 
                 pending_indices.append(i)
                 pending_states.append(state)
-                pending_available.append(available)
-                pending_encoded.append(encoded_actions)
-                pending_meaningful.append(has_meaningful)
+                # Copy mask since buffer is reused across iterations
+                pending_contexts.append(ActionContext(
+                    mask=ctx.mask.copy(),
+                    has_meaningful=ctx.has_meaningful,
+                    can_buy=ctx.can_buy,
+                    resolvers=ctx.resolvers,
+                ))
 
             if not pending_states:
                 continue
 
             # Step 4: Batch construction — states, masks, forward pass
             states_batch = torch.stack(pending_states).to(self.device)
-            # Build all masks at once
             masks_batch = torch.zeros(len(pending_states), self.action_dim, device=self.device)
-            for j, encoded in enumerate(pending_encoded):
-                masks_batch[j, encoded] = 1
-                if pending_meaningful[j] and 1 in encoded:
+            for j, ctx in enumerate(pending_contexts):
+                masks_batch[j] = torch.from_numpy(ctx.mask.astype(np.float32))
+                # Suppress END_TURN when meaningful actions exist
+                if ctx.has_meaningful:
                     masks_batch[j, 1] = 0
 
             with torch.no_grad():
@@ -165,14 +170,10 @@ class BatchRunner:
             log_probs = dist.log_prob(act_indices)
 
             # Step 5: Distribute actions and apply
-            # Move action indices to CPU in bulk (one sync) instead of per-element .item()
             act_indices_cpu = act_indices.tolist()
             for j, i in enumerate(pending_indices):
                 act_idx = act_indices_cpu[j]
-                encoded = pending_encoded[j]
-                available = pending_available[j]
-
-                action = available[encoded.index(act_idx)]
+                action = pending_contexts[j].resolvers[act_idx]
 
                 buffers[i].add(
                     pending_states[j],
@@ -301,12 +302,10 @@ class BatchRunner:
                 else:
                     games[i] = None
 
-            # Collect pending PPO decisions
+            # Collect pending PPO decisions using unified action context
             pending_indices: list[int] = []
             pending_states: list[torch.Tensor] = []
-            pending_available: list[list] = []
-            pending_encoded: list[list[int]] = []
-            pending_meaningful: list[bool] = []
+            pending_contexts: list[ActionContext] = []
 
             for i in range(self.num_concurrent):
                 if games[i] is None or games[i].is_game_over:
@@ -315,24 +314,27 @@ class BatchRunner:
                 if player.name != self.training_agent_name:
                     continue
 
-                available = get_available_actions(games[i], player)
-                encoded_actions = [encode_action(a, cards=self.card_names, card_index_map=self.card_index_map) for a in available]
-                has_meaningful = any(
-                    a.type in (ActionType.ATTACK_PLAYER, ActionType.PLAY_CARD)
-                    for a in available
+                ctx = build_action_context(
+                    games[i], player, self.card_index_map,
+                    self.action_dim, mask_buf=self._mask_buf,
                 )
                 state = encode_state(
                     games[i], is_current_player_training=True,
-                    cards=self.card_names, available_actions=available,
+                    cards=self.card_names,
                     card_index_map=self.card_index_map,
                     state_buf=self._state_buf,
+                    can_buy=ctx.can_buy,
+                    has_actions=ctx.has_meaningful,
                 )
 
                 pending_indices.append(i)
                 pending_states.append(state)
-                pending_available.append(available)
-                pending_encoded.append(encoded_actions)
-                pending_meaningful.append(has_meaningful)
+                pending_contexts.append(ActionContext(
+                    mask=ctx.mask.copy(),
+                    has_meaningful=ctx.has_meaningful,
+                    can_buy=ctx.can_buy,
+                    resolvers=ctx.resolvers,
+                ))
 
             if not pending_states:
                 continue
@@ -340,9 +342,9 @@ class BatchRunner:
             # Batched forward pass with batch-constructed masks
             states_batch = torch.stack(pending_states).to(self.device)
             masks_batch = torch.zeros(len(pending_states), self.action_dim, device=self.device)
-            for j, encoded in enumerate(pending_encoded):
-                masks_batch[j, encoded] = 1
-                if pending_meaningful[j] and 1 in encoded:
+            for j, ctx in enumerate(pending_contexts):
+                masks_batch[j] = torch.from_numpy(ctx.mask.astype(np.float32))
+                if ctx.has_meaningful:
                     masks_batch[j, 1] = 0
 
             with torch.no_grad():
@@ -355,7 +357,7 @@ class BatchRunner:
             act_indices_cpu = act_indices.tolist()
             for j, i in enumerate(pending_indices):
                 act_idx = act_indices_cpu[j]
-                action = pending_available[j][pending_encoded[j].index(act_idx)]
+                action = pending_contexts[j].resolvers[act_idx]
                 games[i].apply_decision(action)
                 step_counts[i] += 1
 
