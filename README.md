@@ -5,21 +5,28 @@ A simulator and AI trainer for a space-based deck building card game, featuring 
 ## Quick Start
 
 ```bash
-# Install dependencies
-uv sync
+# Install dependencies (CPU-only torch by default)
+uv sync --extra cpu
 
-# GPU setup (optional — CPU works but is slower)
-python scripts/setup_gpu.py detect   # auto-detect and install GPU PyTorch
+# GPU setup — pick your backend:
+uv sync --extra rocm    # AMD GPUs (ROCm via TheRock)
+uv sync --extra cuda    # NVIDIA GPUs (CUDA 12.8)
+# Or auto-detect:
+python scripts/setup_gpu.py detect
 
 # Train a PPO agent
-python -m src train --updates 50 --episodes 128
+uv run --extra rocm python -m src train --updates 50 --episodes 128
 
 # Simulate games with a trained model
-python -m src simulate --games 100
+uv run --extra rocm python -m src simulate --games 100
 
 # Benchmark training throughput
-python -m src benchmark --episodes 128
+uv run --extra rocm python -m src benchmark --episodes 128
 ```
+
+> **Note:** Replace `--extra rocm` with your GPU backend (`cuda` or `cpu`).
+> After the initial `uv sync --extra <backend>`, plain `uv run` also works
+> without clobbering your GPU torch install.
 
 ## Unified CLI
 
@@ -37,16 +44,16 @@ Run `python -m src <command> --help` for full option details.
 
 ```bash
 # Basic training
-python -m src train --updates 50 --episodes 128 --device cuda
+uv run --extra rocm python -m src train --updates 50 --episodes 128
 
 # Self-play training
-python -m src train --updates 100 --episodes 128 --self-play
+uv run --extra rocm python -m src train --updates 100 --episodes 128 --self-play
 
 # Mixed opponents with custom weights
-python -m src train --opponents random:0.6,heuristic:0.4
+uv run --extra rocm python -m src train --opponents random:0.6,heuristic:0.4
 
 # Resume from a checkpoint
-python -m src train --load-latest-model --updates 50
+uv run --extra rocm python -m src train --load-latest-model --updates 50
 ```
 
 ### Key Training Options
@@ -62,7 +69,7 @@ python -m src train --load-latest-model --updates 50
 | `--self-play` | off | Train against past snapshots |
 | `--opponents` | random | Opponent mix (random, heuristic, simple) |
 | `--main-device` | cuda | Device for gradient updates |
-| `--simulation-device` | cpu | Device for episode simulation |
+| `--simulation-device` | cuda | Device for episode simulation |
 | `--eval-every` | 5 | Evaluate every N updates |
 
 ## Configuration System
