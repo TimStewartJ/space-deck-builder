@@ -189,12 +189,11 @@ class Game:
                     self.current_player.play_card(card)
                     self.stats.record_card_play(self.current_player.name)
                     log(f"{self.current_player.name} played {card.name}", v=True)
-                    # Apply first card effect if ship
-                    if card.card_type == "ship" and card.effects and len(card.effects) > 0:
-                        card.effects[0].apply(self, self.current_player, card)
-                    # Attempt application of all other effects if they don't require decisions
-                    for card in self.current_player.played_cards:
-                        for effect in card.effects:
+                    # Auto-apply simple resource effects across all played cards.
+                    # Skip scrap effects (must be explicitly chosen), OR effects
+                    # (require a choice), and ally effects (surfaced as APPLY_EFFECT actions).
+                    for pc in list(self.current_player.played_cards):
+                        for effect in pc.effects:
                             if (
                                 effect.effect_type in [
                                     CardEffectType.COMBAT,
@@ -205,8 +204,10 @@ class Game:
                                     CardEffectType.PARENT,
                                 ]
                                 and not effect.is_or_effect
+                                and not effect.is_scrap_effect
+                                and not effect.faction_requirement
                             ):
-                                effect.apply(self, self.current_player, card)
+                                effect.apply(self, self.current_player, pc)
                     break
         
         elif action.type == ActionType.APPLY_EFFECT and action.card_effect is not None:
@@ -312,20 +313,30 @@ class Game:
                         self.trade_row.pop(i)
                         log(f"{self.current_player.name} scrapped {card.name} from trade row", v=True)
                         break
-                # If this was the last pending action in the current set, refresh the trade row
-                if pending_set_completed <= 0:
+                # Refill trade row after all scraps from the pending set are done
+                if not pending_set or pending_set_completed:
                     self.fill_trade_row()
             # Return explorers to the explorer pile
             if action.card_id == "Explorer" and action.card:
                 self.explorer_pile.append(action.card)
         elif action.type == ActionType.DISCARD_CARDS:
-            # Discard card from hand
-            self.stats.record_cards_discarded_from_hand(self.current_player.name, 1)
-            for card in self.current_player.hand:
+            # Determine target: opponent's hand if forced discard, else current player
+            if action.card_source == "opponent":
+                opponent = self.get_opponent(self.current_player)
+                if opponent is None:
+                    return False
+                target_hand = opponent.hand
+                target_discard = opponent.discard_pile
+                self.stats.record_cards_discarded_from_hand(opponent.name, 1)
+            else:
+                target_hand = self.current_player.hand
+                target_discard = self.current_player.discard_pile
+                self.stats.record_cards_discarded_from_hand(self.current_player.name, 1)
+            for card in target_hand:
                 if card.name == action.card_id:
-                    self.current_player.hand.remove(card)
-                    self.current_player.discard_pile.append(card)
-                    log(f"{self.current_player.name} discarded {card.name}", v=True)
+                    target_hand.remove(card)
+                    target_discard.append(card)
+                    log(f"{self.current_player.name} discarded {card.name} from {'opponent' if action.card_source == 'opponent' else 'hand'}", v=True)
                     break
 
         return False  # Turn continues

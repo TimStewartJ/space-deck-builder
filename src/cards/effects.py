@@ -120,13 +120,11 @@ class Effect:
             if pending_actions:
                 player.add_pending_actions(pending_actions, self.value, self.is_mandatory)
         elif self.effect_type == CardEffectType.TARGET_DISCARD:
-            # Create an action for the target player to discard a card
+            # Current player chooses which card the opponent discards
             if self.card_targets and "opponent" in self.card_targets:
-                # Assuming the opponent is the next player in the game
                 opponent = game.get_opponent(player)
                 if opponent is None:
                     return
-                # Create an action for each card in the opponent's hand
                 pending_actions = []
                 for target in opponent.hand:
                     action = Action(
@@ -135,29 +133,24 @@ class Effect:
                         card_source="opponent"
                     )
                     pending_actions.append(action)
-                opponent.add_pending_actions(pending_actions, self.value, True)
+                if pending_actions:
+                    player.add_pending_actions(pending_actions, self.value, True)
         elif self.effect_type == CardEffectType.DESTROY_BASE:
+            # Current player chooses which opponent base to destroy.
+            # Unlike combat attacks, destroy effects can target any base
+            # (outposts do NOT have priority here).
             opponent = game.get_opponent(player)
             if opponent is None:
                 return
             pending_actions = []
-            outposts = [b for b in opponent.bases if b.is_outpost()]
-            if outposts:
-                for outpost in outposts:
-                    pending_actions.append(Action(
-                        ActionType.DESTROY_BASE,
-                        target_id=outpost.name,
-                        card_id=outpost.name,
-                    ))
-            else:
-                for base in opponent.bases:
-                    pending_actions.append(Action(
-                        ActionType.DESTROY_BASE,
-                        target_id=base.name,
-                        card_id=base.name,
-                    ))
+            for base in opponent.bases:
+                pending_actions.append(Action(
+                    ActionType.DESTROY_BASE,
+                    target_id=base.name,
+                    card_id=base.name,
+                ))
             if pending_actions:
-                opponent.add_pending_actions(pending_actions, self.value, False)
+                player.add_pending_actions(pending_actions, self.value, False)
                 
         elif self.effect_type == CardEffectType.PARENT:
             # Apply child effects if this card has any
