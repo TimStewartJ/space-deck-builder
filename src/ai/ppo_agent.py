@@ -3,43 +3,16 @@ import torch.nn as nn
 import torch.optim as optim
 from typing import TYPE_CHECKING, List, Optional
 import time
+from src.ppo.ppo_actor_critic import PPOActorCritic
+from src.nn.state_utils import unpack_state
 from src.ai.agent import Agent
-from src.engine.actions import get_available_actions
+from src.engine.actions import ActionType, get_available_actions
 from src.nn.state_encoder import encode_state, get_state_size
 from src.nn.action_encoder import encode_action, decode_action, get_action_space_size
 from src.utils.logger import log
 
 if TYPE_CHECKING:
     from src.engine.game import Game
-
-class PPOActorCritic(nn.Module):
-    def __init__(self, state_dim: int, action_dim: int):
-        super().__init__()
-        # actor head
-        self.actor = nn.Sequential(
-            nn.Linear(state_dim, 1024),
-            nn.Tanh(),
-            nn.Linear(1024, 1024),
-            nn.Tanh(),
-            nn.Linear(1024, 1024),
-            nn.Tanh(),
-            nn.Linear(1024, action_dim)
-        )
-        # critic head
-        self.critic = nn.Sequential(
-            nn.Linear(state_dim, 1024),
-            nn.Tanh(),
-            nn.Linear(1024, 1024),
-            nn.Tanh(),
-            nn.Linear(1024, 1024),
-            nn.Tanh(),
-            nn.Linear(1024, 1)
-        )
-
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        logits = self.actor(x)
-        value = self.critic(x).squeeze(-1)
-        return logits, value
 
 class PPOAgent(Agent):
     def __init__(
@@ -78,7 +51,7 @@ class PPOAgent(Agent):
             log(f"State size: {self.state_dim}, Action size: {self.action_dim}")
             log(f"Using device: {self.device}")
 
-        self.model = PPOActorCritic(self.state_dim, self.action_dim).to(self.device)
+        self.model = PPOActorCritic(self.state_dim, self.action_dim, len(card_names)).to(self.device)
         if model_path:
             log(f"Loading PPO model from {model_path}")
             self.model.load_state_dict(torch.load(model_path, map_location=self.device))
@@ -102,16 +75,27 @@ class PPOAgent(Agent):
 
         start_time = time.perf_counter()
         available = get_available_actions(game_state, game_state.current_player)
+        encoded_actions = [encode_action(a, cards=self.cards) for a in available]
+        has_available_actions = True if any(
+            action.type == ActionType.ATTACK_PLAYER or action.type == ActionType.PLAY_CARD
+            for action in available
+        ) else False
         state = encode_state(
             game_state, is_current_player_training=True,
-            cards=self.cards, available_actions=available
+            cards=self.cards,
+            available_actions=available
         ).to(self.device)
 
         logits: torch.Tensor
         value: torch.Tensor
         logits, value = self.model(state)
-        # mask out unavailable
-        mask = state[-self.action_dim:]
+        # mask out unavailable actions using encoded_actions
+        mask = torch.zeros(self.action_dim, device=self.device)
+        mask[encoded_actions] = 1
+        # # mark end turn as unavailable if there are other actions available
+        if has_available_actions and 1 in encoded_actions:
+            # End turn has a value of 1 in the encoded_actions list
+            mask[1] = 0
         logits = logits.masked_fill(mask == 0, float('-inf'))
 
         dist = torch.distributions.Categorical(torch.softmax(logits, -1))
@@ -119,13 +103,20 @@ class PPOAgent(Agent):
         logp: torch.Tensor = dist.log_prob(torch.tensor(act_idx, device=self.device))
 
         # decode back to Action
-        action = next(a for a in available if encode_action(a, cards=self.cards) == act_idx)
+        action = available[encoded_actions.index(int(act_idx))]
+
+        reward = 0.0
+        # If the end turn action was taken while other actions were available,
+        # lower the reward to encourage taking other actions
+        # if has_available_actions and action.type != ActionType.END_TURN:
+        #     reward = 0.00025
 
         # store
         self.states.append(state.detach())
         self.actions.append(act_idx)
         self.log_probs.append(logp.detach())
         self.values.append(value.detach())
+        self.rewards.append(reward)
         self.dones.append(False)
 
         # timing
@@ -135,15 +126,19 @@ class PPOAgent(Agent):
 
         return action
 
-    def store_reward(self, reward: float, done: bool):
-        self.rewards.append(reward)
-        self.dones[-1] = done
+    def fill_last_reward(self, reward: float):
+        self.rewards[-1] = reward
+        self.dones[-1] = True
 
-    def make_last_reward_negative(self):
-        """Make the last reward negative to indicate end of episode."""
-        if self.rewards:
-            self.rewards[-1] = -1.0
-            self.dones[-1] = True
+    def create_dummy_state(self, game: 'Game'):
+        # encode final state so we get a “next‐state” entry with value=0
+        final_state = encode_state(game, True, cards=self.cards, available_actions=[])
+        self.states.append(final_state.detach())
+        self.actions.append(0)          # dummy
+        self.log_probs.append(torch.tensor(0.0, device=self.device))
+        self.values.append(torch.tensor(0.0, device=self.device))
+        self.rewards.append(0.0)
+        self.dones.append(True)         # marks bootstrap point
 
     def finish_batch(self):
         self.device = self.simulation_device
@@ -214,6 +209,7 @@ class PPOAgent(Agent):
 
                 self.optimizer.zero_grad()
                 loss.backward()
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.5)
                 self.optimizer.step()
 
                 # accumulate for averages

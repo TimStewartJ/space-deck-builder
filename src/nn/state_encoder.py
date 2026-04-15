@@ -1,7 +1,7 @@
 import torch
 from typing import TYPE_CHECKING
 
-from src.engine.actions import get_available_actions
+from src.engine.actions import ActionType, get_available_actions
 from src.nn.action_encoder import encode_action, get_action_space_size
 
 if TYPE_CHECKING:
@@ -20,15 +20,16 @@ def get_state_size(cards: list[str]) -> int:
     return (
         1 + # is_training_player flag
         1 + # is_first_player flag
+        1 + # can_buy_anything flag
+        1 + # has_available_actions flag
         cards_length + # Trade row
-        player_encoding_size * 2 + # Players
-        get_action_space_size(cards) # Available actions
+        player_encoding_size * 2 # Players
     )
 
 def encode_card_presence(cards_list: list['Card'], cards: list[str]) -> list[float]:
     """Encode card presence in a list of cards"""
 
-    card_presence_worth = 0.25
+    card_presence_worth = 0.0125
 
     card_presence = [0.0] * len(cards)
     for card in cards_list:
@@ -63,7 +64,7 @@ def encode_player(player: 'Player', cards: list[str]) -> list[float]:
 
     return player_resources + hand_encoding + discard_encoding + deck_encoding + bases_encoding
 
-def encode_state(game_state: 'Game', is_current_player_training: bool, cards: list[str], available_actions: list['Action'] | None = None) -> torch.FloatTensor:
+def encode_state(game_state: 'Game', is_current_player_training: bool, cards: list[str], available_actions: list['Action']) -> torch.FloatTensor:
     """Convert variable-length game state to fixed-length tensor"""
     state = []
 
@@ -82,6 +83,19 @@ def encode_state(game_state: 'Game', is_current_player_training: bool, cards: li
     # Encode if the first player is the training player
     is_first_player = 1.0 if game_state.first_player_name == training_player.name else 0.0
     state.append(is_first_player)
+
+    # Encode if there are non-end turn and non-scrap actions available
+    can_buy_anything = 1.0 if any(
+            action.type == ActionType.BUY_CARD
+            for action in available_actions
+        ) else 0.0
+    state.append(can_buy_anything)
+
+    has_available_actions = 1.0 if any(
+            action.type == ActionType.ATTACK_PLAYER or action.type == ActionType.PLAY_CARD
+            for action in available_actions
+        ) else 0.0
+    state.append(has_available_actions)
     
     # Encode trade row
     trade_row_encoding = encode_card_presence(game_state.trade_row, cards)
@@ -92,15 +106,5 @@ def encode_state(game_state: 'Game', is_current_player_training: bool, cards: li
 
     # Encode opponent player
     state.extend(encode_player(opponent, cards=cards))
-
-    # Encode available actions for the training player in 1 hot format
-    if available_actions is None:
-        available_actions = get_available_actions(game_state, training_player)
-    action_encoding = [0.0] * get_action_space_size(cards)
-    for action in available_actions:
-        action_index = encode_action(action, cards=cards)
-        if 0 <= action_index < len(action_encoding):
-            action_encoding[action_index] = 1.0
-    state.extend(action_encoding)
 
     return torch.FloatTensor(state)

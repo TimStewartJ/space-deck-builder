@@ -28,13 +28,13 @@ def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card]):
         done = game.step()
         reward = 0.0
         if done:
+            # agent.create_dummy_state(game)
+
             if game.get_winner() == agent.name:
                 reward = 1.0
             else:
                 reward = -1.0
-                agent.make_last_reward_negative()
-        if is_agent:
-            agent.store_reward(reward, done)
+            agent.fill_last_reward(reward)
     return agent.finish_batch()
 
 def run_episode_worker(state_dict, agent_kwargs, cards, seed):
@@ -78,15 +78,15 @@ def run_eval_game_worker(agent_state_dict, agent_kwargs, opponent_type, opponent
 def main():
     parser = argparse.ArgumentParser("PPO Trainer")
     parser.add_argument("--episodes",    type=int,   default=1024)
-    parser.add_argument("--updates",     type=int,   default=8)
+    parser.add_argument("--updates",     type=int,   default=4)
     parser.add_argument("--cards-path",  type=str,   default="data/cards.csv")
     parser.add_argument("--lr",          type=float, default=3e-4)
-    parser.add_argument("--gamma",       type=float, default=0.99)
-    parser.add_argument("--lam",         type=float, default=0.95)
-    parser.add_argument("--clip-eps",    type=float, default=0.2)
+    parser.add_argument("--gamma",       type=float, default=0.995)
+    parser.add_argument("--lam",         type=float, default=0.99)
+    parser.add_argument("--clip-eps",    type=float, default=0.3)
     parser.add_argument("--epochs",      type=int,   default=4)
-    parser.add_argument("--batch-size",  type=int,   default=256)
-    parser.add_argument("--entropy",     type=float, default=0.01, help="Entropy bonus coefficient for PPO")
+    parser.add_argument("--batch-size",  type=int,   default=1024)
+    parser.add_argument("--entropy",     type=float, default=0.025, help="Entropy bonus coefficient for PPO")
     parser.add_argument("--device",      type=str,   default="cuda", help="Device to run ML (cuda or cpu)")
     parser.add_argument("--model-path",  type=str,   default=None, help="Path to a pretrained PPO model to load")
     parser.add_argument("--load-latest-model", action="store_true", help="If set, load the latest PPO model from the models directory if available.")
@@ -192,6 +192,7 @@ def main():
         duration_update = time.time() - start_time
         total_time_spent_on_updates += duration_update
         log(f"Update {upd} complete in {duration_update:.2f}s. State size: {states.shape}")
+        log(f"Loc Emb: {agent.model.loc_emb.weight.grad is not None and agent.model.loc_emb.weight.grad.norm().item()}")
 
         # Save a deep copy of the agent after update
         past_agent = copy.deepcopy(agent)
