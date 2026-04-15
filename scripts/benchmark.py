@@ -59,7 +59,7 @@ def benchmark_batched(num_episodes, card_names, cards, device):
     )
 
     start = time.perf_counter()
-    states, actions, old_lp, returns, advs = runner.run_episodes(num_episodes)
+    states, actions, old_lp, returns, advs, _masks = runner.run_episodes(num_episodes)
     elapsed = time.perf_counter() - start
     total_steps = states.shape[0]
     return total_steps, None, elapsed
@@ -72,7 +72,7 @@ def benchmark_parallel(num_episodes, card_names, cards, device, num_workers=4):
     model = PPOActorCritic(state_dim, action_dim, len(card_names)).to(device)
 
     start = time.perf_counter()
-    states, actions, old_lp, returns, advs = run_episodes_parallel(
+    states, actions, old_lp, returns, advs, _masks = run_episodes_parallel(
         model=model, card_names=card_names, cards=cards,
         action_dim=action_dim, num_episodes=num_episodes,
         num_workers=num_workers,

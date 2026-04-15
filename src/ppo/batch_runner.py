@@ -427,11 +427,13 @@ def run_episodes_parallel(model, card_names, cards, action_dim,
         ]
         results = [f.result() for f in futures]
 
-    S, A, OL, R, Adv = zip(*results)
+    S, A, OL, R, Adv, M = zip(*results)
+    has_masks = all(m is not None for m in M)
     return (
         torch.cat(S).to(device),
         torch.cat(A).to(device),
         torch.cat(OL).to(device),
         torch.cat(R).to(device),
         torch.cat(Adv).to(device),
+        torch.cat(M).to(device) if has_masks else None,
     )
