@@ -3,10 +3,10 @@ from src.ai.agent import Agent
 from src.cards.effects import CardEffectType
 from src.utils import logger as _logger
 from src.utils.logger import log
-from src.cards.card import Card
+from src.cards.card import Card, CardType
 from src.config import GameConfig
 from src.engine.player import Player
-from src.engine.actions import ActionType, Action
+from src.engine.actions import ActionType, Action, CardSource
 from src.engine.game_stats import GameStats
 
 
@@ -72,7 +72,7 @@ class Game:
                     Effect(CardEffectType.TRADE, 2),
                     Effect(CardEffectType.COMBAT, 2, is_scrap_effect=True),
                 ],
-                "ship",
+                CardType.SHIP,
             )
             self.explorer_pile.append(explorer_card)
     def fill_trade_row(self):
@@ -117,9 +117,9 @@ class Game:
         scout_idx = self.card_index_map["Scout"] if self.card_index_map else len(self.card_names) - 2
         viper_idx = self.card_index_map["Viper"] if self.card_index_map else len(self.card_names) - 1
         for _ in range(self.config.num_scouts):
-            starting_deck.append(Card("Scout", scout_idx, 0, [Effect(CardEffectType.TRADE, 1)], "ship"))
+            starting_deck.append(Card("Scout", scout_idx, 0, [Effect(CardEffectType.TRADE, 1)], CardType.SHIP))
         for _ in range(self.config.num_vipers):
-            starting_deck.append(Card("Viper", viper_idx, 0, [Effect(CardEffectType.COMBAT, 1)], "ship"))
+            starting_deck.append(Card("Viper", viper_idx, 0, [Effect(CardEffectType.COMBAT, 1)], CardType.SHIP))
         return starting_deck
     
     def step(self, action: Action | None = None):
@@ -387,9 +387,9 @@ class Game:
                         self.stats.end_game(self.current_player.name)
 
         elif action.type == ActionType.SCRAP_CARD and action.card_source is not None:
-            self.stats.record_card_scrap(self.current_player.name, action.card_source)
+            self.stats.record_card_scrap(self.current_player.name, action.card_source.value)
             target_card = action.card
-            if action.card_source == 'hand':
+            if action.card_source == CardSource.HAND:
                 if target_card is not None and target_card in self.current_player.hand:
                     self.current_player.hand.remove(target_card)
                 else:
@@ -400,7 +400,7 @@ class Game:
                             break
                 if _log_enabled and target_card:
                     log(f"{self.current_player.name} scrapped {target_card.name} from hand", v=True)
-            elif action.card_source == 'discard':
+            elif action.card_source == CardSource.DISCARD:
                 if target_card is not None and target_card in self.current_player.discard_pile:
                     self.current_player.discard_pile.remove(target_card)
                 else:
@@ -411,7 +411,7 @@ class Game:
                             break
                 if _log_enabled and target_card:
                     log(f"{self.current_player.name} scrapped {target_card.name} from discard pile", v=True)
-            elif action.card_source == 'trade':
+            elif action.card_source == CardSource.TRADE:
                 if target_card is not None:
                     for i, card in enumerate(self.trade_row):
                         if card is target_card:
@@ -434,7 +434,7 @@ class Game:
 
         elif action.type == ActionType.DISCARD_CARDS:
             # Determine target: opponent's hand if forced discard, else current player
-            if action.card_source == "opponent":
+            if action.card_source == CardSource.OPPONENT:
                 opponent = self.get_opponent(self.current_player)
                 if opponent is None:
                     return False
@@ -457,7 +457,7 @@ class Game:
                         target_discard.append(card)
                         break
             if _log_enabled and target_card:
-                log(f"{self.current_player.name} discarded {target_card.name} from {'opponent' if action.card_source == 'opponent' else 'hand'}", v=True)
+                log(f"{self.current_player.name} discarded {target_card.name} from {'opponent' if action.card_source == CardSource.OPPONENT else 'hand'}", v=True)
 
         # Finalize pending set after action execution so that card moves
         # (discard, scrap) happen before any completion effects (draw-on-complete).

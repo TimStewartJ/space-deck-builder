@@ -1,5 +1,6 @@
 from typing import List, Optional
 from src.cards.card import Card
+from src.cards.factions import Faction, parse_faction
 from src.ai.agent import Agent
 from src.config import GameConfig
 from src.engine.actions import ActionType, Action, get_available_actions, PendingActionSet
@@ -27,8 +28,8 @@ class Player:
         self.pending_action_sets: List[PendingActionSet] = []
         self.cards_drawn = 0  # Track the number of cards drawn
         # Cached faction ally counts — updated incrementally on card play,
-        # reset on end_turn. Maps lowercase faction name → count.
-        self._faction_counts: dict[str, int] = {}
+        # reset on end_turn. Maps Faction bit → count of cards contributing.
+        self._faction_counts: dict[Faction, int] = {}
         self._faction_counts_dirty: bool = True
         self._faction_counts_card_count: int = 0  # track card count for staleness detection
         
@@ -70,17 +71,17 @@ class Player:
         for f in factions:
             self._faction_counts[f] = self._faction_counts.get(f, 0) + 1
 
-    def _get_card_faction_keys(self, card) -> list[str]:
-        """Get the lowercase faction keys a card contributes to ally counts."""
-        if card.ally_factions is not None:
-            if "*" in card.ally_factions:
-                return ["*"]
-            return [f.lower() for f in card.ally_factions]
+    def _get_card_faction_keys(self, card) -> list[Faction]:
+        """Get the Faction bits a card contributes to ally counts."""
+        if card.ally_factions:
+            if card.ally_factions == Faction.ALL:
+                return [Faction.ALL]
+            # Return each individual faction bit
+            return [f for f in Faction if f in card.ally_factions and f != Faction.NONE and f != Faction.ALL]
         if not card.faction:
             return []
-        if isinstance(card.faction, list):
-            return [f.lower() for f in card.faction]
-        return [card.faction.lower()]
+        # Return each individual faction bit from the card's faction bitmask
+        return [f for f in Faction if f in card.faction and f != Faction.NONE and f != Faction.ALL]
 
     def _rebuild_faction_counts(self):
         """Full rebuild of faction counts from played_cards + bases."""
@@ -176,19 +177,26 @@ class Player:
         """Skip the current pending action set"""
         self.advance_pending_set()
     
-    def get_faction_ally_count(self, faction):
+    def get_faction_ally_count(self, faction) -> int:
         """Count cards that count as allies for the specified faction.
 
         Uses cached faction counts when available (updated incrementally
         on card play). Falls back to full rebuild if cache is dirty or
         the card count has changed (e.g. direct list manipulation).
+
+        Args:
+            faction: A Faction bitmask or a string faction name.
         """
         current_count = len(self.played_cards) + len(self.bases)
         if self._faction_counts_dirty or self._faction_counts_card_count != current_count:
             self._rebuild_faction_counts()
-        target = faction.lower()
+        # Accept string for backward compatibility during transition
+        if isinstance(faction, str):
+            target = parse_faction(faction)
+        else:
+            target = faction
         count = self._faction_counts.get(target, 0)
-        # Wildcard cards ("*") count as allies for every faction
-        if target != "*":
-            count += self._faction_counts.get("*", 0)
+        # Wildcard cards (Faction.ALL) count as allies for every faction
+        if target != Faction.ALL:
+            count += self._faction_counts.get(Faction.ALL, 0)
         return count

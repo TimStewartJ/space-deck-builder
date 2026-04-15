@@ -1,7 +1,8 @@
 """Tests for Card.clone() and Effect.clone() methods."""
 import pytest
-from src.cards.card import Card
+from src.cards.card import Card, CardType
 from src.cards.effects import Effect, CardEffectType
+from src.cards.factions import Faction
 
 
 class TestEffectClone:
@@ -98,7 +99,7 @@ class TestCardClone:
             ]),
         ]
         return Card("Viper", index=0, cost=0, effects=effects,
-                     card_type="ship", defense=None, faction="Blob", set="Core Set")
+                     card_type=CardType.SHIP, defense=None, faction=Faction.BLOB, set="Core Set")
 
     def test_clone_returns_new_card(self):
         card = self._make_card()
@@ -111,9 +112,9 @@ class TestCardClone:
         assert cloned.name == "Viper"
         assert cloned.index == 0
         assert cloned.cost == 0
-        assert cloned.card_type == "ship"
+        assert cloned.card_type == CardType.SHIP
         assert cloned.defense is None
-        assert cloned.faction == "Blob"
+        assert cloned.faction == Faction.BLOB
         assert cloned.set == "Core Set"
 
     def test_clone_effects_are_independent(self):
@@ -134,25 +135,26 @@ class TestCardClone:
         cloned.effects[1].child_effects[0].applied = True
         assert card.effects[1].child_effects[0].applied is False
 
-    def test_clone_list_faction_is_independent(self):
+    def test_clone_bitmask_faction_is_independent(self):
+        """Faction bitmasks are immutable ints — cloning preserves the value."""
         card = Card("Patrol Cutter", index=1, cost=2,
                      effects=[Effect(CardEffectType.COMBAT, value=2)],
-                     faction=["Trade Federation", "Star Empire"])
+                     faction=Faction.TRADE_FEDERATION | Faction.STAR_EMPIRE)
         cloned = card.clone()
-        cloned.faction.append("Blob")
-        assert len(card.faction) == 2
+        assert cloned.faction == Faction.TRADE_FEDERATION | Faction.STAR_EMPIRE
+        assert card.faction == cloned.faction
 
     def test_clone_string_faction_unchanged(self):
         card = self._make_card()
         cloned = card.clone()
-        assert cloned.faction == "Blob"
+        assert cloned.faction == Faction.BLOB
 
     def test_clone_none_faction(self):
         card = Card("Scout", index=2, cost=0,
                      effects=[Effect(CardEffectType.TRADE, value=1)],
                      faction=None)
         cloned = card.clone()
-        assert cloned.faction is None
+        assert cloned.faction == Faction.NONE
 
 
 class TestEffectReset:

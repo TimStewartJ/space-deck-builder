@@ -11,7 +11,7 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from src.engine.actions import Action, ActionType, PendingActionSet
+from src.engine.actions import Action, ActionType, CardSource, PendingActionSet
 from src.cards.effects import CardEffectType
 from src.encoding.action_encoder import END_TURN_INDEX, SKIP_INDEX
 
@@ -275,11 +275,11 @@ def _encode_action_index(action, card_index_map, num_cards,
             return off_effect_scrap + ci
         return off_effect_nonscrap + ci
     if action.type == ActionType.SCRAP_CARD and ci is not None:
-        if action.card_source == "hand":
+        if action.card_source == CardSource.HAND:
             return off_scrap_hand + ci
-        if action.card_source == "discard":
+        if action.card_source == CardSource.DISCARD:
             return off_scrap_discard + ci
-        if action.card_source == "trade":
+        if action.card_source == CardSource.TRADE:
             return off_scrap_trade + ci
     if action.type == ActionType.DISCARD_CARDS and ci is not None:
         return off_discard + ci

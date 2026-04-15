@@ -1,13 +1,14 @@
 """Tests for CardRegistry: construction, lookup, and ordering consistency."""
 import pytest
 
-from src.cards.card import Card
+from src.cards.card import Card, CardType
 from src.cards.effects import Effect, CardEffectType
+from src.cards.factions import Faction
 from src.cards.registry import CardDef, CardRegistry, build_registry
 from src.config import DataConfig
 
 
-def _make_card(name: str, index: int, cost: int = 1, card_type: str = "ship",
+def _make_card(name: str, index: int, cost: int = 1, card_type=CardType.SHIP,
                faction=None, defense=None, set_name: str = "Core Set") -> Card:
     return Card(
         name=name, index=index, cost=cost,
@@ -19,28 +20,28 @@ def _make_card(name: str, index: int, cost: int = 1, card_type: str = "ship",
 
 class TestCardDef:
     def test_frozen(self):
-        cd = CardDef(card_def_id=0, name="Scout", cost=0, card_type="ship")
+        cd = CardDef(card_def_id=0, name="Scout", cost=0, card_type=CardType.SHIP)
         with pytest.raises(AttributeError):
             cd.name = "Viper"
 
     def test_fields(self):
         cd = CardDef(
-            card_def_id=3, name="Blob Fighter", cost=1, card_type="ship",
-            defense=None, faction="Blob", set_name="Core Set",
+            card_def_id=3, name="Blob Fighter", cost=1, card_type=CardType.SHIP,
+            defense=None, faction=Faction.BLOB, set_name="Core Set",
         )
         assert cd.card_def_id == 3
         assert cd.name == "Blob Fighter"
         assert cd.cost == 1
-        assert cd.card_type == "ship"
-        assert cd.faction == "Blob"
+        assert cd.card_type == CardType.SHIP
+        assert cd.faction == Faction.BLOB
         assert cd.set_name == "Core Set"
 
 
 class TestCardRegistry:
     def test_basic_construction(self):
         defs = [
-            CardDef(0, "Blob Fighter", 1, "ship", faction="Blob"),
-            CardDef(1, "Trade Pod", 2, "ship", faction="Blob"),
+            CardDef(0, "Blob Fighter", 1, CardType.SHIP, faction=Faction.BLOB),
+            CardDef(1, "Trade Pod", 2, CardType.SHIP, faction=Faction.BLOB),
         ]
         reg = CardRegistry(defs, starter_names=["Scout", "Viper", "Explorer"])
         assert reg.num_cards == 5
@@ -48,8 +49,8 @@ class TestCardRegistry:
 
     def test_card_index_map(self):
         defs = [
-            CardDef(0, "Blob Fighter", 1, "ship"),
-            CardDef(1, "Trade Pod", 2, "ship"),
+            CardDef(0, "Blob Fighter", 1, CardType.SHIP),
+            CardDef(1, "Trade Pod", 2, CardType.SHIP),
         ]
         reg = CardRegistry(defs, starter_names=["Scout", "Viper", "Explorer"])
         assert reg.card_index_map["Blob Fighter"] == 0
@@ -59,26 +60,26 @@ class TestCardRegistry:
         assert reg.card_index_map["Explorer"] == 4
 
     def test_get_by_id(self):
-        cd = CardDef(0, "Blob Fighter", 1, "ship")
+        cd = CardDef(0, "Blob Fighter", 1, CardType.SHIP)
         reg = CardRegistry([cd], starter_names=[])
         assert reg.get(0) is cd
 
     def test_get_by_name(self):
-        cd = CardDef(0, "Blob Fighter", 1, "ship")
+        cd = CardDef(0, "Blob Fighter", 1, CardType.SHIP)
         reg = CardRegistry([cd], starter_names=[])
         assert reg.get_by_name("Blob Fighter") is cd
         assert reg.get_by_name("Nonexistent") is None
 
     def test_len(self):
-        defs = [CardDef(i, f"Card{i}", i, "ship") for i in range(5)]
+        defs = [CardDef(i, f"Card{i}", i, CardType.SHIP) for i in range(5)]
         reg = CardRegistry(defs, starter_names=["Scout"])
         assert len(reg) == 6
 
     def test_starters_not_duplicated(self):
         """If a starter name already exists in trade deck, don't add it twice."""
         defs = [
-            CardDef(0, "Scout", 0, "ship"),  # Scout in trade deck (unusual but valid)
-            CardDef(1, "Blob Fighter", 1, "ship"),
+            CardDef(0, "Scout", 0, CardType.SHIP),
+            CardDef(1, "Blob Fighter", 1, CardType.SHIP),
         ]
         reg = CardRegistry(defs, starter_names=["Scout", "Viper"])
         assert reg.card_names.count("Scout") == 1
@@ -111,21 +112,21 @@ class TestBuildRegistry:
         assert reg.card_names == ["Blob Fighter", "Scout", "Viper", "Explorer"]
 
     def test_multi_faction_card(self):
-        """Multi-faction cards should store faction as joined string."""
-        card = _make_card("Patrol Cutter", 0, faction=["Trade Federation", "Star Empire"])
+        """Multi-faction cards should store faction as bitmask."""
+        card = _make_card("Patrol Cutter", 0, faction=Faction.TRADE_FEDERATION | Faction.STAR_EMPIRE)
         reg = build_registry([card], ["Scout"])
         cd = reg.get_by_name("Patrol Cutter")
-        assert cd.faction == "Trade Federation / Star Empire"
+        assert cd.faction == Faction.TRADE_FEDERATION | Faction.STAR_EMPIRE
 
     def test_card_def_fields(self):
-        card = _make_card("Space Station", 0, cost=4, card_type="outpost",
-                          defense=5, faction="Star Empire")
+        card = _make_card("Space Station", 0, cost=4, card_type=CardType.OUTPOST,
+                          defense=5, faction=Faction.STAR_EMPIRE)
         reg = build_registry([card], ["Scout"])
         cd = reg.get_by_name("Space Station")
         assert cd.cost == 4
-        assert cd.card_type == "outpost"
+        assert cd.card_type == CardType.OUTPOST
         assert cd.defense == 5
-        assert cd.faction == "Star Empire"
+        assert cd.faction == Faction.STAR_EMPIRE
 
 
 class TestRegistryMatchesLegacy:
@@ -189,14 +190,14 @@ class TestRegistryMatchesLegacy:
         scout = registry.get_by_name("Scout")
         assert scout is not None
         assert scout.cost == 0
-        assert scout.card_type == "ship"
+        assert scout.card_type == CardType.SHIP
 
         viper = registry.get_by_name("Viper")
         assert viper is not None
         assert viper.cost == 0
-        assert viper.card_type == "ship"
+        assert viper.card_type == CardType.SHIP
 
         explorer = registry.get_by_name("Explorer")
         assert explorer is not None
         assert explorer.cost == 2
-        assert explorer.card_type == "ship"
+        assert explorer.card_type == CardType.SHIP
