@@ -31,6 +31,9 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--batch-size",  type=int,   default=_ppo.batch_size)
     p.add_argument("--entropy",     type=float, default=_ppo.entropy_coef,
                    help="Entropy bonus coefficient")
+    p.add_argument("--adv-norm",    type=str,   default=_ppo.adv_norm,
+                   choices=["per_episode", "global"],
+                   help="Advantage normalization mode")
     # Run topology (defaults sourced from RunConfig dataclass)
     p.add_argument("--episodes",    type=int,   default=_run.episodes)
     p.add_argument("--updates",     type=int,   default=_run.updates)
@@ -116,6 +119,7 @@ def _run_train(args):
         lr=args.lr, gamma=args.gamma, lam=args.lam,
         clip_eps=args.clip_eps, epochs=args.epochs,
         batch_size=args.batch_size, entropy_coef=args.entropy,
+        adv_norm=args.adv_norm,
     )
     run_cfg = RunConfig(
         episodes=args.episodes, updates=args.updates,

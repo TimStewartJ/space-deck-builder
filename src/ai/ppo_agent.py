@@ -54,6 +54,7 @@ class PPOAgent(Agent):
             entropy_coef=entropy_coef if entropy_coef is not None else ppo.entropy_coef,
             grad_clip=ppo.grad_clip,
             critic_loss_coef=ppo.critic_loss_coef,
+            adv_norm=ppo.adv_norm,
         )
         self.model_config = mdl
 
