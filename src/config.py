@@ -97,7 +97,7 @@ class PPOConfig:
     entropy_coef: float = 0.025
     grad_clip: float = 0.5
     critic_loss_coef: float = 0.5
-    adv_norm: str = "per_episode"  # "per_episode" | "global"
+    adv_norm: str = "global"  # "per_episode" | "global"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
