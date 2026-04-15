@@ -29,7 +29,7 @@ def get_action_space_size(cards: list[str]) -> int:
     )
     return size
 
-def encode_action(action: Action | None, cards: list[str]) -> int:
+def encode_action(action: Action | None, cards: list[str], card_index_map: dict[str, int] = None) -> int:
     """Convert an Action object to a numerical index for neural network processing
     
     Maps different action types to different index ranges
@@ -53,8 +53,10 @@ def encode_action(action: Action | None, cards: list[str]) -> int:
     cards_length = len(cards)
     card_index = None
     if action.card_id is not None:
-        # Get index of card in all available cards
-        card_index = next((i for i, card in enumerate(cards) if card == action.card_id), None)
+        if card_index_map is not None:
+            card_index = card_index_map.get(action.card_id)
+        else:
+            card_index = next((i for i, card in enumerate(cards) if card == action.card_id), None)
 
     # Encode play card action based on the card
     if action.type == ActionType.PLAY_CARD:

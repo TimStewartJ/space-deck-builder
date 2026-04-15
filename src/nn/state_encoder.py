@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from typing import TYPE_CHECKING
 
 from src.engine.actions import ActionType, get_available_actions
@@ -9,6 +10,12 @@ if TYPE_CHECKING:
     from src.cards.card import Card
     from src.engine.player import Player
     from src.engine.actions import Action
+
+
+def build_card_index_map(cards: list[str]) -> dict[str, int]:
+    """Build O(1) card name → index lookup table."""
+    return {name: i for i, name in enumerate(cards)}
+
 
 def get_state_size(cards: list[str]) -> int:
     """Get the size of the state vector"""
@@ -26,85 +33,79 @@ def get_state_size(cards: list[str]) -> int:
         player_encoding_size * 2 # Players
     )
 
-def encode_card_presence(cards_list: list['Card'], cards: list[str]) -> list[float]:
-    """Encode card presence in a list of cards"""
-
+def encode_card_presence(cards_list: list['Card'], num_cards: int, card_index_map: dict[str, int], out: np.ndarray = None, offset: int = 0) -> np.ndarray:
+    """Encode card presence using O(1) lookups into a pre-allocated array."""
     card_presence_worth = 0.0125
 
-    card_presence = [0.0] * len(cards)
+    if out is None:
+        out = np.zeros(num_cards, dtype=np.float32)
+        offset = 0
+
     for card in cards_list:
-        if card.name in cards:
-            card_index = card.index
-            card_presence[card_index] += card_presence_worth  # Increment the count for this card
-            card_presence[card_index] = min(card_presence[card_index], 1.0)  # Cap at 1.0
-    return card_presence
+        idx = card_index_map.get(card.name)
+        if idx is not None:
+            out[offset + idx] = min(out[offset + idx] + card_presence_worth, 1.0)
+    return out
 
-def encode_player(player: 'Player', cards: list[str]) -> list[float]:
-    """Convert player information to a fixed-length vector"""
-    # Player resources (trade, combat, health, deck size, discard pile size)
-    player_resources = [
-        player.trade / 100.0,  # Normalize values
-        player.combat / 100.0,
-        player.health / 100.0,
-        len(player.deck) / 40.0,
-        len(player.discard_pile) / 40.0
-    ]
+def encode_player_into(player: 'Player', num_cards: int, card_index_map: dict[str, int], out: np.ndarray, offset: int) -> int:
+    """Encode player info directly into pre-allocated numpy array. Returns new offset."""
+    # Player resources
+    out[offset] = player.trade / 100.0
+    out[offset + 1] = player.combat / 100.0
+    out[offset + 2] = player.health / 100.0
+    out[offset + 3] = len(player.deck) / 40.0
+    out[offset + 4] = len(player.discard_pile) / 40.0
+    offset += 5
 
-    # Encode hand cards
-    hand_encoding = encode_card_presence(player.hand, cards)
-    
-    # Encode discard pile cards
-    discard_encoding = encode_card_presence(player.discard_pile, cards)
+    # Hand, discard, deck, bases — each is num_cards wide
+    encode_card_presence(player.hand, num_cards, card_index_map, out, offset)
+    offset += num_cards
+    encode_card_presence(player.discard_pile, num_cards, card_index_map, out, offset)
+    offset += num_cards
+    encode_card_presence(player.deck, num_cards, card_index_map, out, offset)
+    offset += num_cards
+    encode_card_presence(player.bases, num_cards, card_index_map, out, offset)
+    offset += num_cards
 
-    # Encode draw deck cards
-    deck_encoding = encode_card_presence(player.deck, cards)
+    return offset
 
-    # Encode bases as well
-    bases_encoding = encode_card_presence(player.bases, cards)
+def encode_state(game_state: 'Game', is_current_player_training: bool, cards: list[str], available_actions: list['Action'], card_index_map: dict[str, int] = None) -> torch.FloatTensor:
+    """Convert game state to fixed-length tensor using numpy for speed."""
+    num_cards = len(cards)
+    if card_index_map is None:
+        card_index_map = build_card_index_map(cards)
 
-    return player_resources + hand_encoding + discard_encoding + deck_encoding + bases_encoding
-
-def encode_state(game_state: 'Game', is_current_player_training: bool, cards: list[str], available_actions: list['Action']) -> torch.FloatTensor:
-    """Convert variable-length game state to fixed-length tensor"""
-    state = []
+    state_size = get_state_size(cards)
+    state = np.zeros(state_size, dtype=np.float32)
 
     training_player = game_state.current_player if is_current_player_training else game_state.get_opponent(game_state.current_player)
     if training_player is None:
         raise ValueError("Training player not found in game state.")
-    
+
     opponent = game_state.get_opponent(training_player)
     if opponent is None:
         raise ValueError("Opponent not found in game state.")
-    
-    # Encode if the current player is the training player
-    is_training_player = 1.0 if is_current_player_training else 0.0
-    state.append(is_training_player)
 
-    # Encode if the first player is the training player
-    is_first_player = 1.0 if game_state.first_player_name == training_player.name else 0.0
-    state.append(is_first_player)
+    offset = 0
 
-    # Encode if there are non-end turn and non-scrap actions available
-    can_buy_anything = 1.0 if any(
-            action.type == ActionType.BUY_CARD
-            for action in available_actions
-        ) else 0.0
-    state.append(can_buy_anything)
+    # Flags
+    state[offset] = 1.0 if is_current_player_training else 0.0
+    offset += 1
+    state[offset] = 1.0 if game_state.first_player_name == training_player.name else 0.0
+    offset += 1
+    state[offset] = 1.0 if any(a.type == ActionType.BUY_CARD for a in available_actions) else 0.0
+    offset += 1
+    state[offset] = 1.0 if any(a.type in (ActionType.ATTACK_PLAYER, ActionType.PLAY_CARD) for a in available_actions) else 0.0
+    offset += 1
 
-    has_available_actions = 1.0 if any(
-            action.type == ActionType.ATTACK_PLAYER or action.type == ActionType.PLAY_CARD
-            for action in available_actions
-        ) else 0.0
-    state.append(has_available_actions)
-    
-    # Encode trade row
-    trade_row_encoding = encode_card_presence(game_state.trade_row, cards)
-    state.extend(trade_row_encoding)
+    # Trade row
+    encode_card_presence(game_state.trade_row, num_cards, card_index_map, state, offset)
+    offset += num_cards
 
-    # Encode training player
-    state.extend(encode_player(training_player, cards=cards))
+    # Training player
+    offset = encode_player_into(training_player, num_cards, card_index_map, state, offset)
 
-    # Encode opponent player
-    state.extend(encode_player(opponent, cards=cards))
+    # Opponent
+    offset = encode_player_into(opponent, num_cards, card_index_map, state, offset)
 
-    return torch.FloatTensor(state)
+    return torch.from_numpy(state)

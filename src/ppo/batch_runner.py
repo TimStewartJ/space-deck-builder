@@ -46,6 +46,9 @@ class BatchRunner:
         self.opponent_factory = opponent_factory
         self.num_concurrent = num_concurrent
         self.training_agent_name = "PPO"
+        # Pre-compute O(1) card name → index lookup
+        from src.nn.state_encoder import build_card_index_map
+        self.card_index_map = build_card_index_map(card_names)
 
     def run_episodes(self, num_episodes: int) -> tuple:
         """Run num_episodes games and return aggregated rollout data.
@@ -97,9 +100,9 @@ class BatchRunner:
             # Step 3: Collect pending PPO decisions
             pending_indices: list[int] = []
             pending_states: list[torch.Tensor] = []
-            pending_masks: list[torch.Tensor] = []
             pending_available: list[list] = []
             pending_encoded: list[list[int]] = []
+            pending_meaningful: list[bool] = []
 
             for i in range(self.num_concurrent):
                 if games[i] is None or games[i].is_game_over:
@@ -109,33 +112,34 @@ class BatchRunner:
                     continue
 
                 available = get_available_actions(games[i], player)
-                encoded_actions = [encode_action(a, cards=self.card_names) for a in available]
+                encoded_actions = [encode_action(a, cards=self.card_names, card_index_map=self.card_index_map) for a in available]
                 has_meaningful = any(
                     a.type in (ActionType.ATTACK_PLAYER, ActionType.PLAY_CARD)
                     for a in available
                 )
                 state = encode_state(
                     games[i], is_current_player_training=True,
-                    cards=self.card_names, available_actions=available
-                ).to(self.device)
-
-                mask = torch.zeros(self.action_dim, device=self.device)
-                mask[encoded_actions] = 1
-                if has_meaningful and 1 in encoded_actions:
-                    mask[1] = 0
+                    cards=self.card_names, available_actions=available,
+                    card_index_map=self.card_index_map
+                )
 
                 pending_indices.append(i)
                 pending_states.append(state)
-                pending_masks.append(mask)
                 pending_available.append(available)
                 pending_encoded.append(encoded_actions)
+                pending_meaningful.append(has_meaningful)
 
             if not pending_states:
                 continue
 
-            # Step 4: Batched forward pass
-            states_batch = torch.stack(pending_states)
-            masks_batch = torch.stack(pending_masks)
+            # Step 4: Batch construction — states, masks, forward pass
+            states_batch = torch.stack(pending_states).to(self.device)
+            # Build all masks at once
+            masks_batch = torch.zeros(len(pending_states), self.action_dim, device=self.device)
+            for j, encoded in enumerate(pending_encoded):
+                masks_batch[j, encoded] = 1
+                if pending_meaningful[j] and 1 in encoded:
+                    masks_batch[j, 1] = 0
 
             with torch.no_grad():
                 logits_batch, values_batch = self.model(states_batch)
@@ -273,9 +277,9 @@ class BatchRunner:
             # Collect pending PPO decisions
             pending_indices: list[int] = []
             pending_states: list[torch.Tensor] = []
-            pending_masks: list[torch.Tensor] = []
             pending_available: list[list] = []
             pending_encoded: list[list[int]] = []
+            pending_meaningful: list[bool] = []
 
             for i in range(self.num_concurrent):
                 if games[i] is None or games[i].is_game_over:
@@ -285,33 +289,33 @@ class BatchRunner:
                     continue
 
                 available = get_available_actions(games[i], player)
-                encoded_actions = [encode_action(a, cards=self.card_names) for a in available]
+                encoded_actions = [encode_action(a, cards=self.card_names, card_index_map=self.card_index_map) for a in available]
                 has_meaningful = any(
                     a.type in (ActionType.ATTACK_PLAYER, ActionType.PLAY_CARD)
                     for a in available
                 )
                 state = encode_state(
                     games[i], is_current_player_training=True,
-                    cards=self.card_names, available_actions=available
-                ).to(self.device)
-
-                mask = torch.zeros(self.action_dim, device=self.device)
-                mask[encoded_actions] = 1
-                if has_meaningful and 1 in encoded_actions:
-                    mask[1] = 0
+                    cards=self.card_names, available_actions=available,
+                    card_index_map=self.card_index_map
+                )
 
                 pending_indices.append(i)
                 pending_states.append(state)
-                pending_masks.append(mask)
                 pending_available.append(available)
                 pending_encoded.append(encoded_actions)
+                pending_meaningful.append(has_meaningful)
 
             if not pending_states:
                 continue
 
-            # Batched forward pass
-            states_batch = torch.stack(pending_states)
-            masks_batch = torch.stack(pending_masks)
+            # Batched forward pass with batch-constructed masks
+            states_batch = torch.stack(pending_states).to(self.device)
+            masks_batch = torch.zeros(len(pending_states), self.action_dim, device=self.device)
+            for j, encoded in enumerate(pending_encoded):
+                masks_batch[j, encoded] = 1
+                if pending_meaningful[j] and 1 in encoded:
+                    masks_batch[j, 1] = 0
 
             with torch.no_grad():
                 logits_batch, values_batch = self.model(states_batch)
