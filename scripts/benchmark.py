@@ -6,6 +6,10 @@ from src.cards.loader import load_trade_deck_cards
 from src.engine.game import Game
 from src.ai.ppo_agent import PPOAgent
 from src.ai.random_agent import RandomAgent
+from src.nn.action_encoder import get_action_space_size
+from src.ppo.ppo_actor_critic import PPOActorCritic
+from src.nn.state_encoder import get_state_size
+from src.ppo.batch_runner import BatchRunner
 from src.utils.logger import set_disabled
 
 def run_single_episode(agent, opponent, cards):
@@ -20,11 +24,8 @@ def run_single_episode(agent, opponent, cards):
     winner = game.get_winner()
     return steps, winner == agent.name
 
-def benchmark(num_episodes=64, device="cpu"):
-    set_disabled(True)
-    cards = load_trade_deck_cards("data/cards.csv", filter_sets=["Core Set"], log_cards=False)
-    card_names = list(dict.fromkeys(c.name for c in cards)) + ["Scout", "Viper", "Explorer"]
-
+def benchmark_sequential(num_episodes, card_names, cards, device):
+    """Original sequential benchmark (one game at a time)."""
     agent = PPOAgent("PPO", card_names, device=device, main_device=device, simulation_device=device)
     opponent = RandomAgent("Rand")
 
@@ -39,29 +40,60 @@ def benchmark(num_episodes=64, device="cpu"):
         if won:
             wins += 1
     elapsed = time.perf_counter() - start
+    return total_steps, wins, elapsed
 
-    print(f"=== Benchmark Results ===")
-    print(f"Episodes:      {num_episodes}")
-    print(f"Total steps:   {total_steps}")
-    print(f"Wall time:     {elapsed:.2f}s")
-    print(f"Steps/sec:     {total_steps / elapsed:.1f}")
-    print(f"Episodes/sec:  {num_episodes / elapsed:.2f}")
-    print(f"Avg steps/ep:  {total_steps / num_episodes:.1f}")
-    print(f"Win rate:      {wins}/{num_episodes} ({wins/num_episodes:.1%})")
-    print(f"Device:        {device}")
-    return {
-        "episodes": num_episodes,
-        "total_steps": total_steps,
-        "elapsed": elapsed,
-        "steps_per_sec": total_steps / elapsed,
-        "episodes_per_sec": num_episodes / elapsed,
-        "win_rate": wins / num_episodes,
-    }
+def benchmark_batched(num_episodes, card_names, cards, device):
+    """Batched benchmark using BatchRunner."""
+    state_dim = get_state_size(card_names)
+    action_dim = get_action_space_size(card_names)
+    model = PPOActorCritic(state_dim, action_dim, len(card_names)).to(device)
+
+    runner = BatchRunner(
+        model=model,
+        card_names=card_names,
+        cards=cards,
+        action_dim=action_dim,
+        device=device,
+        num_concurrent=min(num_episodes, 64),
+    )
+
+    start = time.perf_counter()
+    states, actions, old_lp, returns, advs = runner.run_episodes(num_episodes)
+    elapsed = time.perf_counter() - start
+    total_steps = states.shape[0]
+    return total_steps, None, elapsed
+
+def benchmark(num_episodes=64, device="cpu", mode="both"):
+    set_disabled(True)
+    cards = load_trade_deck_cards("data/cards.csv", filter_sets=["Core Set"], log_cards=False)
+    card_names = list(dict.fromkeys(c.name for c in cards)) + ["Scout", "Viper", "Explorer"]
+
+    if mode in ("sequential", "both"):
+        total_steps, wins, elapsed = benchmark_sequential(num_episodes, card_names, cards, device)
+        print(f"=== Sequential Benchmark ===")
+        print(f"Episodes:      {num_episodes}")
+        print(f"Total steps:   {total_steps}")
+        print(f"Wall time:     {elapsed:.2f}s")
+        print(f"Steps/sec:     {total_steps / elapsed:.1f}")
+        print(f"Episodes/sec:  {num_episodes / elapsed:.2f}")
+        print(f"Win rate:      {wins}/{num_episodes} ({wins/num_episodes:.1%})")
+        print()
+
+    if mode in ("batched", "both"):
+        total_steps, _, elapsed = benchmark_batched(num_episodes, card_names, cards, device)
+        print(f"=== Batched Benchmark ===")
+        print(f"Episodes:      {num_episodes}")
+        print(f"Total steps:   {total_steps}")
+        print(f"Wall time:     {elapsed:.2f}s")
+        print(f"Steps/sec:     {total_steps / elapsed:.1f}")
+        print(f"Episodes/sec:  {num_episodes / elapsed:.2f}")
+        print(f"Device:        {device}")
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--episodes", type=int, default=64)
     parser.add_argument("--device", type=str, default="cpu")
+    parser.add_argument("--mode", type=str, default="both", choices=["sequential", "batched", "both"])
     args = parser.parse_args()
-    benchmark(args.episodes, args.device)
+    benchmark(args.episodes, args.device, args.mode)

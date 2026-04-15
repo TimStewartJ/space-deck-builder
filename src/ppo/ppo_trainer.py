@@ -13,6 +13,8 @@ from src.cards.loader import load_trade_deck_cards
 from src.engine.game import Game
 from src.ai.ppo_agent import PPOAgent
 from src.ai.random_agent import RandomAgent
+from src.nn.action_encoder import get_action_space_size
+from src.ppo.batch_runner import BatchRunner
 from src.utils.logger import log, set_disabled, set_verbose
 
 def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card]):
@@ -162,49 +164,28 @@ def main():
         # collect trajectories
         start_time = time.time()
 
-        # Parallel episode rollouts
-        # Get model params from cpu
-        state_dict   = agent.model.cpu().state_dict()
-        agent_kwargs = {
-            "card_names": card_names,
-            "lr": args.lr,
-            "gamma": args.gamma,
-            "lam": args.lam,
-            "clip_eps": args.clip_eps,
-            "device": args.simulation_device,
-            "main_device": args.main_device,
-            "simulation_device": args.simulation_device,
-            "log_debug": False,
-        }
-        # Prepare opponent info for workers
-        if isinstance(opponent, PPOAgent):
-            opponent_type = "ppo"
-            opponent_state_dict = opponent.model.cpu().state_dict()
-            opponent_kwargs = agent_kwargs.copy()
-        else:
-            opponent_type = "random"
-            opponent_state_dict = None
-            opponent_kwargs = {}
-        # Generate random seeds for reproducibility
-        seeds = [random.randint(0, 1_000_000_000) for _ in range(args.episodes)]
-        with ProcessPoolExecutor(max_workers=args.workers) as executor:
-            futures = [executor.submit(run_episode_worker, state_dict, agent_kwargs,
-                                       opponent_type, opponent_state_dict, opponent_kwargs,
-                                       cards, s)
-                       for s in seeds]
-            all_data = [f.result() for f in futures]
+        # Batched episode rollouts using BatchRunner
+        runner = BatchRunner(
+            model=agent.model,
+            card_names=card_names,
+            cards=cards,
+            action_dim=get_action_space_size(card_names),
+            device=agent.simulation_device,
+            opponent_factory=lambda opp=opponent: opp if isinstance(opp, RandomAgent) else RandomAgent("Rand"),
+            num_concurrent=min(args.episodes, 64),
+        )
+        states, actions, old_lp, returns, advs = runner.run_episodes(args.episodes)
         duration_episodes = time.time() - start_time
         total_time_spent_on_episodes += duration_episodes
         log(f"Finished {args.episodes} episodes in {duration_episodes:.2f}s.")
 
-        # unpack & concat
-        S, A, OL, R, Adv = zip(*all_data)
-        agent.device = agent.main_device  # Set device back to main device for training
-        states   = torch.cat(S).to(agent.device)
-        actions  = torch.cat(A).to(agent.device)
-        old_lp   = torch.cat(OL).to(agent.device)
-        returns  = torch.cat(R).to(agent.device)
-        advs     = torch.cat(Adv).to(agent.device)
+        # Move to main device for training
+        agent.device = agent.main_device
+        states = states.to(agent.device)
+        actions = actions.to(agent.device)
+        old_lp = old_lp.to(agent.device)
+        returns = returns.to(agent.device)
+        advs = advs.to(agent.device)
 
         # perform PPO update
         start_time = time.time()
