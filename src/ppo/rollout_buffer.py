@@ -39,12 +39,18 @@ class RolloutBuffer:
               normalize: bool = True):
         """Compute GAE returns and advantages.
 
+        Device contract: log_probs, values, and masks are assumed to already
+        reside on ``device`` (placed there by model output in ``add()``).
+        States originate from ``encode_state()`` on CPU and are moved to
+        ``device`` here.  Returns and advantages are freshly constructed
+        from Python floats and also need placement.
+
         Args:
             normalize: If True, normalize advantages to mean=0/std=1 for this
                 episode. Set to False when using global normalization after
                 merging multiple rollouts.
 
-        Returns (states, actions, old_lp, returns, advantages, masks).
+        Returns: (states, actions, old_lp, returns, advantages, masks)
         """
         returns: list[torch.Tensor] = []
         advs: list[torch.Tensor] = []
@@ -61,16 +67,17 @@ class RolloutBuffer:
             advs.insert(0, gae)
             returns.insert(0, gae + vals[step])
 
+        # log_probs, values, masks are already on target device (from model output).
+        # states originate from encode_state() on CPU and need device placement.
         states = torch.stack(self.states).to(device)
         actions = torch.tensor(self.actions, dtype=torch.int64, device=device)
-        old_lp = torch.stack(self.log_probs).to(device)
+        old_lp = torch.stack(self.log_probs)
         returns_t = torch.stack(returns).to(device)
         advs_t = torch.stack(advs).to(device)
         if normalize:
             advs_t = (advs_t - advs_t.mean()) / (advs_t.std(unbiased=False) + 1e-8)
 
-        # Include action masks if they were stored
-        masks_t = torch.stack(self.masks).to(device) if self.masks else None
+        masks_t = torch.stack(self.masks) if self.masks else None
         return states, actions, old_lp, returns_t, advs_t, masks_t
 
 

@@ -173,22 +173,22 @@ class BatchRunner:
 
                 games[i].apply_decision(action)
 
-        # Merge all rollouts
+        # Merge all rollouts — tensors already on self.device from RolloutBuffer
         if not completed_rollouts:
             raise RuntimeError("No completed rollouts")
 
         S, A, OL, R, Adv, M = zip(*completed_rollouts)
         has_masks = all(m is not None for m in M)
-        advs = torch.cat(Adv).to(self.device)
+        advs = torch.cat(Adv)
         if self.ppo_config.adv_norm == "global":
             advs = (advs - advs.mean()) / (advs.std(unbiased=False) + 1e-8)
         return (
-            torch.cat(S).to(self.device),
-            torch.cat(A).to(self.device),
-            torch.cat(OL).to(self.device),
-            torch.cat(R).to(self.device),
+            torch.cat(S),
+            torch.cat(A),
+            torch.cat(OL),
+            torch.cat(R),
             advs,
-            torch.cat(M).to(self.device) if has_masks else None,
+            torch.cat(M) if has_masks else None,
         )
 
     def _start_game(self):

@@ -96,8 +96,11 @@ def train(
         total_time_spent_on_episodes += duration_episodes
         log(f"Finished {run_cfg.episodes} episodes in {duration_episodes:.2f}s.")
 
-        # Move to main device for training
+        # --- Device boundary: sim_device → main_device ---
+        # run_episodes() returns tensors on simulation_device.
+        # Transfer to main_device for the PPO gradient update.
         agent.device = agent.main_device
+        agent.model.to(agent.main_device)
         states = states.to(agent.device)
         actions = actions.to(agent.device)
         old_lp = old_lp.to(agent.device)
