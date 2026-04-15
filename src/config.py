@@ -131,7 +131,6 @@ class RunConfig:
 @dataclass
 class DeviceConfig:
     """Device placement for training and simulation."""
-    device: str = "cuda"
     main_device: str = "cuda"
     simulation_device: str = "cpu"
 

@@ -12,8 +12,6 @@ import sys
 def _add_common_args(parser: argparse.ArgumentParser):
     """Add args shared across subcommands."""
     parser.add_argument("--cards-path", type=str, default="data/cards.csv")
-    parser.add_argument("--device", type=str, default="cuda",
-                        help="Device for ML inference (cuda or cpu)")
 
 
 def _build_train_parser(sub: argparse._SubParsersAction):
@@ -62,6 +60,8 @@ def _build_simulate_parser(sub: argparse._SubParsersAction):
     p.add_argument("--player2-random", action="store_true", default=True,
                    help="Use random agent for player 2")
     p.add_argument("--games", type=int, default=50)
+    p.add_argument("--simulation-device", type=str, default="cpu",
+                   help="Device for inference (cuda or cpu)")
     return p
 
 
@@ -72,6 +72,8 @@ def _build_benchmark_parser(sub: argparse._SubParsersAction):
     p.add_argument("--mode", type=str, default="both",
                    choices=["sequential", "batched", "parallel", "both"])
     p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--simulation-device", type=str, default="cpu",
+                   help="Device for inference (cuda or cpu)")
     return p
 
 
@@ -118,7 +120,7 @@ def _run_train(args):
         self_play_ratio=args.self_play_ratio,
     )
     dev_cfg = DeviceConfig(
-        device=args.device, main_device=args.main_device,
+        main_device=args.main_device,
         simulation_device=args.simulation_device,
     )
     train(data_cfg, ppo_cfg, run_cfg, dev_cfg,
@@ -136,7 +138,7 @@ def _run_simulate(args):
     simulate(data_cfg, sim_cfg,
              model1_path=args.model1,
              model2_path=args.model2,
-             device=args.device)
+             device=args.simulation_device)
 
 
 def _run_benchmark(args):
@@ -144,7 +146,7 @@ def _run_benchmark(args):
     from scripts.benchmark import benchmark
     benchmark(
         num_episodes=args.episodes,
-        device=args.device,
+        device=args.simulation_device,
         mode=args.mode,
         workers=args.workers,
     )

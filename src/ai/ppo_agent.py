@@ -27,7 +27,7 @@ class PPOAgent(Agent):
         epochs: int | None = None,
         batch_size: int | None = None,
         entropy_coef: float | None = None,
-        device: str = "cuda",
+        device: str | None = None,
         main_device: str = "cuda",
         simulation_device: str = "cpu",
         model_path: Optional[str] = None,
@@ -65,15 +65,21 @@ class PPOAgent(Agent):
         self.batch_size = self.ppo_config.batch_size
         self.entropy_coef = self.ppo_config.entropy_coef
 
-        self.device = torch.device(device if torch.cuda.is_available() else "cpu")
-        self.main_device = torch.device(main_device if torch.cuda.is_available() else "cpu")
-        self.simulation_device = torch.device(simulation_device if torch.cuda.is_available() else "cpu")
-        # Apply DeviceConfig if no explicit kwargs were given (detect by checking
-        # if the caller passed non-default values — we use the config values)
+        # Resolve devices: DeviceConfig > explicit kwargs > defaults
         if device_config is not None:
-            self.device = torch.device(dev.device if torch.cuda.is_available() else "cpu")
-            self.main_device = torch.device(dev.main_device if torch.cuda.is_available() else "cpu")
-            self.simulation_device = torch.device(dev.simulation_device if torch.cuda.is_available() else "cpu")
+            main_dev_str = dev.main_device
+            sim_dev_str = dev.simulation_device
+        else:
+            main_dev_str = main_device
+            sim_dev_str = simulation_device
+        # Legacy `device` kwarg overrides both if provided
+        if device is not None:
+            main_dev_str = device
+            sim_dev_str = device
+
+        self.main_device = torch.device(main_dev_str if torch.cuda.is_available() else "cpu")
+        self.simulation_device = torch.device(sim_dev_str if torch.cuda.is_available() else "cpu")
+        self.device = self.simulation_device  # active device starts as simulation
 
         self.cards = card_names
 
