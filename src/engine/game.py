@@ -198,22 +198,22 @@ class Game:
         # Handle pending action sets — use identity first, then semantic match
         pending_set = self.current_player.get_current_pending_set()
         pending_set_completed = False
+        pending_skipped = False
+        pending_action_matched = False
         if pending_set:
             if action.type == ActionType.SKIP_DECISION and not pending_set.mandatory:
-                self.current_player.advance_pending_set()
+                pending_skipped = True
             else:
                 # Remove by identity first (fast path for action context resolvers),
                 # then by semantic match (type + card_id + source/target) for legacy
-                removed = False
                 for idx, pending_action in enumerate(pending_set.actions):
                     if pending_action is action or _pending_action_matches(pending_action, action):
                         pending_set.actions.pop(idx)
                         pending_set.decisions_left -= 1
-                        removed = True
+                        pending_action_matched = True
                         break
                 if pending_set.decisions_left <= 0:
                     pending_set_completed = True
-                    self.current_player.advance_pending_set()
 
         if action.type == ActionType.END_TURN:
             return True
@@ -460,6 +460,16 @@ class Game:
             if _log_enabled and target_card:
                 log(f"{self.current_player.name} discarded {target_card.name} from {'opponent' if action.card_source == 'opponent' else 'hand'}", v=True)
 
+        # Finalize pending set after action execution so that card moves
+        # (discard, scrap) happen before any completion effects (draw-on-complete).
+        # Only count actions that actually matched and consumed a pending action.
+        if pending_set and (pending_skipped or pending_set_completed):
+            if pending_action_matched:
+                pending_set.resolved_count += 1
+            self._complete_pending_set(pending_set)
+        elif pending_set and pending_action_matched and not pending_set_completed:
+            pending_set.resolved_count += 1
+
         return False  # Turn continues
 
     # Set of effect types that can be auto-applied without player choice
@@ -503,6 +513,18 @@ class Game:
         self.is_running = False
         # Logic to determine the winner and end the game
         pass
+
+    def _complete_pending_set(self, pending_set):
+        """Advance past a completed/skipped pending set and run completion effects.
+
+        Called AFTER the final action in the set has executed, so card moves
+        (discard, scrap) have already happened before any draw-on-complete.
+        """
+        if pending_set.on_complete_draw and pending_set.resolved_count > 0:
+            for _ in range(pending_set.resolved_count):
+                self.current_player.draw_card()
+                self.stats.record_card_draw(self.current_player.name)
+        self.current_player.advance_pending_set()
 
     def add_player(self, name: str, agent: 'Agent'):
         if len(self.players) >= 4:

@@ -7,6 +7,19 @@ if TYPE_CHECKING:
     from src.engine.player import Player
     from src.engine.game import Game
 
+
+def _faction_matches(card_faction, target: str) -> bool:
+    """Check if a card's faction field matches a target faction (case-insensitive).
+
+    Handles both single-faction strings and multi-faction lists.
+    Returns False for None/empty factions.
+    """
+    if not card_faction:
+        return False
+    if isinstance(card_faction, list):
+        return any(f.lower() == target for f in card_faction)
+    return card_faction.lower() == target
+
 class CardEffectType(Enum):
     COMBAT = "combat"
     TRADE = "trade"
@@ -185,13 +198,71 @@ class Effect:
                 game.explorer_pile.append(card)
 
     def handle_complex_effect(self, game: 'Game', player: 'Player', card):
-        # Handle conditional card draw
+        from src.engine.actions import Action, ActionType
+
+        # "Draw a card for each <Faction> card that you've played this turn"
         draw_match = re.search(r"Draw a card for each (\w+) card", self.text)
         if draw_match:
             faction = draw_match.group(1).lower()
-            count = sum(1 for c in player.played_cards if c.faction and c.faction.lower() == faction)
+            count = sum(1 for c in player.played_cards
+                        if _faction_matches(c.faction, faction))
             for _ in range(count):
                 player.draw_card()
+            return
+
+        # "If you have two or more bases in play, draw two cards" (Embassy Yacht)
+        if "two or more bases in play" in self.text.lower():
+            if len(player.bases) >= 2:
+                for _ in range(2):
+                    player.draw_card()
+                    game.stats.record_card_draw(player.name)
+            return
+
+        # "Scrap up to two cards from your hand and/or discard pile" (Brain World)
+        # Creates pending scrap actions with draw-on-complete. The sibling child
+        # effect ("Draw a card for each card scrapped this way") is handled by the
+        # completion mechanism and should be skipped — see PARENT handler below.
+        scrap_up_to = re.search(r"Scrap up to (\w+) cards? from your hand and/or discard pile", self.text)
+        if scrap_up_to:
+            count_word = scrap_up_to.group(1)
+            count_map = {"one": 1, "two": 2, "three": 3}
+            max_scrap = count_map.get(count_word, int(count_word) if count_word.isdigit() else 1)
+            pending_actions = []
+            for target in player.hand:
+                pending_actions.append(Action(
+                    ActionType.SCRAP_CARD, card_id=target.name,
+                    card=target, card_source="hand"
+                ))
+            for target in player.discard_pile:
+                pending_actions.append(Action(
+                    ActionType.SCRAP_CARD, card_id=target.name,
+                    card=target, card_source="discard"
+                ))
+            if pending_actions:
+                player.add_pending_actions(
+                    pending_actions, max_scrap, mandatory=False,
+                    on_complete_draw=True
+                )
+            return
+
+        # "discard up to two cards, then draw that many cards" (Recycling Station)
+        discard_draw = re.search(r"discard up to (\w+) cards?, then draw that many", self.text)
+        if discard_draw:
+            count_word = discard_draw.group(1)
+            count_map = {"one": 1, "two": 2, "three": 3}
+            max_discard = count_map.get(count_word, int(count_word) if count_word.isdigit() else 1)
+            pending_actions = []
+            for target in player.hand:
+                pending_actions.append(Action(
+                    ActionType.DISCARD_CARDS, card_id=target.name,
+                    card=target, card_source="self"
+                ))
+            if pending_actions:
+                player.add_pending_actions(
+                    pending_actions, max_discard, mandatory=False,
+                    on_complete_draw=True
+                )
+            return
 
     def clone(self) -> 'Effect':
         """Create a lightweight copy with fresh mutable state.

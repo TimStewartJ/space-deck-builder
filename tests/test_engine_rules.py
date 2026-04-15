@@ -595,3 +595,346 @@ class TestC2DestroyBase:
 
         assert base not in p2.bases
         assert base in p2.discard_pile
+
+
+# ── Work Unit D: COMPLEX Effects ─────────────────────────────────────────────
+
+
+class TestD1EmbassyYacht:
+    """D1: Embassy Yacht draws 2 cards when player has 2+ bases in play."""
+
+    def test_draws_two_with_two_bases(self):
+        game, p1, _ = _make_game_with_players()
+        # Put two bases in play
+        base1 = _make_base(name="Base1", effects=[])
+        base2 = _make_base(name="Base2", effects=[])
+        p1.bases.extend([base1, base2])
+
+        # Create Embassy Yacht's COMPLEX child effect
+        yacht_effect = Effect(CardEffectType.COMPLEX, 0,
+                              text="If you have two or more bases in play, draw two cards")
+        # Give the player cards to draw
+        p1.deck.extend([Card("D1", 0, 0, [], "ship"), Card("D2", 1, 0, [], "ship")])
+        initial_hand = len(p1.hand)
+
+        yacht_effect.apply(game, p1, None)
+
+        assert len(p1.hand) == initial_hand + 2
+
+    def test_no_draw_with_one_base(self):
+        game, p1, _ = _make_game_with_players()
+        base1 = _make_base(name="Base1", effects=[])
+        p1.bases.append(base1)
+        p1.deck.extend([Card("D1", 0, 0, [], "ship"), Card("D2", 1, 0, [], "ship")])
+        initial_hand = len(p1.hand)
+
+        yacht_effect = Effect(CardEffectType.COMPLEX, 0,
+                              text="If you have two or more bases in play, draw two cards")
+        yacht_effect.apply(game, p1, None)
+
+        assert len(p1.hand) == initial_hand
+
+    def test_no_draw_with_zero_bases(self):
+        game, p1, _ = _make_game_with_players()
+        p1.deck.append(Card("D1", 0, 0, [], "ship"))
+        initial_hand = len(p1.hand)
+
+        yacht_effect = Effect(CardEffectType.COMPLEX, 0,
+                              text="If you have two or more bases in play, draw two cards")
+        yacht_effect.apply(game, p1, None)
+
+        assert len(p1.hand) == initial_hand
+
+    def test_trade_and_authority_always_apply(self):
+        """Embassy Yacht's resource effects fire regardless of base count."""
+        game, p1, _ = _make_game_with_players()
+        yacht = Card("Embassy Yacht", 0, 3, [
+            Effect(CardEffectType.PARENT, 0, child_effects=[
+                Effect(CardEffectType.PARENT, 0, child_effects=[
+                    Effect(CardEffectType.TRADE, 2),
+                    Effect(CardEffectType.HEAL, 3),
+                ]),
+                Effect(CardEffectType.COMPLEX, 0,
+                       text="If you have two or more bases in play, draw two cards"),
+            ]),
+        ], "ship", faction="Trade Federation")
+        p1.hand.append(yacht)
+
+        play_action = Action(type=ActionType.PLAY_CARD, card=yacht, card_id=yacht.name)
+        game.execute_action(play_action)
+
+        # Resources always apply, no bases → no draw
+        assert p1.trade == 2
+        assert p1.health == 50 + 3
+
+
+class TestD2BlobWorldFactionSafety:
+    """D2: Blob World's faction counting must handle list factions."""
+
+    def test_list_faction_no_crash(self):
+        """Multi-faction cards in played_cards shouldn't crash Blob World."""
+        game, p1, _ = _make_game_with_players()
+        multi = Card("DualShip", 0, 1, [], "ship", faction=["Blob", "Star Empire"])
+        p1.played_cards.append(multi)
+        p1.deck.append(Card("D1", 1, 0, [], "ship"))
+
+        blob_world_effect = Effect(CardEffectType.COMPLEX, 0,
+                                   text="Draw a card for each Blob card that you've played this turn")
+        blob_world_effect.apply(game, p1, None)
+
+        # Multi-faction card with "Blob" should count
+        assert len(p1.hand) == 1
+
+    def test_string_faction_still_works(self):
+        """Single string factions should continue to work."""
+        game, p1, _ = _make_game_with_players()
+        blob1 = Card("BlobShip", 0, 1, [], "ship", faction="Blob")
+        blob2 = Card("BlobShip2", 1, 1, [], "ship", faction="Blob")
+        p1.played_cards.extend([blob1, blob2])
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        blob_world_effect = Effect(CardEffectType.COMPLEX, 0,
+                                   text="Draw a card for each Blob card that you've played this turn")
+        blob_world_effect.apply(game, p1, None)
+
+        assert len(p1.hand) == 2
+
+    def test_non_matching_faction_not_counted(self):
+        """Non-Blob factions should not trigger draws."""
+        game, p1, _ = _make_game_with_players()
+        se = Card("SEShip", 0, 1, [], "ship", faction="Star Empire")
+        p1.played_cards.append(se)
+        p1.deck.append(Card("D1", 1, 0, [], "ship"))
+        initial_hand = len(p1.hand)
+
+        blob_world_effect = Effect(CardEffectType.COMPLEX, 0,
+                                   text="Draw a card for each Blob card that you've played this turn")
+        blob_world_effect.apply(game, p1, None)
+
+        assert len(p1.hand) == initial_hand
+
+
+class TestD3RecyclingStation:
+    """D3: Recycling Station discard-then-draw via pending action completion."""
+
+    def _make_recycling_station_effect(self):
+        return Effect(CardEffectType.COMPLEX, 0,
+                      text="discard up to two cards, then draw that many cards")
+
+    def test_discard_two_draw_two(self):
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        c2 = Card("C2", 1, 0, [], "ship")
+        p1.hand.extend([c1, c2])
+        # Cards to draw after discard
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        effect = self._make_recycling_station_effect()
+        effect.apply(game, p1, None)
+
+        # Should have pending discard actions
+        pending = p1.get_current_pending_set()
+        assert pending is not None
+        assert pending.on_complete_draw is True
+
+        # Discard first card
+        discard1 = [a for a in pending.actions if a.card is c1][0]
+        game.execute_action(discard1)
+
+        # Discard second card
+        pending = p1.get_current_pending_set()
+        discard2 = [a for a in pending.actions if a.card is c2][0]
+        game.execute_action(discard2)
+
+        # Pending set should be done, 2 cards drawn
+        assert p1.get_current_pending_set() is None
+        assert c1 not in p1.hand
+        assert c2 not in p1.hand
+        # Drew 2 cards from deck
+        assert any(c.name == "D1" for c in p1.hand)
+        assert any(c.name == "D2" for c in p1.hand)
+
+    def test_discard_one_then_skip_draw_one(self):
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        c2 = Card("C2", 1, 0, [], "ship")
+        p1.hand.extend([c1, c2])
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        effect = self._make_recycling_station_effect()
+        effect.apply(game, p1, None)
+
+        # Discard one card
+        pending = p1.get_current_pending_set()
+        discard1 = [a for a in pending.actions if a.card is c1][0]
+        game.execute_action(discard1)
+
+        # Skip the rest
+        skip = Action(type=ActionType.SKIP_DECISION)
+        game.execute_action(skip)
+
+        assert p1.get_current_pending_set() is None
+        # Only 1 card drawn (c1 discarded, c2 still in hand, 1 drawn from deck)
+        assert c1 not in p1.hand
+        assert c2 in p1.hand
+        assert len(p1.hand) == 2  # c2 + 1 drawn
+
+    def test_skip_immediately_draw_zero(self):
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        p1.hand.append(c1)
+        p1.deck.append(Card("D1", 1, 0, [], "ship"))
+        initial_hand_size = len(p1.hand)
+
+        effect = self._make_recycling_station_effect()
+        effect.apply(game, p1, None)
+
+        # Skip without discarding
+        skip = Action(type=ActionType.SKIP_DECISION)
+        game.execute_action(skip)
+
+        assert p1.get_current_pending_set() is None
+        # No cards drawn, hand unchanged (c1 still there)
+        assert len(p1.hand) == initial_hand_size
+
+    def test_or_branch_trade_no_discard(self):
+        """Choosing the trade branch of Recycling Station should not trigger discard/draw."""
+        game, p1, _ = _make_game_with_players()
+        # Recycling Station as an OR: {Gain 1 Trade} OR discard-then-draw
+        trade_effect = Effect(CardEffectType.TRADE, 1)
+        trade_effect.apply(game, p1, None)
+
+        assert p1.trade == 1
+        assert p1.get_current_pending_set() is None
+
+
+class TestD4BrainWorld:
+    """D4: Brain World scrap-then-draw via pending action completion."""
+
+    def _make_brain_world_effect(self):
+        return Effect(CardEffectType.COMPLEX, 0,
+                      text="Scrap up to two cards from your hand and/or discard pile")
+
+    def test_scrap_two_draw_two(self):
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        c2 = Card("C2", 1, 0, [], "ship")
+        p1.hand.append(c1)
+        p1.discard_pile.append(c2)
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        effect = self._make_brain_world_effect()
+        effect.apply(game, p1, None)
+
+        pending = p1.get_current_pending_set()
+        assert pending is not None
+        assert pending.on_complete_draw is True
+
+        # Scrap from hand
+        scrap1 = [a for a in pending.actions if a.card is c1][0]
+        game.execute_action(scrap1)
+
+        # Scrap from discard
+        pending = p1.get_current_pending_set()
+        scrap2 = [a for a in pending.actions if a.card is c2][0]
+        game.execute_action(scrap2)
+
+        assert p1.get_current_pending_set() is None
+        assert c1 not in p1.hand
+        assert c2 not in p1.discard_pile
+        assert any(c.name == "D1" for c in p1.hand)
+        assert any(c.name == "D2" for c in p1.hand)
+
+    def test_scrap_one_then_skip_draw_one(self):
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        p1.hand.append(c1)
+        p1.deck.extend([Card("D1", 1, 0, [], "ship"), Card("D2", 2, 0, [], "ship")])
+
+        effect = self._make_brain_world_effect()
+        effect.apply(game, p1, None)
+
+        # Scrap one
+        pending = p1.get_current_pending_set()
+        scrap1 = [a for a in pending.actions if a.card is c1][0]
+        game.execute_action(scrap1)
+
+        # Skip remaining
+        skip = Action(type=ActionType.SKIP_DECISION)
+        game.execute_action(skip)
+
+        assert p1.get_current_pending_set() is None
+        # c1 scrapped, 1 card drawn from deck
+        assert c1 not in p1.hand
+        assert len(p1.hand) == 1
+
+    def test_skip_immediately_draw_zero(self):
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        p1.hand.append(c1)
+        p1.deck.append(Card("D1", 1, 0, [], "ship"))
+        initial_hand_size = len(p1.hand)
+
+        effect = self._make_brain_world_effect()
+        effect.apply(game, p1, None)
+
+        skip = Action(type=ActionType.SKIP_DECISION)
+        game.execute_action(skip)
+
+        assert p1.get_current_pending_set() is None
+        assert len(p1.hand) == initial_hand_size  # no draw
+
+    def test_mixed_sources_hand_and_discard(self):
+        """Scrapping one from hand and one from discard should both count."""
+        game, p1, _ = _make_game_with_players()
+        h1 = Card("Hand1", 0, 0, [], "ship")
+        d1 = Card("Disc1", 1, 0, [], "ship")
+        p1.hand.append(h1)
+        p1.discard_pile.append(d1)
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        effect = self._make_brain_world_effect()
+        effect.apply(game, p1, None)
+
+        pending = p1.get_current_pending_set()
+        # Scrap from hand
+        scrap_hand = [a for a in pending.actions if a.card_source == "hand" and a.card is h1][0]
+        game.execute_action(scrap_hand)
+
+        # Scrap from discard
+        pending = p1.get_current_pending_set()
+        scrap_disc = [a for a in pending.actions if a.card_source == "discard" and a.card is d1][0]
+        game.execute_action(scrap_disc)
+
+        assert p1.get_current_pending_set() is None
+        assert h1 not in p1.hand
+        assert d1 not in p1.discard_pile
+        assert len([c for c in p1.hand if c.name in ("D1", "D2")]) == 2
+
+    def test_stale_action_does_not_inflate_draw_count(self):
+        """Replaying a consumed action must not increment resolved_count."""
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        c2 = Card("C2", 1, 0, [], "ship")
+        p1.hand.extend([c1, c2])
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        effect = self._make_brain_world_effect()
+        effect.apply(game, p1, None)
+
+        pending = p1.get_current_pending_set()
+        scrap1 = [a for a in pending.actions if a.card is c1][0]
+        game.execute_action(scrap1)
+
+        # Replay the same stale action — should not match again
+        game.execute_action(scrap1)
+
+        # Skip remaining
+        skip = Action(type=ActionType.SKIP_DECISION)
+        game.execute_action(skip)
+
+        # Only 1 scrap counted → 1 card drawn. Hand = c2 + 1 drawn = 2
+        assert p1.get_current_pending_set() is None
+        assert c1 not in p1.hand
+        assert c2 in p1.hand
+        assert len(p1.hand) == 2  # c2 + 1 drawn (not 3 from inflated count)

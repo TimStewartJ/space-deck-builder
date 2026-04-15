@@ -144,12 +144,19 @@ class Player:
         import random
         random.shuffle(self.deck)
     
-    def add_pending_actions(self, actions: List[Action], decisions_left: int, mandatory: bool):
-        """Add a new set of pending actions"""
+    def add_pending_actions(self, actions: List[Action], decisions_left: int, mandatory: bool,
+                           on_complete_draw: bool = False):
+        """Add a new set of pending actions.
+
+        Args:
+            on_complete_draw: If True, draw one card per resolved action when
+                              the set completes (used by Brain World, Recycling Station).
+        """
         self.pending_action_sets.append(PendingActionSet(
             actions=list(actions),
             decisions_left=decisions_left,
-            mandatory=mandatory
+            mandatory=mandatory,
+            on_complete_draw=on_complete_draw,
         ))
 
     def get_current_pending_set(self) -> Optional[PendingActionSet]:
