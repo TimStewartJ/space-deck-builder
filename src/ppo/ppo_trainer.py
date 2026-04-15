@@ -165,13 +165,27 @@ def main():
         start_time = time.time()
 
         # Batched episode rollouts using BatchRunner
+        # Build opponent factory that creates a fresh opponent per game
+        if isinstance(opponent, PPOAgent):
+            opp_state_dict = opponent.model.cpu().state_dict()
+            opp_name = opponent.name
+            def make_opponent(sd=opp_state_dict, name=opp_name):
+                opp = PPOAgent(name, card_names, device=str(agent.simulation_device),
+                               main_device=str(agent.simulation_device),
+                               simulation_device=str(agent.simulation_device))
+                opp.model.load_state_dict(sd)
+                return opp
+        else:
+            def make_opponent():
+                return RandomAgent("Rand")
+
         runner = BatchRunner(
             model=agent.model,
             card_names=card_names,
             cards=cards,
             action_dim=get_action_space_size(card_names),
             device=agent.simulation_device,
-            opponent_factory=lambda opp=opponent: opp if isinstance(opp, RandomAgent) else RandomAgent("Rand"),
+            opponent_factory=make_opponent,
             num_concurrent=min(args.episodes, 64),
         )
         states, actions, old_lp, returns, advs = runner.run_episodes(args.episodes)
