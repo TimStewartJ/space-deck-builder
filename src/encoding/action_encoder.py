@@ -1,5 +1,5 @@
 from src.cards.card import Card
-from src.engine.actions import Action, ActionType
+from src.engine.actions import Action, ActionType, CardSource
 from src.utils.logger import log
 from src.cards.effects import Effect, CardEffectType
 
@@ -111,11 +111,11 @@ def encode_action(action: Action | None, cards: list[str], card_index_map: dict[
     
     if action.type == ActionType.SCRAP_CARD:
         if card_index is not None: # Check if card was found
-            if "hand" == action.card_source:
+            if action.card_source == CardSource.HAND:
                 return scrap_hand_start_index + card_index
-            if "discard" == action.card_source:
+            if action.card_source == CardSource.DISCARD:
                 return scrap_discard_start_index + card_index
-            if "trade" == action.card_source:
+            if action.card_source == CardSource.TRADE:
                 return scrap_trade_start_index + card_index
                 
     current_act_index += 3 * cards_length # Increment for all three potential scrap sources
@@ -212,17 +212,17 @@ def decode_action(action_idx: int, card_names: list[str]) -> Action:
     if scrap_hand_start <= action_idx < scrap_hand_start + cards_length:
         card_idx = action_idx - scrap_hand_start
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.SCRAP_CARD, card_id=card_names[card_idx], card_source="hand")
+            return Action(type=ActionType.SCRAP_CARD, card_id=card_names[card_idx], card_source=CardSource.HAND)
     # discard
     if scrap_discard_start <= action_idx < scrap_discard_start + cards_length:
         card_idx = action_idx - scrap_discard_start
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.SCRAP_CARD, card_id=card_names[card_idx], card_source="discard")
+            return Action(type=ActionType.SCRAP_CARD, card_id=card_names[card_idx], card_source=CardSource.DISCARD)
     # trade
     if scrap_trade_start <= action_idx < scrap_trade_start + cards_length:
         card_idx = action_idx - scrap_trade_start
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.SCRAP_CARD, card_id=card_names[card_idx], card_source="trade")
+            return Action(type=ActionType.SCRAP_CARD, card_id=card_names[card_idx], card_source=CardSource.TRADE)
     current_act_index += 3 * cards_length
 
     # DISCARD_CARDS (target discard by card index)
@@ -230,7 +230,7 @@ def decode_action(action_idx: int, card_names: list[str]) -> Action:
     if discard_start_index <= action_idx < discard_start_index + cards_length:
         card_idx = action_idx - discard_start_index
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.DISCARD_CARDS, card_id=card_names[card_idx], card_source="opponent")
+            return Action(type=ActionType.DISCARD_CARDS, card_id=card_names[card_idx], card_source=CardSource.OPPONENT)
     current_act_index += cards_length
 
     # Fallback: return END_TURN

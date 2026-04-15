@@ -4,8 +4,9 @@ from typing import List
 
 from .effects_parser import parse_effect_text
 from src.utils.logger import log
-from .card import Card
+from .card import Card, CardType
 from .effects import Effect
+from .factions import Faction, parse_faction
 
 def load_trade_deck_cards(file_path=None, filter_names=None, filter_sets=None, log_cards=True) -> list[Card]:
     """
@@ -58,9 +59,9 @@ def load_trade_deck_cards(file_path=None, filter_names=None, filter_sets=None, l
                 defense = int(defense_str) if defense_str.isdigit() else None
             
             # Determine card type (ship, base, outpost)
-            card_type = row['Type'].lower()
+            card_type = CardType(row['Type'].lower())
             if row['Defense'] and 'outpost' in row['Defense'].lower():
-                card_type = 'outpost'
+                card_type = CardType.OUTPOST
             
             # Handle cost - some cards like starting deck cards have no cost
             try:
@@ -68,12 +69,10 @@ def load_trade_deck_cards(file_path=None, filter_names=None, filter_sets=None, l
             except (ValueError, TypeError):
                 cost = 0
 
-            # Parse faction - handle multi-faction cards
-            faction = None
+            # Parse faction — handle multi-faction cards
+            faction = Faction.NONE
             if row['Faction'] and row['Faction'].lower() != 'unaligned':
-                faction = row['Faction'].split(' / ')  # Handle cards with multiple factions
-                if len(faction) == 1:
-                    faction = faction[0]  # Single faction as string
+                faction = parse_faction(row['Faction'])
 
             # Parse effects text into Effect objects
             effects: List[Effect] = []
@@ -97,7 +96,7 @@ def load_trade_deck_cards(file_path=None, filter_names=None, filter_sets=None, l
             # Detect ally_factions from effect text (e.g. Mech World)
             for effect in effects:
                 if effect.effect_type.name == "COMPLEX" and "counts as an ally for all factions" in effect.text.lower():
-                    card.ally_factions = ["*"]
+                    card.ally_factions = Faction.ALL
                     break
 
             index += 1

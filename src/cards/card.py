@@ -1,26 +1,67 @@
+from enum import Enum
 from typing import List, Optional
 from src.cards.effects import Effect
+from src.cards.factions import Faction, faction_display, parse_faction
+
+
+class CardType(Enum):
+    SHIP = "ship"
+    BASE = "base"
+    OUTPOST = "outpost"
 
 
 class Card:
-    def __init__(self, name, index, cost, effects: List[Effect], card_type="ship",
+    def __init__(self, name, index, cost, effects: List[Effect], card_type=CardType.SHIP,
                  defense=None, faction=None, set=None, ally_factions=None):
         self.name: str = name
         self.index: int = index
         self.cost: int = cost
         self.effects: List[Effect] = effects
-        self.card_type = card_type  # "ship", "base", or "outpost"
+        # Accept string for backward compatibility, normalize to CardType enum
+        if isinstance(card_type, str):
+            card_type = CardType(card_type)
+        self.card_type: CardType = card_type
         self.defense: Optional[int] = defense  # Only used for bases and outposts
-        self.faction = faction  # Can be None (unaligned), a string, or a list of factions
+        # Faction bitmask: Faction.NONE for unaligned, single bit for one faction,
+        # OR'd bits for multi-faction cards. Accepts string/list for backward compat.
+        if faction is None:
+            self.faction: Faction = Faction.NONE
+        elif isinstance(faction, Faction):
+            self.faction = faction
+        elif isinstance(faction, list):
+            result = Faction.NONE
+            for f in faction:
+                result |= f if isinstance(f, Faction) else parse_faction(f)
+            self.faction = result
+        elif isinstance(faction, str):
+            self.faction = parse_faction(faction)
+        else:
+            self.faction = Faction(faction)
         self.set: str | None = set  # The set the card comes from (e.g. "Core Set", "Colony Wars", etc.)
-        # Override for ally-counting: None=use faction, ["*"]=all factions, ["X","Y"]=specific
-        self.ally_factions: list[str] | None = ally_factions
+        # Override for ally-counting: Faction.NONE=use card faction, Faction.ALL=all factions
+        # Accepts list of strings or "*" for backward compat.
+        if ally_factions is None:
+            self.ally_factions: Faction = Faction.NONE
+        elif isinstance(ally_factions, Faction):
+            self.ally_factions = ally_factions
+        elif isinstance(ally_factions, list):
+            if "*" in ally_factions:
+                self.ally_factions = Faction.ALL
+            else:
+                result = Faction.NONE
+                for f in ally_factions:
+                    result |= f if isinstance(f, Faction) else parse_faction(f)
+                self.ally_factions = result
+        elif isinstance(ally_factions, str):
+            self.ally_factions = parse_faction(ally_factions)
+        else:
+            self.ally_factions = Faction(ally_factions)
         
     def is_base(self):
-        return self.card_type in ["base", "outpost"]
+        return self.card_type in (CardType.BASE, CardType.OUTPOST)
         
     def is_outpost(self):
-        return self.card_type == "outpost"
+        return self.card_type == CardType.OUTPOST
             
     def clone(self) -> 'Card':
         """Create a lightweight copy with fresh effect state.
@@ -35,9 +76,9 @@ class Card:
             effects=[e.clone() for e in self.effects],
             card_type=self.card_type,
             defense=self.defense,
-            faction=list(self.faction) if isinstance(self.faction, list) else self.faction,
+            faction=self.faction,
             set=self.set,
-            ally_factions=list(self.ally_factions) if self.ally_factions else None,
+            ally_factions=self.ally_factions,
         )
 
     def reset_effects(self):
@@ -48,14 +89,12 @@ class Card:
     def __str__(self):
         info = [f"{self.set} {self.name} ({self.cost} cost)"]
         if self.faction:
-            faction_str = self.faction if isinstance(self.faction, str) else "/".join(self.faction)
-            info.append(f"Faction: {faction_str}")
+            info.append(f"Faction: {faction_display(self.faction)}")
         if self.ally_factions:
-            ally_str = "all" if "*" in self.ally_factions else "/".join(self.ally_factions)
-            info.append(f"Ally for: {ally_str}")
+            info.append(f"Ally for: {faction_display(self.ally_factions)}")
         if self.defense is not None:
             info.append(f"Defense: {self.defense}")
-        info.append(f"Type: {self.card_type}")
+        info.append(f"Type: {self.card_type.value}")
         effects_str = ", ".join(str(effect) for effect in self.effects)
         if effects_str:
             info.append(f"Effects: {effects_str}")

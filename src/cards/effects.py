@@ -7,18 +7,23 @@ if TYPE_CHECKING:
     from src.engine.player import Player
     from src.engine.game import Game
 
+from src.cards.factions import Faction, parse_faction
 
-def _faction_matches(card_faction, target: str) -> bool:
-    """Check if a card's faction field matches a target faction (case-insensitive).
 
-    Handles both single-faction strings and multi-faction lists.
-    Returns False for None/empty factions.
+def _faction_matches(card_faction, target) -> bool:
+    """Check if a card's faction bitmask contains the target faction.
+
+    Args:
+        card_faction: A Faction bitmask (from card.faction).
+        target: A Faction bitmask or string faction name to check.
     """
     if not card_faction:
         return False
-    if isinstance(card_faction, list):
-        return any(f.lower() == target for f in card_faction)
-    return card_faction.lower() == target
+    if isinstance(target, str):
+        target = parse_faction(target)
+    if isinstance(card_faction, str):
+        card_faction = parse_faction(card_faction)
+    return bool(card_faction & target)
 
 class CardEffectType(Enum):
     COMBAT = "combat"
@@ -86,7 +91,7 @@ class Effect:
         return self.applied
     
     def apply(self, game: 'Game', player: 'Player', card=None):
-        from src.engine.actions import Action, ActionType
+        from src.engine.actions import Action, ActionType, CardSource
         # If it has already been applied, do nothing
         if self.applied:
             return
@@ -115,7 +120,7 @@ class Effect:
                         ActionType.SCRAP_CARD,
                         card_id=target.name,
                         card=target,
-                        card_source="discard"
+                        card_source=CardSource.DISCARD
                     ))
             if self.card_targets and "hand" in self.card_targets:
                 for target in player.hand:
@@ -123,7 +128,7 @@ class Effect:
                         ActionType.SCRAP_CARD,
                         card_id=target.name,
                         card=target,
-                        card_source="hand"
+                        card_source=CardSource.HAND
                     ))
             if self.card_targets and "trade" in self.card_targets:
                 for target in game.trade_row:
@@ -131,7 +136,7 @@ class Effect:
                         ActionType.SCRAP_CARD,
                         card_id=target.name,
                         card=target,
-                        card_source="trade"
+                        card_source=CardSource.TRADE
                     ))
             if pending_actions:
                 player.add_pending_actions(pending_actions, self.value, self.is_mandatory)
@@ -147,7 +152,7 @@ class Effect:
                         ActionType.DISCARD_CARDS,
                         card_id=target.name,
                         card=target,
-                        card_source="opponent"
+                        card_source=CardSource.OPPONENT
                     )
                     pending_actions.append(action)
                 if pending_actions:
@@ -198,7 +203,7 @@ class Effect:
                 game.explorer_pile.append(card)
 
     def handle_complex_effect(self, game: 'Game', player: 'Player', card):
-        from src.engine.actions import Action, ActionType
+        from src.engine.actions import Action, ActionType, CardSource
 
         # "Draw a card for each <Faction> card that you've played this turn"
         draw_match = re.search(r"Draw a card for each (\w+) card", self.text)
@@ -219,9 +224,6 @@ class Effect:
             return
 
         # "Scrap up to two cards from your hand and/or discard pile" (Brain World)
-        # Creates pending scrap actions with draw-on-complete. The sibling child
-        # effect ("Draw a card for each card scrapped this way") is handled by the
-        # completion mechanism and should be skipped — see PARENT handler below.
         scrap_up_to = re.search(r"Scrap up to (\w+) cards? from your hand and/or discard pile", self.text)
         if scrap_up_to:
             count_word = scrap_up_to.group(1)
@@ -231,12 +233,12 @@ class Effect:
             for target in player.hand:
                 pending_actions.append(Action(
                     ActionType.SCRAP_CARD, card_id=target.name,
-                    card=target, card_source="hand"
+                    card=target, card_source=CardSource.HAND
                 ))
             for target in player.discard_pile:
                 pending_actions.append(Action(
                     ActionType.SCRAP_CARD, card_id=target.name,
-                    card=target, card_source="discard"
+                    card=target, card_source=CardSource.DISCARD
                 ))
             if pending_actions:
                 player.add_pending_actions(
@@ -255,7 +257,7 @@ class Effect:
             for target in player.hand:
                 pending_actions.append(Action(
                     ActionType.DISCARD_CARDS, card_id=target.name,
-                    card=target, card_source="self"
+                    card=target, card_source=CardSource.SELF
                 ))
             if pending_actions:
                 player.add_pending_actions(

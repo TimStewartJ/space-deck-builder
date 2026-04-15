@@ -20,15 +20,29 @@ class ActionType(Enum):
     DESTROY_BASE = "destroy_base"
     SKIP_DECISION = "skip_decision"
 
+
+class CardSource(Enum):
+    """Source zone for scrap/discard actions."""
+    HAND = "hand"
+    DISCARD = "discard"
+    TRADE = "trade"
+    OPPONENT = "opponent"
+    SELF = "self"
+
 @dataclass
 class Action:
     type: ActionType
     card_id: Optional[str] = None
     card: Optional['Card'] = None
     target_id: Optional[str] = None
-    card_source: Optional[str] = None
+    card_source: Optional[CardSource] = None
     card_effect: Optional['Effect'] = None
     additional_params: Optional[dict] = None
+
+    def __post_init__(self):
+        # Normalize legacy string card_source to CardSource enum
+        if isinstance(self.card_source, str):
+            self.card_source = CardSource(self.card_source)
     
     def __str__(self):
         """String representation for display in CLI"""
@@ -43,9 +57,9 @@ class Action:
         elif self.type == ActionType.ATTACK_PLAYER:
             return f"Attack player: {self.target_id}"
         elif self.type == ActionType.SCRAP_CARD:
-            return f"Scrap card: {self.card_id} from {self.card_source}"
+            return f"Scrap card: {self.card_id} from {self.card_source.value if self.card_source else 'unknown'}"
         elif self.type == ActionType.DISCARD_CARDS:
-            return f"Discard cards: {self.card_id} from {self.card_source}"
+            return f"Discard cards: {self.card_id} from {self.card_source.value if self.card_source else 'unknown'}"
         elif self.type == ActionType.DESTROY_BASE:
             return f"Destroy base: {self.target_id}"
         elif self.type == ActionType.END_TURN:

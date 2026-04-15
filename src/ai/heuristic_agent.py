@@ -1,5 +1,7 @@
 from src.engine.game import Game
-from src.engine.actions import ActionType, Action, get_available_actions
+from src.engine.actions import ActionType, Action, CardSource, get_available_actions
+from src.cards.factions import Faction, faction_display
+from src.cards.card import CardType
 from src.cards.effects import CardEffectType
 from src.ai.agent import Agent
 
@@ -110,7 +112,7 @@ class HeuristicAgent(Agent):
                 return scrap_explorers[0]
 
         # Scrap from trade row if available (deny opponent good cards)
-        trade_scraps = [a for a in scrap_actions if a.card_source == "trade"]
+        trade_scraps = [a for a in scrap_actions if a.card_source == CardSource.TRADE]
         if trade_scraps:
             # Scrap the most expensive trade row card to deny it
             trade_scraps.sort(key=lambda a: self._card_cost(a, game_state), reverse=True)
@@ -265,8 +267,8 @@ class HeuristicAgent(Agent):
             return 2  # Marginal early game buy
 
         # Faction synergy: bonus if we already have cards of this faction
-        if card.faction and isinstance(card.faction, str):
-            existing = faction_counts.get(card.faction.lower(), 0)
+        if card.faction:
+            existing = faction_counts.get(card.faction, 0)
             score += existing * 1.5  # Each existing ally card adds synergy value
 
         # Effect bonuses
@@ -283,21 +285,20 @@ class HeuristicAgent(Agent):
                 score += 2
 
         # Base/outpost bonus — persistent value across turns
-        if card.card_type == "outpost":
+        if card.card_type == CardType.OUTPOST:
             score += 4 + (card.defense or 0) * 0.5
-        elif card.card_type == "base":
+        elif card.card_type == CardType.BASE:
             score += 3 + (card.defense or 0) * 0.5
 
         return score
 
     def _count_factions(self, player):
         """Count faction occurrences across the player's full card pool."""
-        counts = {}
+        counts: dict[Faction, int] = {}
         for zone in [player.hand, player.deck, player.discard_pile, player.played_cards, player.bases]:
             for card in zone:
-                if card.faction and isinstance(card.faction, str):
-                    faction = card.faction.lower()
-                    counts[faction] = counts.get(faction, 0) + 1
+                if card.faction:
+                    counts[card.faction] = counts.get(card.faction, 0) + 1
         return counts
 
     # ── Helpers ─────────────────────────────────────────────────────────

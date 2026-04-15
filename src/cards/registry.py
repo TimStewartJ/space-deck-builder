@@ -10,7 +10,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from src.cards.card import Card
+from src.cards.card import Card, CardType
+from src.cards.factions import Faction, faction_display
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,9 +25,9 @@ class CardDef:
     card_def_id: int
     name: str
     cost: int
-    card_type: str          # "ship", "base", "outpost"
+    card_type: CardType
     defense: Optional[int] = None
-    faction: Optional[str] = None   # original string(s) for display/logic
+    faction: Faction = Faction.NONE
     set_name: Optional[str] = None
 
 
@@ -107,21 +108,13 @@ def build_registry(
             continue
         seen.add(card.name)
 
-        # Normalize faction for storage
-        faction_str: str | None = None
-        if card.faction:
-            if isinstance(card.faction, list):
-                faction_str = " / ".join(card.faction)
-            else:
-                faction_str = card.faction
-
         card_defs.append(CardDef(
             card_def_id=index,
             name=card.name,
             cost=card.cost,
             card_type=card.card_type,
             defense=card.defense,
-            faction=faction_str,
+            faction=card.faction,
             set_name=card.set,
         ))
         index += 1
@@ -130,16 +123,16 @@ def build_registry(
     # These must match the definitions in Game.create_starting_deck() and
     # Game.setup_explorer_pile().
     _STARTER_DEFS: dict[str, dict] = {
-        "Scout":    {"cost": 0, "card_type": "ship"},
-        "Viper":    {"cost": 0, "card_type": "ship"},
-        "Explorer": {"cost": 2, "card_type": "ship"},
+        "Scout":    {"cost": 0, "card_type": CardType.SHIP},
+        "Viper":    {"cost": 0, "card_type": CardType.SHIP},
+        "Explorer": {"cost": 2, "card_type": CardType.SHIP},
     }
 
     # Add starter card defs if not already present from trade deck
     for starter in starter_names:
         if starter not in seen:
             seen.add(starter)
-            meta = _STARTER_DEFS.get(starter, {"cost": 0, "card_type": "ship"})
+            meta = _STARTER_DEFS.get(starter, {"cost": 0, "card_type": CardType.SHIP})
             card_defs.append(CardDef(
                 card_def_id=index,
                 name=starter,

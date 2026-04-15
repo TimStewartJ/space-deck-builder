@@ -1,9 +1,10 @@
 """Tests for game engine rule correctness — Work Unit A: Base & Outpost System."""
 import pytest
-from src.cards.card import Card
+from src.cards.card import Card, CardType
 from src.cards.effects import Effect, CardEffectType
+from src.cards.factions import Faction
 from src.engine.player import Player
-from src.engine.actions import get_available_actions, ActionType, Action
+from src.engine.actions import get_available_actions, ActionType, Action, CardSource
 from src.ai.agent import Agent
 
 
@@ -193,10 +194,10 @@ class TestE1AllyFactions:
     """E1: Extensible ally_factions system — wildcard, specific list, fallback."""
 
     def test_wildcard_counts_for_any_faction(self):
-        """A card with ally_factions=["*"] counts as ally for every faction."""
+        """A card with ally_factions=ALL counts as ally for every faction."""
         player = Player("P1", Agent("P1"))
         mech_world = _make_outpost(name="Mech World", faction="Machine Cult")
-        mech_world.ally_factions = ["*"]
+        mech_world.ally_factions = Faction.ALL
         player.hand.append(mech_world)
         player.play_card(mech_world)
 
@@ -218,10 +219,10 @@ class TestE1AllyFactions:
         assert player.get_faction_ally_count("Machine Cult") == 0
 
     def test_none_ally_factions_falls_back_to_faction(self):
-        """Default behavior: ally_factions=None uses card.faction."""
+        """Default behavior: ally_factions=Faction.NONE uses card.faction."""
         player = Player("P1", Agent("P1"))
         card = Card("Ship", 0, 1, [], "ship", faction="Blob")
-        assert card.ally_factions is None
+        assert card.ally_factions == Faction.NONE
         player.played_cards.append(card)
 
         assert player.get_faction_ally_count("Blob") == 1
@@ -241,28 +242,27 @@ class TestE1AllyFactions:
                      faction="Machine Cult", ally_factions=["*"])
         cloned = card.clone()
 
-        assert cloned.ally_factions == ["*"]
-        assert cloned.ally_factions is not card.ally_factions
+        assert cloned.ally_factions == Faction.ALL
 
     def test_clone_none_ally_factions(self):
         card = Card("Ship", 0, 1, [], "ship")
         cloned = card.clone()
-        assert cloned.ally_factions is None
+        assert cloned.ally_factions == Faction.NONE
 
     def test_mech_world_loaded_from_csv(self):
-        """Integration: Mech World from cards.csv gets ally_factions=["*"]."""
+        """Integration: Mech World from cards.csv gets ally_factions=Faction.ALL."""
         from src.config import DataConfig
         cfg = DataConfig()
         cards = cfg.load_cards()
         mech_worlds = [c for c in cards if c.name == "Mech World"]
         assert len(mech_worlds) == 1
-        assert mech_worlds[0].ally_factions == ["*"]
+        assert mech_worlds[0].ally_factions == Faction.ALL
 
     def test_wildcard_enables_ally_ability(self):
         """Mech World should satisfy any faction's ally requirement."""
         game, p1, _ = _make_game_with_players()
         mech_world = _make_outpost(name="Mech World", faction="Machine Cult")
-        mech_world.ally_factions = ["*"]
+        mech_world.ally_factions = Faction.ALL
         p1.hand.append(mech_world)
         p1.play_card(mech_world)
 
@@ -484,7 +484,7 @@ class TestB4TradeRowScrapRefresh:
         initial_row_size = len(game.trade_row)
 
         scrap_action = Action(type=ActionType.SCRAP_CARD,
-                              card_id="Target", card_source="trade")
+                              card_id="Target", card_source=CardSource.TRADE)
         game.execute_action(scrap_action)
 
         # Row should have refilled with the filler card
@@ -898,12 +898,12 @@ class TestD4BrainWorld:
 
         pending = p1.get_current_pending_set()
         # Scrap from hand
-        scrap_hand = [a for a in pending.actions if a.card_source == "hand" and a.card is h1][0]
+        scrap_hand = [a for a in pending.actions if a.card_source == CardSource.HAND and a.card is h1][0]
         game.execute_action(scrap_hand)
 
         # Scrap from discard
         pending = p1.get_current_pending_set()
-        scrap_disc = [a for a in pending.actions if a.card_source == "discard" and a.card is d1][0]
+        scrap_disc = [a for a in pending.actions if a.card_source == CardSource.DISCARD and a.card is d1][0]
         game.execute_action(scrap_disc)
 
         assert p1.get_current_pending_set() is None
