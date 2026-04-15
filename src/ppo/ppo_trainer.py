@@ -29,11 +29,12 @@ def train(
         if model_files:
             model_files.sort(key=os.path.getmtime, reverse=True)
             model_path = model_files[0]
-            log(f"Auto-loading latest PPO model: {model_path}")
+            print(f"Auto-loading latest PPO model: {model_path}")
         else:
-            log("No PPO model found in models directory to auto-load.")
+            print("No PPO model found in models directory to auto-load.")
 
     set_verbose(False)
+    set_disabled(True)
     cards = data_cfg.load_cards()
     registry = data_cfg.build_registry(cards)
     card_names = registry.card_names
@@ -55,7 +56,7 @@ def train(
         output_size = last_layer.out_features if hasattr(last_layer, 'out_features') else "Unknown"
     except Exception:
         input_size = output_size = "Unknown"
-    log(f"Model has {num_params / 1_000_000:.2f}M parameters. Actor input size: {input_size}, output size: {output_size}.")
+    print(f"Model has {num_params / 1_000_000:.2f}M parameters. Actor input size: {input_size}, output size: {output_size}.")
 
     # Set up the opponent pool from config
     pool = OpponentPool(
@@ -63,9 +64,10 @@ def train(
         self_play_ratio=run_cfg.self_play_ratio,
     )
     opp_types = pool.opponent_types
-    log(f"Opponent pool: {', '.join(opp_types)}"
-        f"{' + self-play' if run_cfg.self_play else ''}"
-        f" (self-play ratio: {run_cfg.self_play_ratio})" if run_cfg.self_play else "")
+    pool_msg = f"Opponent pool: {', '.join(opp_types)}"
+    if run_cfg.self_play:
+        pool_msg += f" + self-play (self-play ratio: {run_cfg.self_play_ratio})"
+    print(pool_msg)
 
     total_time_spent_on_updates = 0.0
     total_time_spent_on_episodes = 0.0
@@ -76,9 +78,9 @@ def train(
 
     for upd in range(1, run_cfg.updates + 1):
         make_opponent = pool.make_factory(card_names, device=sim_device, registry=registry)
-        log(f"Starting update {upd}/{run_cfg.updates} "
-            f"(opponents: {', '.join(opp_types)}"
-            f"{' + snapshots' if pool.has_snapshots else ''})")
+        snap_msg = " + snapshots" if pool.has_snapshots else ""
+        print(f"Starting update {upd}/{run_cfg.updates} "
+              f"(opponents: {', '.join(opp_types)}{snap_msg})")
 
         # Collect trajectories
         start_time = time.time()
@@ -97,7 +99,7 @@ def train(
         states, actions, old_lp, returns, advs, masks = runner.run_episodes(run_cfg.episodes)
         duration_episodes = time.time() - start_time
         total_time_spent_on_episodes += duration_episodes
-        log(f"Finished {run_cfg.episodes} episodes in {duration_episodes:.2f}s.")
+        print(f"Finished {run_cfg.episodes} episodes in {duration_episodes:.2f}s.")
 
         # --- Device boundary: sim_device → main_device ---
         # run_episodes() returns tensors on simulation_device.
@@ -117,8 +119,8 @@ def train(
         agent.update(states, actions, old_lp, returns, advs, masks)
         duration_update = time.time() - start_time
         total_time_spent_on_updates += duration_update
-        log(f"Update {upd} complete in {duration_update:.2f}s. State size: {states.shape}")
-        log(f"Loc Emb: {agent.model.loc_emb.weight.grad is not None and agent.model.loc_emb.weight.grad.norm().item()}")
+        print(f"Update {upd} complete in {duration_update:.2f}s. State size: {states.shape}")
+        print(f"Loc Emb: {agent.model.loc_emb.weight.grad is not None and agent.model.loc_emb.weight.grad.norm().item()}")
 
         # Add snapshot for self-play after each update
         if run_cfg.self_play:
@@ -138,7 +140,7 @@ def train(
             duration_eval = time.time() - start_time
             total_time_spent_on_eval += duration_eval
         else:
-            log(f"Skipping eval (next eval at update {upd + run_cfg.eval_every - upd % run_cfg.eval_every}).")
+            print(f"Skipping eval (next eval at update {upd + run_cfg.eval_every - upd % run_cfg.eval_every}).")
 
         # Save checkpoint per update
         ts = datetime.now().strftime("%m%d_%H%M")
@@ -153,16 +155,16 @@ def train(
             device_config=dev_cfg,
             update=upd,
         )
-        log(f"Checkpoint saved.")
+        print("Checkpoint saved.")
 
-    log(f"Total time spent on episodes: {total_time_spent_on_episodes:.2f}s\n\tAverage per update: {total_time_spent_on_episodes / run_cfg.updates:.2f}s")
-    log(f"Total time spent on PPO updates: {total_time_spent_on_updates:.2f}s\n\tAverage per update: {total_time_spent_on_updates / run_cfg.updates:.2f}s")
-    log(f"Total time spent on evaluation: {total_time_spent_on_eval:.2f}s\n\tAverage per update: {total_time_spent_on_eval / run_cfg.updates:.2f}s")
-    log("All updates finished.")
+    print(f"Total time spent on episodes: {total_time_spent_on_episodes:.2f}s\n\tAverage per update: {total_time_spent_on_episodes / run_cfg.updates:.2f}s")
+    print(f"Total time spent on PPO updates: {total_time_spent_on_updates:.2f}s\n\tAverage per update: {total_time_spent_on_updates / run_cfg.updates:.2f}s")
+    print(f"Total time spent on evaluation: {total_time_spent_on_eval:.2f}s\n\tAverage per update: {total_time_spent_on_eval / run_cfg.updates:.2f}s")
+    print("All updates finished.")
     # Log average decision time per decision
     avg_decision_time = agent.get_average_decision_time()
-    log(f"Average PPOAgent decision time: {avg_decision_time:.6f} seconds per decision.")
-    log(f"Overall time spent: {time.perf_counter() - overall_start_time:.2f}s")
+    print(f"Average PPOAgent decision time: {avg_decision_time:.6f} seconds per decision.")
+    print(f"Overall time spent: {time.perf_counter() - overall_start_time:.2f}s")
 
 
 def _run_per_opponent_eval(
@@ -185,7 +187,7 @@ def _run_per_opponent_eval(
     total_wins = 0
     total_games = 0
 
-    log(f"Evaluating after update {upd} ({games_per_type} games × {len(opp_types)} opponent types)...")
+    print(f"Evaluating after update {upd} ({games_per_type} games × {len(opp_types)} opponent types)...")
 
     for opp_type in opp_types:
         factory = pool.make_factory_for_type(opp_type)
@@ -203,10 +205,10 @@ def _run_per_opponent_eval(
         wins, losses, eval_steps = eval_runner.run_eval(games_per_type)
         win_rate = wins / games_per_type
         avg_steps = eval_steps / games_per_type if games_per_type > 0 else 0
-        log(f"  vs {opp_type}: {wins}/{games_per_type} wins ({win_rate:.0%}), avg {avg_steps:.0f} steps/game")
+        print(f"  vs {opp_type}: {wins}/{games_per_type} wins ({win_rate:.0%}), avg {avg_steps:.0f} steps/game")
         total_wins += wins
         total_games += games_per_type
 
     overall_rate = total_wins / total_games if total_games > 0 else 0
-    log(f"  Overall: {total_wins}/{total_games} wins ({overall_rate:.0%})")
+    print(f"  Overall: {total_wins}/{total_games} wins ({overall_rate:.0%})")
     return total_wins

@@ -119,21 +119,24 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                         target_id=opponent.name
                     ))
     
-    # Add unused actions from played cards
-    for card in player.played_cards:
+    # Add unused actions from played cards and bases
+    seen_cards = set()
+    for card in list(player.played_cards) + list(player.bases):
+        if id(card) in seen_cards:
+            continue
+        seen_cards.add(id(card))
         for effect in card.effects:
             if not effect.all_child_effects_used():
                 # Ensure faction allies are valid
                 if effect.faction_requirement:
                     faction_count = player.get_faction_ally_count(effect.faction_requirement)
                     if faction_count > effect.faction_requirement_count:
-                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=effect))
+                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card=card, card_effect=effect))
                 elif effect.is_or_effect and effect.child_effects and not effect.any_child_effects_used():
-                    # If it's an OR effect that hasn't been used yet, add all child effects
                     for child_effect in effect.child_effects:
-                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=child_effect))
+                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card=card, card_effect=child_effect))
                 else:
-                    actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card_effect=effect))
+                    actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card=card, card_effect=effect))
 
     # Always allow ending turn
     actions.append(Action(type=ActionType.END_TURN))

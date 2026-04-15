@@ -1,6 +1,7 @@
 from typing import List
 from src.ai.agent import Agent
 from src.cards.effects import CardEffectType
+from src.utils import logger as _logger
 from src.utils.logger import log
 from src.cards.card import Card
 from src.config import GameConfig
@@ -10,13 +11,15 @@ from src.engine.game_stats import GameStats
 
 class Game:
     def __init__(self, cards=None, card_names: list[str] | None = None,
-                 game_config: GameConfig | None = None):
+                 game_config: GameConfig | None = None,
+                 card_index_map: dict[str, int] | None = None):
         self.config = game_config or GameConfig()
         self.players: List[Player] = []
         self.current_turn = 0
         self.is_game_over = False
         self.trade_deck = [card.clone() for card in cards] if cards else []
         self.card_names = card_names if card_names else []
+        self.card_index_map = card_index_map
         self.trade_row: List[Card] = []
         self.explorer_pile: List[Card] = []
         self.is_running = False
@@ -44,10 +47,11 @@ class Game:
         from src.cards.card import Card
         from src.cards.effects import Effect, CardEffectType
 
+        explorer_idx = self.card_index_map["Explorer"] if self.card_index_map else len(self.card_names) - 1
         for _ in range(self.config.explorer_count):
             explorer_card = Card(
                 "Explorer",
-                len(self.card_names) - 1,
+                explorer_idx,
                 2,
                 [
                     Effect(CardEffectType.TRADE, 2),
@@ -60,7 +64,8 @@ class Game:
         while len(self.trade_row) < self.config.trade_row_size and self.trade_deck:
             card = self.trade_deck.pop()
             self.trade_row.append(card)
-            log(f"Added {card.name} to trade row", v=True)
+            if not _logger.disabled:
+                log(f"Added {card.name} to trade row", v=True)
 
     def shuffle_trade_deck(self):
         import random
@@ -94,10 +99,12 @@ class Game:
         from src.cards.effects import Effect
         from src.cards.card import Card
         starting_deck = []
+        scout_idx = self.card_index_map["Scout"] if self.card_index_map else len(self.card_names) - 2
+        viper_idx = self.card_index_map["Viper"] if self.card_index_map else len(self.card_names) - 1
         for _ in range(self.config.num_scouts):
-            starting_deck.append(Card("Scout", len(self.card_names) - 2, 0, [Effect(CardEffectType.TRADE, 1)], "ship"))
+            starting_deck.append(Card("Scout", scout_idx, 0, [Effect(CardEffectType.TRADE, 1)], "ship"))
         for _ in range(self.config.num_vipers):
-            starting_deck.append(Card("Viper", len(self.card_names) - 1, 0, [Effect(CardEffectType.COMBAT, 1)], "ship"))
+            starting_deck.append(Card("Viper", viper_idx, 0, [Effect(CardEffectType.COMBAT, 1)], "ship"))
         return starting_deck
     
     def step(self, action: Action | None = None):
@@ -135,13 +142,15 @@ class Game:
             # Get player decision (through UI or AI)
             action = self.current_player.make_decision(self)
 
-        log(f"Getting action for {self.current_player.name}", v=True)
+        if not _logger.disabled:
+            log(f"Getting action for {self.current_player.name}", v=True)
 
         if action:
             turn_ended = self.execute_action(action)
         
         if turn_ended:
-            log(f"Ended turn for {self.current_player.name}", v=True)
+            if not _logger.disabled:
+                log(f"Ended turn for {self.current_player.name}", v=True)
 
             # Tell player turn is over
             self.current_player.reset_resources()
@@ -150,7 +159,8 @@ class Game:
             # Increment turn counter and move onto next player
             self.stats.total_turns += 1
             if self.stats.total_turns > self.config.turn_cap:
-                log(f"Game has exceeded {self.config.turn_cap} turns, ending game.", v=True)
+                if not _logger.disabled:
+                    log(f"Game has exceeded {self.config.turn_cap} turns, ending game.", v=True)
                 self.end_game()
             self.current_turn = (self.current_turn + 1) % len(self.players)
             self.current_player = self.players[self.current_turn]
@@ -160,7 +170,9 @@ class Game:
     
     def execute_action(self, action: Action):
         """Execute a player's action and update game state"""
-        log(f"{self.current_player.name} executing action: {action}", v=True)
+        _log_enabled = not _logger.disabled
+        if _log_enabled:
+            log(f"{self.current_player.name} executing action: {action}", v=True)
 
         # Handle pending action sets
         pending_set = self.current_player.get_current_pending_set()
@@ -188,31 +200,40 @@ class Game:
                 if card.name == action.card_id:
                     self.current_player.play_card(card)
                     self.stats.record_card_play(self.current_player.name)
-                    log(f"{self.current_player.name} played {card.name}", v=True)
-                    # Apply first card effect if ship
-                    if card.card_type == "ship" and card.effects and len(card.effects) > 0:
-                        card.effects[0].apply(self, self.current_player, card)
-                    # Attempt application of all other effects if they don't require decisions
-                    for card in self.current_player.played_cards:
-                        for effect in card.effects:
+                    if _log_enabled:
+                        log(f"{self.current_player.name} played {card.name}", v=True)
+                    # Auto-apply simple resource effects across all played cards.
+                    # Skip scrap effects (must be explicitly chosen), OR effects
+                    # (require a choice), and ally effects (surfaced as APPLY_EFFECT actions).
+                    for pc in list(self.current_player.played_cards):
+                        for effect in pc.effects:
                             if (
-                                effect.effect_type in [
+                                effect.effect_type in (
                                     CardEffectType.COMBAT,
                                     CardEffectType.TRADE,
                                     CardEffectType.HEAL,
                                     CardEffectType.DRAW,
                                     CardEffectType.TARGET_DISCARD,
                                     CardEffectType.PARENT,
-                                ]
+                                )
                                 and not effect.is_or_effect
+                                and not effect.is_scrap_effect
+                                and not effect.faction_requirement
                             ):
-                                effect.apply(self, self.current_player, card)
+                                effect.apply(self, self.current_player, pc)
                     break
         
         elif action.type == ActionType.APPLY_EFFECT and action.card_effect is not None:
-            # Apply the effect directly
-            action.card_effect.apply(self, self.current_player)
-            log(f"{self.current_player.name} applied effect: {action.card_effect}", v=True)
+            # Resolve source card for scrap-from-play effects
+            source_card = action.card
+            if source_card is None:
+                for c in self.current_player.played_cards + self.current_player.bases:
+                    if c.name == action.card_id:
+                        source_card = c
+                        break
+            action.card_effect.apply(self, self.current_player, source_card)
+            if _log_enabled:
+                log(f"{self.current_player.name} applied effect: {action.card_effect}", v=True)
                     
         elif action.type == ActionType.BUY_CARD:
             # If the card is an explorer, take it from the explorer pile
@@ -222,7 +243,8 @@ class Game:
                     self.current_player.trade -= card.cost
                     self.current_player.discard_pile.append(card)
                     self.stats.record_card_buy(self.current_player.name)
-                    log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
+                    if _log_enabled:
+                        log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
                     return
             # Find the card in trade row
             for i, card in enumerate(self.trade_row):
@@ -230,14 +252,16 @@ class Game:
                     self.current_player.trade -= card.cost
                     self.current_player.discard_pile.append(card)
                     self.stats.record_card_buy(self.current_player.name)
-                    log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
+                    if _log_enabled:
+                        log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
                     self.trade_row.pop(i)
                     # Replace card in trade row
                     if self.trade_deck:
                         new_card = self.trade_deck.pop()
                         self.trade_row.append(new_card)
                         self.stats.trade_row_refreshes += 1
-                        log(f"Added {new_card.name} to trade row", v=True)
+                        if _log_enabled:
+                            log(f"Added {new_card.name} to trade row", v=True)
                     break
         
         elif action.type == ActionType.ATTACK_BASE:
@@ -250,7 +274,8 @@ class Game:
                             player.bases.remove(base)
                             player.discard_pile.append(base)
                             self.stats.record_base_destroy(self.current_player.name)
-                            log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
+                            if _log_enabled:
+                                log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
                             break
 
         elif action.type == ActionType.DESTROY_BASE:
@@ -262,7 +287,8 @@ class Game:
                             self.stats.record_base_destroy(self.current_player.name)
                             player.bases.remove(base)
                             player.discard_pile.append(base)
-                            log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
+                            if _log_enabled:
+                                log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
                             break
 
         elif action.type == ActionType.ATTACK_PLAYER:
@@ -275,10 +301,12 @@ class Game:
                         player.health -= damage
                         self.current_player.combat = 0
                         self.stats.record_damage(self.current_player.name, damage)
-                        log(f"{self.current_player.name} attacked {player.name} for {damage} damage", v=True)
+                        if _log_enabled:
+                            log(f"{self.current_player.name} attacked {player.name} for {damage} damage", v=True)
                         # Check for game over
                         if player.health <= 0:
-                            log(f"{player.name} has been defeated!", v=True)
+                            if _log_enabled:
+                                log(f"{player.name} has been defeated!", v=True)
                             self.is_game_over = True
                             self.stats.end_game(self.current_player.name)
                         break
@@ -290,36 +318,50 @@ class Game:
                 for card in self.current_player.hand:
                     if card.name == action.card_id:
                         self.current_player.hand.remove(card)
-                        log(f"{self.current_player.name} scrapped {card.name} from hand", v=True)
+                        if _log_enabled:
+                            log(f"{self.current_player.name} scrapped {card.name} from hand", v=True)
                         break
             elif action.card_source == 'discard':
                 # Scrap card from discard pile
                 for card in self.current_player.discard_pile:
                     if card.name == action.card_id:
                         self.current_player.discard_pile.remove(card)
-                        log(f"{self.current_player.name} scrapped {card.name} from discard pile", v=True)
+                        if _log_enabled:
+                            log(f"{self.current_player.name} scrapped {card.name} from discard pile", v=True)
                         break
             elif action.card_source == 'trade':
                 # Scrap card from trade row
                 for i, card in enumerate(self.trade_row):
                     if card.name == action.card_id:
                         self.trade_row.pop(i)
-                        log(f"{self.current_player.name} scrapped {card.name} from trade row", v=True)
+                        if _log_enabled:
+                            log(f"{self.current_player.name} scrapped {card.name} from trade row", v=True)
                         break
-                # If this was the last pending action in the current set, refresh the trade row
-                if pending_set_completed <= 0:
+                # Refill trade row after all scraps from the pending set are done
+                if not pending_set or pending_set_completed:
                     self.fill_trade_row()
             # Return explorers to the explorer pile
             if action.card_id == "Explorer" and action.card:
                 self.explorer_pile.append(action.card)
         elif action.type == ActionType.DISCARD_CARDS:
-            # Discard card from hand
-            self.stats.record_cards_discarded_from_hand(self.current_player.name, 1)
-            for card in self.current_player.hand:
+            # Determine target: opponent's hand if forced discard, else current player
+            if action.card_source == "opponent":
+                opponent = self.get_opponent(self.current_player)
+                if opponent is None:
+                    return False
+                target_hand = opponent.hand
+                target_discard = opponent.discard_pile
+                self.stats.record_cards_discarded_from_hand(opponent.name, 1)
+            else:
+                target_hand = self.current_player.hand
+                target_discard = self.current_player.discard_pile
+                self.stats.record_cards_discarded_from_hand(self.current_player.name, 1)
+            for card in target_hand:
                 if card.name == action.card_id:
-                    self.current_player.hand.remove(card)
-                    self.current_player.discard_pile.append(card)
-                    log(f"{self.current_player.name} discarded {card.name}", v=True)
+                    target_hand.remove(card)
+                    target_discard.append(card)
+                    if _log_enabled:
+                        log(f"{self.current_player.name} discarded {card.name} from {'opponent' if action.card_source == 'opponent' else 'hand'}", v=True)
                     break
 
         return False  # Turn continues

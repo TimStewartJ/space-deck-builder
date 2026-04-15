@@ -40,8 +40,12 @@ def get_state_size(cards: list[str]) -> int:
         opponent_size
     )
 
-def encode_card_presence(cards_list: list['Card'], num_cards: int, card_index_map: dict[str, int], out: np.ndarray = None, offset: int = 0) -> np.ndarray:
-    """Encode card presence using O(1) lookups into a pre-allocated array."""
+def encode_card_presence(cards_list: list['Card'], num_cards: int, card_index_map: dict[str, int] = None, out: np.ndarray = None, offset: int = 0) -> np.ndarray:
+    """Encode card presence using direct card.index for O(1) lookups.
+    
+    Falls back to card_index_map dict lookup when card.index is out of bounds
+    (e.g. starter cards created without a canonical index map).
+    """
     card_presence_worth = 0.125
 
     if out is None:
@@ -49,8 +53,14 @@ def encode_card_presence(cards_list: list['Card'], num_cards: int, card_index_ma
         offset = 0
 
     for card in cards_list:
-        idx = card_index_map.get(card.name)
-        if idx is not None:
+        idx = card.index
+        if not (0 <= idx < num_cards):
+            # Fallback for cards without a valid encoding index
+            if card_index_map is not None:
+                idx = card_index_map.get(card.name, -1)
+            else:
+                continue
+        if 0 <= idx < num_cards:
             out[offset + idx] = min(out[offset + idx] + card_presence_worth, 1.0)
     return out
 
@@ -65,13 +75,13 @@ def encode_player_into(player: 'Player', num_cards: int, card_index_map: dict[st
     offset += 5
 
     # Hand, discard, deck, bases — each is num_cards wide
-    encode_card_presence(player.hand, num_cards, card_index_map, out, offset)
+    encode_card_presence(player.hand, num_cards, out=out, offset=offset)
     offset += num_cards
-    encode_card_presence(player.discard_pile, num_cards, card_index_map, out, offset)
+    encode_card_presence(player.discard_pile, num_cards, out=out, offset=offset)
     offset += num_cards
-    encode_card_presence(player.deck, num_cards, card_index_map, out, offset)
+    encode_card_presence(player.deck, num_cards, out=out, offset=offset)
     offset += num_cards
-    encode_card_presence(player.bases, num_cards, card_index_map, out, offset)
+    encode_card_presence(player.bases, num_cards, out=out, offset=offset)
     offset += num_cards
 
     return offset
@@ -93,24 +103,31 @@ def encode_opponent_into(player: 'Player', num_cards: int, card_index_map: dict[
     out[offset + 5] = len(player.discard_pile) / 40.0
     offset += 6
 
-    # Unseen (hand + deck combined), discard, bases — 3 zones
-    encode_card_presence(player.hand + player.deck, num_cards, card_index_map, out, offset)
+    # Unseen zone: encode hand and deck separately into the same output
+    # region to avoid creating a concatenated list
+    encode_card_presence(player.hand, num_cards, out=out, offset=offset)
+    encode_card_presence(player.deck, num_cards, out=out, offset=offset)
     offset += num_cards
-    encode_card_presence(player.discard_pile, num_cards, card_index_map, out, offset)
+    encode_card_presence(player.discard_pile, num_cards, out=out, offset=offset)
     offset += num_cards
-    encode_card_presence(player.bases, num_cards, card_index_map, out, offset)
+    encode_card_presence(player.bases, num_cards, out=out, offset=offset)
     offset += num_cards
 
     return offset
 
-def encode_state(game_state: 'Game', is_current_player_training: bool, cards: list[str], available_actions: list['Action'], card_index_map: dict[str, int] = None) -> torch.FloatTensor:
-    """Convert game state to fixed-length tensor using numpy for speed."""
+def encode_state(game_state: 'Game', is_current_player_training: bool, cards: list[str], available_actions: list['Action'], card_index_map: dict[str, int] = None, state_buf: np.ndarray = None) -> torch.FloatTensor:
+    """Convert game state to fixed-length tensor.
+    
+    If state_buf is provided, it is zeroed and reused to avoid allocation.
+    """
     num_cards = len(cards)
-    if card_index_map is None:
-        card_index_map = build_card_index_map(cards)
 
-    state_size = get_state_size(cards)
-    state = np.zeros(state_size, dtype=np.float32)
+    if state_buf is not None:
+        state_buf[:] = 0
+        state = state_buf
+    else:
+        state_size = get_state_size(cards)
+        state = np.zeros(state_size, dtype=np.float32)
 
     training_player = game_state.current_player if is_current_player_training else game_state.get_opponent(game_state.current_player)
     if training_player is None:
@@ -133,7 +150,7 @@ def encode_state(game_state: 'Game', is_current_player_training: bool, cards: li
     offset += 1
 
     # Trade row
-    encode_card_presence(game_state.trade_row, num_cards, card_index_map, state, offset)
+    encode_card_presence(game_state.trade_row, num_cards, out=state, offset=offset)
     offset += num_cards
 
     # Training player
@@ -142,4 +159,5 @@ def encode_state(game_state: 'Game', is_current_player_training: bool, cards: li
     # Opponent (asymmetric encoding — hand and deck merged into unseen zone)
     offset = encode_opponent_into(opponent, num_cards, card_index_map, state, offset)
 
-    return torch.from_numpy(state)
+    # Return a copy so the buffer can be safely reused
+    return torch.from_numpy(state.copy()) if state_buf is not None else torch.from_numpy(state)

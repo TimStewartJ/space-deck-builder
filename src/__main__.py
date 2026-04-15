@@ -4,6 +4,7 @@ Usage:
     python -m src train [options]
     python -m src simulate [options]
     python -m src benchmark [options]
+    python -m src elo [options]
 """
 import argparse
 import sys
@@ -85,6 +86,21 @@ def _build_benchmark_parser(sub: argparse._SubParsersAction):
     return p
 
 
+def _build_elo_parser(sub: argparse._SubParsersAction):
+    p = sub.add_parser("elo", help="Run Elo tournament between checkpoints")
+    _add_common_args(p)
+    p.add_argument("--checkpoints", type=str, nargs="+", required=True,
+                   help="Checkpoint glob patterns or paths "
+                        "(e.g. 'models/ppo_agent_0415_*upd*0.pth')")
+    p.add_argument("--games-per-pair", type=int, default=50,
+                   help="Games to play per pairing (default: 50)")
+    p.add_argument("--simulation-device", type=str, default="cpu",
+                   help="Device for inference (cuda or cpu)")
+    p.add_argument("--num-concurrent", type=int, default=32,
+                   help="Concurrent games in BatchRunner (default: 32)")
+    return p
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="space-deck-builder",
@@ -94,6 +110,7 @@ def main(argv=None):
     _build_train_parser(sub)
     _build_simulate_parser(sub)
     _build_benchmark_parser(sub)
+    _build_elo_parser(sub)
 
     args = parser.parse_args(argv)
 
@@ -107,6 +124,8 @@ def main(argv=None):
         _run_simulate(args)
     elif args.command == "benchmark":
         _run_benchmark(args)
+    elif args.command == "elo":
+        _run_elo(args)
 
 
 def _run_train(args):
@@ -158,6 +177,26 @@ def _run_benchmark(args):
         device=args.simulation_device,
         mode=args.mode,
         workers=args.workers,
+    )
+
+
+def _run_elo(args):
+    """Resolve checkpoint paths, build config, and run the Elo tournament."""
+    from src.config import DataConfig
+    from src.ppo.elo_tournament import run_tournament, resolve_checkpoint_paths
+
+    paths = resolve_checkpoint_paths(args.checkpoints)
+    if len(paths) < 2:
+        print(f"Error: need at least 2 checkpoints, found {len(paths)}")
+        sys.exit(1)
+
+    data_cfg = DataConfig(cards_path=args.cards_path)
+    run_tournament(
+        checkpoint_paths=paths,
+        data_cfg=data_cfg,
+        games_per_pair=args.games_per_pair,
+        device=args.simulation_device,
+        num_concurrent=args.num_concurrent,
     )
 
 
