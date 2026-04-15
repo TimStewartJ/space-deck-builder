@@ -109,6 +109,23 @@ class Game:
         done = self.is_game_over
         return done
 
+    def needs_decision(self) -> bool:
+        """Check if the game is waiting for a player decision."""
+        return not self.is_game_over
+
+    def get_decision_context(self) -> tuple['Player', list[Action]] | None:
+        """Return (player, available_actions) if a decision is needed, else None."""
+        if self.is_game_over:
+            return None
+        from src.engine.actions import get_available_actions
+        available = get_available_actions(self, self.current_player)
+        return (self.current_player, available)
+
+    def apply_decision(self, action: Action) -> bool:
+        """Apply an externally-chosen action. Returns True if game is over."""
+        self.next_step(action)
+        return self.is_game_over
+
     def next_step(self, action: Action | None = None):
         if self.is_game_over:
             return
