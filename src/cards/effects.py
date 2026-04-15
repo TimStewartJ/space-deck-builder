@@ -174,11 +174,12 @@ class Effect:
         # if the effect is a scrap effect, remove the card from the game
         if self.is_scrap_effect and card:
             game.stats.record_card_scrap(player.name, "card")
-            # find the card in the player's played cards by name and remove it
-            for c in player.played_cards:
-                if c.name == card.name:
-                    player.played_cards.remove(c)
-                    break
+            # Remove from played cards
+            if card in player.played_cards:
+                player.played_cards.remove(card)
+            # Also remove from bases if it was a base/outpost
+            if card in player.bases:
+                player.bases.remove(card)
             # If this is an explorer, add it back to the explorer pile
             if card.name == "Explorer":
                 game.explorer_pile.append(card)

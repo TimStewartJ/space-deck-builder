@@ -210,8 +210,14 @@ class Game:
                     break
         
         elif action.type == ActionType.APPLY_EFFECT and action.card_effect is not None:
-            # Apply the effect directly
-            action.card_effect.apply(self, self.current_player)
+            # Resolve source card for scrap-from-play effects
+            source_card = action.card
+            if source_card is None:
+                for c in self.current_player.played_cards + self.current_player.bases:
+                    if c.name == action.card_id:
+                        source_card = c
+                        break
+            action.card_effect.apply(self, self.current_player, source_card)
             log(f"{self.current_player.name} applied effect: {action.card_effect}", v=True)
                     
         elif action.type == ActionType.BUY_CARD:

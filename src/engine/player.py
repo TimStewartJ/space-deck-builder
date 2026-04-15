@@ -45,7 +45,7 @@ class Player:
         if card in self.hand:
             self.hand.remove(card)
             self.played_cards.append(card)
-            if card.card_type == "base":
+            if card.is_base():
                 self.bases.append(card)
             return True
         return False
@@ -71,12 +71,16 @@ class Player:
         """End the current turn"""
         # Move played cards to discard pile (except bases)
         for card in self.played_cards:
-            card.reset_effects()  # Reset card effects
+            card.reset_effects()
             if card not in self.bases:
                 self.discard_pile.append(card)
                 
         self.played_cards = []
         self.reset_pending_actions()
+
+        # Reset base effects so they're available again next turn
+        for base in self.bases:
+            base.reset_effects()
         
         # Move hand to discard pile
         self.discard_pile.extend(self.hand)
@@ -114,5 +118,15 @@ class Player:
         self.advance_pending_set()
     
     def get_faction_ally_count(self, faction):
-        """Count the number of cards of the specified faction in play"""
-        return sum(1 for card in self.played_cards if card.faction and card.faction.lower() == faction.lower())
+        """Count cards of the specified faction across played cards and bases."""
+        target = faction.lower()
+        count = 0
+        for card in set(self.played_cards) | set(self.bases):
+            if not card.faction:
+                continue
+            if isinstance(card.faction, list):
+                if any(f.lower() == target for f in card.faction):
+                    count += 1
+            elif card.faction.lower() == target:
+                count += 1
+        return count

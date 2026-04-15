@@ -13,6 +13,9 @@ dependencies = [
 ]
 
 ## GPU-specific torch indexes (used by scripts/setup_gpu.py, not auto-selected)
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
 [[tool.uv.index]]
 name = "therock-gfx120x"
 url = "https://rocm.nightlies.amd.com/v2/gfx120X-all/"
@@ -22,3 +25,8 @@ explicit = true
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/nightly/cu128"
 explicit = true
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
