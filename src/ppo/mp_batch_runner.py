@@ -101,12 +101,8 @@ class MultiProcessBatchRunner:
         if actual_workers <= 0:
             raise ValueError(f"Cannot run {num_episodes} episodes with {self.num_workers} workers")
 
-        # Cap workers by available concurrency to avoid zero-slot workers
-        actual_workers = min(actual_workers, self.num_concurrent)
-
-        # Divide work across workers
+        # Divide episodes across workers; each worker runs num_concurrent games
         episodes_per_worker = _divide_work(num_episodes, actual_workers)
-        concurrent_per_worker = _divide_work(self.num_concurrent, actual_workers)
 
         # Start inference server with opponent snapshots loaded on GPU
         server = InferenceServer(
@@ -135,7 +131,7 @@ class MultiProcessBatchRunner:
                 args=(
                     i,                              # worker_id
                     episodes_per_worker[i],          # num_episodes
-                    concurrent_per_worker[i],        # num_concurrent
+                    self.num_concurrent,             # num_concurrent (per worker)
                     self.data_config.to_dict(),       # data_config_dict
                     self.card_names,                  # card_names (canonical from parent)
                     self.card_index_map,              # card_index_map (canonical)
@@ -224,13 +220,8 @@ class MultiProcessBatchRunner:
         if actual_workers <= 0:
             return 0, 0, 0
 
-        # Cap workers by available concurrency to avoid zero-slot workers
-        actual_workers = min(actual_workers, min(self.num_concurrent, num_games))
-
         games_per_worker = _divide_work(num_games, actual_workers)
-        concurrent_per_worker = _divide_work(
-            min(self.num_concurrent, num_games), actual_workers,
-        )
+        eval_concurrent = min(self.num_concurrent, num_games)
 
         server = InferenceServer(
             self.model, self.device, actual_workers, ctx=self._mp_ctx,
@@ -249,7 +240,7 @@ class MultiProcessBatchRunner:
                 args=(
                     i,
                     games_per_worker[i],
-                    concurrent_per_worker[i],
+                    eval_concurrent,
                     self.data_config.to_dict(),
                     self.card_names,
                     self.card_index_map,
