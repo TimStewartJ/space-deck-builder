@@ -1,8 +1,8 @@
 """OpponentPool: configurable, weighted opponent sampling for PPO training.
 
 Manages a pool of fixed agent types (random, heuristic, simple) and optional
-PPO snapshots for self-play. The pool produces a factory callable that samples
-a fresh opponent per game.
+PPO snapshots for self-play. Supports Prioritized Fictitious Self-Play (PFSP)
+for adaptive snapshot weighting based on win rate estimates.
 """
 from __future__ import annotations
 
@@ -24,12 +24,22 @@ AGENT_REGISTRY: dict[str, Callable[[str], Agent]] = {
 
 VALID_AGENT_NAMES = set(AGENT_REGISTRY.keys())
 
+PFSP_MODES = {"uniform", "hard", "variance"}
+
 
 class OpponentPool:
     """Weighted pool of opponent agents for training and evaluation.
 
     Fixed agents are always available. PPO snapshots are added during
     self-play and stored separately with a configurable pool cap.
+
+    When pfsp_mode is "hard" or "variance", snapshot selection uses
+    Prioritized Fictitious Self-Play instead of uniform random:
+      - "hard": prioritizes opponents the agent loses to most
+      - "variance": prioritizes opponents near 50% win rate (max learning signal)
+
+    Win rates are tracked as exponential moving averages (EMA) so that
+    estimates adapt as the training policy improves.
     """
 
     def __init__(
@@ -37,13 +47,26 @@ class OpponentPool:
         opponent_spec: str = "random",
         self_play_ratio: float = 0.5,
         snapshot_cap: int = 10,
+        pfsp_mode: str = "uniform",
+        pfsp_ema_alpha: float = 0.3,
     ):
+        if pfsp_mode not in PFSP_MODES:
+            raise ValueError(
+                f"Unknown PFSP mode {pfsp_mode!r}. "
+                f"Valid modes: {', '.join(sorted(PFSP_MODES))}"
+            )
         self.entries: list[tuple[str, float]] = _parse_opponent_spec(opponent_spec)
         self.self_play_ratio = self_play_ratio
         self.snapshot_cap = snapshot_cap
+        self.pfsp_mode = pfsp_mode
+        self._pfsp_ema_alpha = pfsp_ema_alpha
 
         # PPO snapshot state_dicts stored as (name, state_dict) pairs
         self._snapshots: list[tuple[str, dict]] = []
+        # EMA win rates per snapshot for PFSP (new snapshots start at 0.5)
+        self._snapshot_ema: dict[str, float] = {}
+        # Cumulative games observed per snapshot (for confidence weighting)
+        self._snapshot_games: dict[str, int] = {}
 
     @property
     def has_snapshots(self) -> bool:
@@ -57,8 +80,83 @@ class OpponentPool:
     def add_snapshot(self, state_dict: dict, name: str) -> None:
         """Add a PPO snapshot for self-play. Evicts oldest when at cap."""
         self._snapshots.append((name, state_dict))
+        self._snapshot_ema.setdefault(name, 0.5)
+        self._snapshot_games.setdefault(name, 0)
         if len(self._snapshots) > self.snapshot_cap:
+            evicted_name = self._snapshots[0][0]
+            self._snapshot_ema.pop(evicted_name, None)
+            self._snapshot_games.pop(evicted_name, None)
             self._snapshots = self._snapshots[-self.snapshot_cap:]
+
+    def update_results(self, results: dict[str, tuple[int, int]]) -> None:
+        """Update PFSP EMA win rates from a training batch.
+
+        Alpha is scaled by sample size so that a 1-game result barely moves
+        the EMA while a full-sized batch applies the configured alpha.
+
+        Args:
+            results: Maps opponent name → (wins_by_training_agent, total_games).
+                     Only names matching current snapshots are processed.
+        """
+        # Games per batch that count as "full confidence" for alpha scaling
+        reference_games = 10
+        snapshot_names = {name for name, _ in self._snapshots}
+        base_alpha = self._pfsp_ema_alpha
+        for name, (wins, total) in results.items():
+            if name not in snapshot_names or total == 0:
+                continue
+            batch_wr = wins / total
+            # Scale alpha by sample count to dampen noisy small samples
+            effective_alpha = base_alpha * min(total / reference_games, 1.0)
+            old_ema = self._snapshot_ema.get(name, 0.5)
+            self._snapshot_ema[name] = effective_alpha * batch_wr + (1 - effective_alpha) * old_ema
+            self._snapshot_games[name] = self._snapshot_games.get(name, 0) + total
+
+    def get_pfsp_summary(self) -> dict[str, dict[str, float]]:
+        """Return per-snapshot EMA win rates and normalized PFSP weights."""
+        snap_names = [n for n, _ in self._snapshots]
+        if not snap_names:
+            return {}
+        weights = self._pfsp_weights(snap_names)
+        total_w = sum(weights)
+        return {
+            name: {
+                "ema_win_rate": self._snapshot_ema.get(name, 0.5),
+                "weight": w / total_w if total_w > 0 else 1.0 / len(snap_names),
+            }
+            for name, w in zip(snap_names, weights)
+        }
+
+    def _pfsp_weights(self, snapshot_names: list[str]) -> list[float]:
+        """Compute PFSP sampling weights for the given snapshots.
+
+        Returns uniform weights when pfsp_mode is "uniform". Otherwise:
+          - "hard": weight = 1 - win_rate  (favor opponents we lose to)
+          - "variance": weight = wr * (1 - wr)  (favor ~50% matchups)
+
+        Low-sample snapshots are blended toward uniform weights using a
+        confidence ramp, preventing untested snapshots from dominating
+        (especially in variance mode where wr=0.5 yields the max weight).
+        """
+        if self.pfsp_mode == "uniform" or not snapshot_names:
+            return [1.0] * len(snapshot_names)
+
+        # Total games before PFSP reaches full confidence for a snapshot
+        warmup_games = 20
+        weights = []
+        for name in snapshot_names:
+            wr = self._snapshot_ema.get(name, 0.5)
+            games = self._snapshot_games.get(name, 0)
+            confidence = min(games / warmup_games, 1.0)
+            if self.pfsp_mode == "hard":
+                pfsp_w = 1.0 - wr
+            else:  # variance
+                pfsp_w = wr * (1.0 - wr)
+            # Blend between uniform (1.0) and PFSP based on observation count
+            w = confidence * pfsp_w + (1 - confidence) * 1.0
+            weights.append(max(w, 1e-6))
+
+        return weights
 
     def make_factory(
         self,
@@ -70,6 +168,7 @@ class OpponentPool:
 
         When self-play snapshots exist, `self_play_ratio` fraction of calls
         return a PPO snapshot opponent; the rest sample from the fixed pool.
+        Snapshot selection uses PFSP weighting when pfsp_mode is not "uniform".
         """
         entries = list(self.entries)
         snapshots = list(self._snapshots)
@@ -79,10 +178,15 @@ class OpponentPool:
         names = [n for n, _ in entries]
         weights = [w for _, w in entries]
 
+        # PFSP weights frozen at factory creation time for this batch
+        snap_names = [n for n, _ in snapshots]
+        pfsp_w = self._pfsp_weights(snap_names)
+
         def factory() -> Agent:
             # Decide whether to use a snapshot or fixed agent
             if snapshots and random.random() < sp_ratio:
-                snap_name, snap_sd = random.choice(snapshots)
+                idx = random.choices(range(len(snapshots)), weights=pfsp_w, k=1)[0]
+                snap_name, snap_sd = snapshots[idx]
                 return _make_ppo_opponent(snap_name, snap_sd, card_names, device,
                                           registry=registry)
             # Weighted sample from fixed pool

@@ -49,6 +49,9 @@ uv run --extra rocm python -m src train --updates 50 --episodes 128
 # Self-play training
 uv run --extra rocm python -m src train --updates 100 --episodes 128 --self-play
 
+# Self-play with PFSP (prioritize challenging snapshots)
+uv run --extra rocm python -m src train --updates 100 --episodes 128 --self-play --pfsp hard
+
 # Mixed opponents with custom weights
 uv run --extra rocm python -m src train --opponents random:0.6,heuristic:0.4
 
@@ -67,6 +70,7 @@ uv run --extra rocm python -m src train --load-latest-model --updates 50
 | `--clip-eps` | 0.3 | PPO clip range |
 | `--entropy` | 0.025 | Entropy bonus coefficient |
 | `--self-play` | off | Train against past snapshots |
+| `--pfsp` | uniform | PFSP snapshot weighting: uniform, hard, or variance |
 | `--opponents` | random | Opponent mix (random, heuristic, simple) |
 | `--main-device` | cuda | Device for gradient updates |
 | `--simulation-device` | cuda | Device for episode simulation |

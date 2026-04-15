@@ -131,6 +131,7 @@ class RunConfig:
     self_play: bool = False
     opponents: str = "random"
     self_play_ratio: float = 0.5
+    pfsp_mode: str = "uniform"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

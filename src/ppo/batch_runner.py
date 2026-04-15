@@ -65,6 +65,9 @@ class BatchRunner:
         self._state_buf = np.zeros(self._state_size, dtype=np.float32)
         # Pre-allocate reusable bool buffer for action mask generation
         self._mask_buf = np.zeros(action_dim, dtype=bool)
+        # Per-opponent result tracking for PFSP
+        self.opponent_results: dict[str, list[int]] = {}
+        self._game_opponents: list[str | None] = [None] * num_concurrent
 
     def run_episodes(self, num_episodes: int) -> tuple:
         """Run num_episodes games and return aggregated rollout data.
@@ -74,6 +77,10 @@ class BatchRunner:
         """
         self.model.to(self.device)
         self.model.eval()
+
+        # Reset per-batch tracking
+        self.opponent_results = {}
+        self._game_opponents = [None] * self.num_concurrent
 
         # Active game slots
         games: list[Optional[Game]] = [None] * self.num_concurrent
@@ -86,7 +93,7 @@ class BatchRunner:
         # Fill initial game slots
         active_count = min(self.num_concurrent, num_episodes)
         for i in range(active_count):
-            games[i], buffers[i] = self._start_game()
+            games[i], buffers[i], self._game_opponents[i] = self._start_game()
             episodes_started += 1
 
         while episodes_completed < num_episodes:
@@ -104,7 +111,7 @@ class BatchRunner:
                 self._finish_game(i, games, buffers, completed_rollouts)
                 episodes_completed += 1
                 if episodes_started < num_episodes:
-                    games[i], buffers[i] = self._start_game()
+                    games[i], buffers[i], self._game_opponents[i] = self._start_game()
                     episodes_started += 1
                     # Advance the new game past opponent's opening moves
                     self._advance_non_ppo(games[i])
@@ -206,24 +213,38 @@ class BatchRunner:
         )
 
     def _start_game(self):
-        """Initialize a new game."""
+        """Initialize a new game. Returns (game, rollout_buffer, opponent_name)."""
         opponent = self.opponent_factory()
         game = Game(self.cards, card_index_map=self.card_index_map)
         game.add_player(self.training_agent_name, _DummyAgent(self.training_agent_name))
         game.add_player(opponent.name, opponent)
         game.start_game()
         buf = RolloutBuffer()
-        return game, buf
+        return game, buf, opponent.name
 
     def _finish_game(self, i, games, buffers, completed_rollouts):
-        """Handle a completed game: compute reward, finalize rollout."""
+        """Handle a completed game: record opponent result, compute reward, finalize rollout."""
+        winner = games[i].get_winner()
+        won = winner == self.training_agent_name
+
+        # Record opponent result for PFSP tracking (before any early returns)
+        opp_name = self._game_opponents[i]
+        if opp_name is not None:
+            entry = self.opponent_results.get(opp_name)
+            if entry is None:
+                entry = [0, 0]
+                self.opponent_results[opp_name] = entry
+            if won:
+                entry[0] += 1
+            entry[1] += 1
+
         if buffers[i] is None or len(buffers[i]) == 0:
             games[i] = None
             buffers[i] = None
+            self._game_opponents[i] = None
             return
 
-        winner = games[i].get_winner()
-        reward = 1.0 if winner == self.training_agent_name else -1.0
+        reward = 1.0 if won else -1.0
         buffers[i].fill_last_reward(reward)
         rollout = buffers[i].finish(
             gamma=self.ppo_config.gamma,
@@ -234,6 +255,7 @@ class BatchRunner:
         completed_rollouts.append(rollout)
         games[i] = None
         buffers[i] = None
+        self._game_opponents[i] = None
 
     def _advance_non_ppo(self, game: Game):
         """Advance the game while the current player is NOT the PPO training agent."""
