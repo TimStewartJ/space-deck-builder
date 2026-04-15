@@ -64,8 +64,12 @@ class RolloutBuffer:
                 - vals[step]
             )
             gae = delta + gamma * lam * (1 - self.dones[step]) * gae
-            advs.insert(0, gae)
-            returns.insert(0, gae + vals[step])
+            advs.append(gae)
+            returns.append(gae + vals[step])
+
+        # Built in reverse order; flip to chronological
+        advs.reverse()
+        returns.reverse()
 
         # log_probs, values, masks are already on target device (from model output).
         # states originate from encode_state() on CPU and need device placement.

@@ -171,7 +171,7 @@ class BatchRunner:
                 logits_batch, values_batch = self.model(states_batch)
 
             logits_batch = logits_batch.masked_fill(masks_batch == 0, float('-inf'))
-            dist = torch.distributions.Categorical(logits=logits_batch)
+            dist = torch.distributions.Categorical(logits=logits_batch, validate_args=False)
             act_indices = dist.sample()
             log_probs = dist.log_prob(act_indices)
 
@@ -372,7 +372,7 @@ class BatchRunner:
                 logits_batch, values_batch = self.model(states_batch)
 
             logits_batch = logits_batch.masked_fill(masks_batch == 0, float('-inf'))
-            dist = torch.distributions.Categorical(logits=logits_batch)
+            dist = torch.distributions.Categorical(logits=logits_batch, validate_args=False)
             act_indices = dist.sample()
 
             act_indices_cpu = act_indices.tolist()
