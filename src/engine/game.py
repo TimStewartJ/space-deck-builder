@@ -235,25 +235,10 @@ class Game:
                 self.stats.record_card_play(self.current_player.name)
                 if _log_enabled:
                     log(f"{self.current_player.name} played {card.name}", v=True)
-                # Auto-apply simple resource effects across all played cards.
-                # Skip scrap effects (must be explicitly chosen), OR effects
-                # (require a choice), and ally effects (surfaced as APPLY_EFFECT actions).
-                for pc in list(self.current_player.played_cards):
-                    for effect in pc.effects:
-                        if (
-                            effect.effect_type in (
-                                CardEffectType.COMBAT,
-                                CardEffectType.TRADE,
-                                CardEffectType.HEAL,
-                                CardEffectType.DRAW,
-                                CardEffectType.TARGET_DISCARD,
-                                CardEffectType.PARENT,
-                            )
-                            and not effect.is_or_effect
-                            and not effect.is_scrap_effect
-                            and not effect.faction_requirement
-                        ):
-                            effect.apply(self, self.current_player, pc)
+                # Apply the newly played card's own auto-applicable effects,
+                # plus any other cards in play with unapplied simple effects
+                # (e.g. bases whose effects reset each turn).
+                self._apply_auto_effects(card)
 
         elif action.type == ActionType.APPLY_EFFECT and action.card_effect is not None:
             # Resolve source card for scrap-from-play effects
@@ -331,6 +316,7 @@ class Game:
                             self.current_player.combat -= target_base.defense
                             player.bases.remove(target_base)
                             player.discard_pile.append(target_base)
+                            player.invalidate_faction_cache()
                             self.stats.record_base_destroy(self.current_player.name)
                             if _log_enabled:
                                 log(f"{self.current_player.name} destroyed {player.name}'s {target_base.name}", v=True)
@@ -344,6 +330,7 @@ class Game:
                                 self.current_player.combat -= base.defense
                                 player.bases.remove(base)
                                 player.discard_pile.append(base)
+                                player.invalidate_faction_cache()
                                 self.stats.record_base_destroy(self.current_player.name)
                                 if _log_enabled:
                                     log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
@@ -358,6 +345,7 @@ class Game:
                         self.stats.record_base_destroy(self.current_player.name)
                         player.bases.remove(target_base)
                         player.discard_pile.append(target_base)
+                        player.invalidate_faction_cache()
                         if _log_enabled:
                             log(f"{self.current_player.name} destroyed {player.name}'s {target_base.name}", v=True)
                         break
@@ -370,6 +358,7 @@ class Game:
                                 self.stats.record_base_destroy(self.current_player.name)
                                 player.bases.remove(base)
                                 player.discard_pile.append(base)
+                                player.invalidate_faction_cache()
                                 if _log_enabled:
                                     log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
                                 break
@@ -472,7 +461,37 @@ class Game:
                 log(f"{self.current_player.name} discarded {target_card.name} from {'opponent' if action.card_source == 'opponent' else 'hand'}", v=True)
 
         return False  # Turn continues
-    
+
+    # Set of effect types that can be auto-applied without player choice
+    _AUTO_APPLY_TYPES = frozenset((
+        CardEffectType.COMBAT,
+        CardEffectType.TRADE,
+        CardEffectType.HEAL,
+        CardEffectType.DRAW,
+        CardEffectType.TARGET_DISCARD,
+        CardEffectType.PARENT,
+    ))
+
+    def _apply_auto_effects(self, played_card):
+        """Apply simple auto-applicable effects on the played card and any
+        other cards in play with unapplied effects (e.g. bases whose effects
+        reset each turn).
+
+        Skips scrap effects (must be explicitly chosen), OR effects
+        (require a choice), and ally-gated effects (surfaced as APPLY_EFFECT).
+        The applied guard in Effect.apply() prevents double-application.
+        """
+        for pc in self.current_player.played_cards:
+            for effect in pc.effects:
+                if (
+                    effect.effect_type in self._AUTO_APPLY_TYPES
+                    and not effect.applied
+                    and not effect.is_or_effect
+                    and not effect.is_scrap_effect
+                    and not effect.faction_requirement
+                ):
+                    effect.apply(self, self.current_player, pc)
+
     def play(self):
         self.start_game()
         while not self.is_game_over:

@@ -178,6 +178,8 @@ class Effect:
             # Also remove from bases if it was a base/outpost
             if card in player.bases:
                 player.bases.remove(card)
+            # Invalidate faction cache since a card left play
+            player.invalidate_faction_cache()
             # If this is an explorer, add it back to the explorer pile
             if card.name == "Explorer":
                 game.explorer_pile.append(card)

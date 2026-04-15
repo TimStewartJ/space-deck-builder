@@ -22,6 +22,11 @@ class Player:
         # Support multiple sets of pending actions
         self.pending_action_sets: List[PendingActionSet] = []
         self.cards_drawn = 0  # Track the number of cards drawn
+        # Cached faction ally counts — updated incrementally on card play,
+        # reset on end_turn. Maps lowercase faction name → count.
+        self._faction_counts: dict[str, int] = {}
+        self._faction_counts_dirty: bool = True
+        self._faction_counts_card_count: int = 0  # track card count for staleness detection
         
     def draw_card(self):
         if not self.deck:
@@ -47,8 +52,48 @@ class Player:
             self.played_cards.append(card)
             if card.is_base():
                 self.bases.append(card)
+            # Update cached faction counts for the newly played card
+            self._update_faction_counts_for_card(card)
             return True
         return False
+
+    def _update_faction_counts_for_card(self, card):
+        """Incrementally update faction counts when a card enters play."""
+        if self._faction_counts_dirty:
+            self._rebuild_faction_counts()
+            return
+        factions = self._get_card_faction_keys(card)
+        for f in factions:
+            self._faction_counts[f] = self._faction_counts.get(f, 0) + 1
+
+    def _get_card_faction_keys(self, card) -> list[str]:
+        """Get the lowercase faction keys a card contributes to ally counts."""
+        if card.ally_factions is not None:
+            if "*" in card.ally_factions:
+                return ["*"]
+            return [f.lower() for f in card.ally_factions]
+        if not card.faction:
+            return []
+        if isinstance(card.faction, list):
+            return [f.lower() for f in card.faction]
+        return [card.faction.lower()]
+
+    def _rebuild_faction_counts(self):
+        """Full rebuild of faction counts from played_cards + bases."""
+        self._faction_counts.clear()
+        for card in set(self.played_cards) | set(self.bases):
+            for f in self._get_card_faction_keys(card):
+                self._faction_counts[f] = self._faction_counts.get(f, 0) + 1
+        self._faction_counts_dirty = False
+        self._faction_counts_card_count = len(self.played_cards) + len(self.bases)
+
+    def invalidate_faction_cache(self):
+        """Mark faction count cache as stale.
+
+        Call this when cards are removed from play (scrap, destroy)
+        outside the normal play_card/end_turn flow.
+        """
+        self._faction_counts_dirty = True
     
     def make_decision(self, game_state):
         """Use the player's agent to decide the next action"""
@@ -91,6 +136,9 @@ class Player:
             self.draw_card()
         
         self.reset_resources()
+        # Reset faction count cache for next turn
+        self._faction_counts.clear()
+        self._faction_counts_dirty = True
 
     def shuffle_deck(self):
         import random
@@ -120,23 +168,16 @@ class Player:
     def get_faction_ally_count(self, faction):
         """Count cards that count as allies for the specified faction.
 
-        Uses card.ally_factions if set (with "*" as wildcard for all factions),
-        otherwise falls back to the card's own faction field.
+        Uses cached faction counts when available (updated incrementally
+        on card play). Falls back to full rebuild if cache is dirty or
+        the card count has changed (e.g. direct list manipulation).
         """
+        current_count = len(self.played_cards) + len(self.bases)
+        if self._faction_counts_dirty or self._faction_counts_card_count != current_count:
+            self._rebuild_faction_counts()
         target = faction.lower()
-        count = 0
-        for card in set(self.played_cards) | set(self.bases):
-            # Check ally_factions override first
-            if card.ally_factions is not None:
-                if "*" in card.ally_factions or any(f.lower() == target for f in card.ally_factions):
-                    count += 1
-                continue
-            # Fall back to card's own faction
-            if not card.faction:
-                continue
-            if isinstance(card.faction, list):
-                if any(f.lower() == target for f in card.faction):
-                    count += 1
-            elif card.faction.lower() == target:
-                count += 1
+        count = self._faction_counts.get(target, 0)
+        # Wildcard cards ("*") count as allies for every faction
+        if target != "*":
+            count += self._faction_counts.get("*", 0)
         return count
