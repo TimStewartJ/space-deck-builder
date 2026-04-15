@@ -75,6 +75,29 @@ python -m src.ppo.ppo_trainer \
 
 Self-play trains against randomly selected past checkpoints. RandomAgent stays in the opponent pool to prevent catastrophic forgetting. Without `--self-play`, the agent trains only against RandomAgent.
 
+### Mixed-Opponent Training
+```bash
+# Equal mix of random and heuristic opponents:
+python -m src train --opponents random,heuristic --updates 50 --episodes 128
+
+# Weighted mix (60% random, 30% heuristic, 10% simple):
+python -m src train --opponents random:0.6,heuristic:0.3,simple:0.1
+
+# Mixed opponents with self-play (50% of games use PPO snapshots):
+python -m src train --opponents random,heuristic --self-play --self-play-ratio 0.5
+```
+
+**Available opponent types:** `random`, `heuristic`, `simple`
+
+| Parameter | Default | Notes |
+|-----------|---------|-------|
+| `--opponents` | `random` | Comma-separated opponent types with optional weights |
+| `--self-play-ratio` | `0.5` | Fraction of games using PPO snapshots vs fixed opponents (only when `--self-play` is active) |
+
+When `--self-play` is combined with `--opponents`, the self-play ratio controls the split: e.g., `--self-play-ratio 0.3` means 30% of training games use past PPO snapshots and 70% use the fixed opponent pool. Snapshots are capped at 10 to bound memory.
+
+**Evaluation** runs separately against each configured opponent type and reports per-type win rates.
+
 ### Loading a Pretrained Model
 ```bash
 # Load a specific checkpoint:

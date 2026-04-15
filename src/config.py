@@ -117,6 +117,8 @@ class RunConfig:
     eval_every: int = 5
     eval_games: int = 100
     self_play: bool = False
+    opponents: str = "random"
+    self_play_ratio: float = 0.5
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

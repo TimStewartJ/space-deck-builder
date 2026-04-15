@@ -35,6 +35,10 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                    help="Evaluate every N updates (always on last)")
     p.add_argument("--eval-games",  type=int,   default=100)
     p.add_argument("--self-play",   action="store_true")
+    p.add_argument("--opponents",   type=str, default="random",
+                   help="Opponent mix: 'random,heuristic' or 'random:0.6,heuristic:0.4'")
+    p.add_argument("--self-play-ratio", type=float, default=0.5,
+                   help="Fraction of games using PPO snapshots when self-play is active")
     # Devices
     p.add_argument("--main-device",       type=str, default="cuda",
                    help="Device for training updates")
@@ -110,6 +114,8 @@ def _run_train(args):
         episodes=args.episodes, updates=args.updates,
         eval_every=args.eval_every, eval_games=args.eval_games,
         self_play=args.self_play,
+        opponents=args.opponents,
+        self_play_ratio=args.self_play_ratio,
     )
     dev_cfg = DeviceConfig(
         device=args.device, main_device=args.main_device,

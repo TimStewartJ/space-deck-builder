@@ -1,19 +1,16 @@
-import argparse
 from datetime import datetime
 from pathlib import Path
 import torch
 import time
 import copy
-import random
 
 from src.config import DataConfig, PPOConfig, RunConfig, DeviceConfig, save_checkpoint
 from src.cards.card import Card
 from src.ai.agent import Agent
-from src.cards.loader import load_trade_deck_cards
 from src.ai.ppo_agent import PPOAgent
-from src.ai.random_agent import RandomAgent
 from src.encoding.action_encoder import get_action_space_size
 from src.ppo.batch_runner import BatchRunner
+from src.ppo.opponent_pool import OpponentPool
 from src.utils.logger import log, set_disabled, set_verbose
 
 
@@ -57,40 +54,32 @@ def train(
     except Exception:
         input_size = output_size = "Unknown"
     log(f"Model has {num_params / 1_000_000:.2f}M parameters. Actor input size: {input_size}, output size: {output_size}.")
-    opponent = RandomAgent("Rand")
 
-    # Keep a record of all past agent iterations
-    past_agents: list[Agent] = [opponent]  # Start with the random agent as the first opponent
+    # Set up the opponent pool from config
+    pool = OpponentPool(
+        opponent_spec=run_cfg.opponents,
+        self_play_ratio=run_cfg.self_play_ratio,
+    )
+    opp_types = pool.opponent_types
+    log(f"Opponent pool: {', '.join(opp_types)}"
+        f"{' + self-play' if run_cfg.self_play else ''}"
+        f" (self-play ratio: {run_cfg.self_play_ratio})" if run_cfg.self_play else "")
 
     total_time_spent_on_updates = 0.0
     total_time_spent_on_episodes = 0.0
     total_time_spent_on_eval = 0.0
     overall_start_time = time.perf_counter()
 
+    sim_device = str(agent.simulation_device)
+
     for upd in range(1, run_cfg.updates + 1):
-        # Select training opponent for this update
-        if run_cfg.self_play and len(past_agents) > 1:
-            opponent = random.choice(past_agents[:-1])
-        else:
-            opponent = RandomAgent("Rand")
-        log(f"Starting update {upd}/{run_cfg.updates} (training opponent: {opponent.name})")
-        # collect trajectories
+        make_opponent = pool.make_factory(card_names, device=sim_device)
+        log(f"Starting update {upd}/{run_cfg.updates} "
+            f"(opponents: {', '.join(opp_types)}"
+            f"{' + snapshots' if pool.has_snapshots else ''})")
+
+        # Collect trajectories
         start_time = time.time()
-
-        # Build opponent factory that creates a fresh opponent per game
-        if isinstance(opponent, PPOAgent):
-            opp_state_dict = opponent.model.cpu().state_dict()
-            opp_name = opponent.name
-            def make_opponent(sd=opp_state_dict, name=opp_name):
-                opp = PPOAgent(name, card_names, device=str(agent.simulation_device),
-                               main_device=str(agent.simulation_device),
-                               simulation_device=str(agent.simulation_device))
-                opp.model.load_state_dict(sd)
-                return opp
-        else:
-            def make_opponent():
-                return RandomAgent("Rand")
-
         action_dim = get_action_space_size(card_names)
         runner = BatchRunner(
             model=agent.model,
@@ -117,7 +106,7 @@ def train(
         if masks is not None:
             masks = masks.to(agent.device)
 
-        # perform PPO update
+        # Perform PPO update
         start_time = time.time()
         agent.update(states, actions, old_lp, returns, advs, masks)
         duration_update = time.time() - start_time
@@ -125,41 +114,26 @@ def train(
         log(f"Update {upd} complete in {duration_update:.2f}s. State size: {states.shape}")
         log(f"Loc Emb: {agent.model.loc_emb.weight.grad is not None and agent.model.loc_emb.weight.grad.norm().item()}")
 
-        # Save a deep copy of the agent after update
-        past_agent = copy.deepcopy(agent)
-        past_agent.clear_buffers()
-        past_agent.name = f"PPO_{upd}"
-        past_agents.append(past_agent)
+        # Add snapshot for self-play after each update
+        if run_cfg.self_play:
+            snapshot_sd = copy.deepcopy(agent.model).cpu().state_dict()
+            pool.add_snapshot(snapshot_sd, f"PPO_{upd}")
 
         # Evaluate performance (every N updates, and always on the last)
         is_last_update = upd == run_cfg.updates
+        wins = -1  # default: no eval this round
         if upd % run_cfg.eval_every == 0 or is_last_update:
-            log(f"Evaluating performance of {agent.name} vs {opponent.name}...")
             start_time = time.time()
-
-            eval_runner = BatchRunner(
-                model=agent.model,
-                card_names=card_names,
-                cards=cards,
-                action_dim=get_action_space_size(card_names),
-                device=agent.simulation_device,
-                opponent_factory=make_opponent,
-                num_concurrent=min(run_cfg.eval_games, run_cfg.num_concurrent),
-                ppo_config=ppo_cfg,
+            wins = _run_per_opponent_eval(
+                agent, pool, card_names, cards, run_cfg, ppo_cfg, upd,
             )
-            wins, losses, eval_steps = eval_runner.run_eval(run_cfg.eval_games)
             agent.clear_buffers()
-            win_rate = wins / run_cfg.eval_games
             duration_eval = time.time() - start_time
             total_time_spent_on_eval += duration_eval
-            avg_steps = eval_steps / run_cfg.eval_games if run_cfg.eval_games > 0 else 0
-            log(f"Evaluation after update {upd}: {wins}/{run_cfg.eval_games} wins, {losses} losses (win rate {win_rate:.2%}) in {duration_eval:.2f}s.")
-            log(f"Average steps per game: {avg_steps:.2f}, avg time per step {duration_eval/max(eval_steps,1):.6f} seconds.")
         else:
-            wins = -1  # no eval this round
             log(f"Skipping eval (next eval at update {upd + run_cfg.eval_every - upd % run_cfg.eval_every}).")
 
-        # save checkpoint per update
+        # Save checkpoint per update
         ts = datetime.now().strftime("%m%d_%H%M")
         Path(data_cfg.models_dir).mkdir(exist_ok=True)
         ckpt_path = f"{data_cfg.models_dir}/ppo_agent_{ts}_upd{upd}_wins{wins}.pth"
@@ -182,3 +156,48 @@ def train(
     avg_decision_time = agent.get_average_decision_time()
     log(f"Average PPOAgent decision time: {avg_decision_time:.6f} seconds per decision.")
     log(f"Overall time spent: {time.perf_counter() - overall_start_time:.2f}s")
+
+
+def _run_per_opponent_eval(
+    agent: PPOAgent,
+    pool: OpponentPool,
+    card_names: list[str],
+    cards: list,
+    run_cfg: RunConfig,
+    ppo_cfg: PPOConfig,
+    upd: int,
+) -> int:
+    """Run evaluation against each opponent type separately, log per-type results.
+
+    Returns the total wins across all opponent types.
+    """
+    opp_types = pool.opponent_types
+    action_dim = get_action_space_size(card_names)
+    games_per_type = max(1, run_cfg.eval_games // len(opp_types))
+    total_wins = 0
+    total_games = 0
+
+    log(f"Evaluating after update {upd} ({games_per_type} games × {len(opp_types)} opponent types)...")
+
+    for opp_type in opp_types:
+        factory = pool.make_factory_for_type(opp_type)
+        eval_runner = BatchRunner(
+            model=agent.model,
+            card_names=card_names,
+            cards=cards,
+            action_dim=action_dim,
+            device=agent.simulation_device,
+            opponent_factory=factory,
+            num_concurrent=min(games_per_type, run_cfg.num_concurrent),
+            ppo_config=ppo_cfg,
+        )
+        wins, losses, eval_steps = eval_runner.run_eval(games_per_type)
+        win_rate = wins / games_per_type
+        avg_steps = eval_steps / games_per_type if games_per_type > 0 else 0
+        log(f"  vs {opp_type}: {wins}/{games_per_type} wins ({win_rate:.0%}), avg {avg_steps:.0f} steps/game")
+        total_wins += wins
+        total_games += games_per_type
+
+    overall_rate = total_wins / total_games if total_games > 0 else 0
+    log(f"  Overall: {total_wins}/{total_games} wins ({overall_rate:.0%})")
+    return total_wins
