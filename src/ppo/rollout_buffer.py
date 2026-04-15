@@ -35,8 +35,17 @@ class RolloutBuffer:
     def __len__(self):
         return len(self.states)
 
-    def finish(self, gamma: float, lam: float, device: torch.device):
-        """Compute GAE returns and advantages. Returns (states, actions, old_lp, returns, advantages)."""
+    def finish(self, gamma: float, lam: float, device: torch.device,
+              normalize: bool = True):
+        """Compute GAE returns and advantages.
+
+        Args:
+            normalize: If True, normalize advantages to mean=0/std=1 for this
+                episode. Set to False when using global normalization after
+                merging multiple rollouts.
+
+        Returns (states, actions, old_lp, returns, advantages, masks).
+        """
         returns: list[torch.Tensor] = []
         advs: list[torch.Tensor] = []
         gae = 0.0
@@ -57,22 +66,32 @@ class RolloutBuffer:
         old_lp = torch.stack(self.log_probs).to(device)
         returns_t = torch.stack(returns).to(device)
         advs_t = torch.stack(advs).to(device)
-        advs_t = (advs_t - advs_t.mean()) / (advs_t.std(unbiased=False) + 1e-8)
+        if normalize:
+            advs_t = (advs_t - advs_t.mean()) / (advs_t.std(unbiased=False) + 1e-8)
 
         # Include action masks if they were stored
         masks_t = torch.stack(self.masks).to(device) if self.masks else None
         return states, actions, old_lp, returns_t, advs_t, masks_t
 
 
-def merge_rollouts(rollout_results: list[tuple]) -> tuple:
-    """Merge multiple (states, actions, old_lp, returns, advs, masks) tuples."""
+def merge_rollouts(rollout_results: list[tuple],
+                   normalize: bool = False) -> tuple:
+    """Merge multiple (states, actions, old_lp, returns, advs, masks) tuples.
+
+    Args:
+        normalize: If True, normalize the concatenated advantages globally
+            to mean=0/std=1 after merging.
+    """
     S, A, OL, R, Adv, M = zip(*rollout_results)
     has_masks = all(m is not None for m in M)
+    advs = torch.cat(Adv)
+    if normalize:
+        advs = (advs - advs.mean()) / (advs.std(unbiased=False) + 1e-8)
     return (
         torch.cat(S),
         torch.cat(A),
         torch.cat(OL),
         torch.cat(R),
-        torch.cat(Adv),
+        advs,
         torch.cat(M) if has_masks else None,
     )

@@ -179,12 +179,15 @@ class BatchRunner:
 
         S, A, OL, R, Adv, M = zip(*completed_rollouts)
         has_masks = all(m is not None for m in M)
+        advs = torch.cat(Adv).to(self.device)
+        if self.ppo_config.adv_norm == "global":
+            advs = (advs - advs.mean()) / (advs.std(unbiased=False) + 1e-8)
         return (
             torch.cat(S).to(self.device),
             torch.cat(A).to(self.device),
             torch.cat(OL).to(self.device),
             torch.cat(R).to(self.device),
-            torch.cat(Adv).to(self.device),
+            advs,
             torch.cat(M).to(self.device) if has_masks else None,
         )
 
@@ -212,6 +215,7 @@ class BatchRunner:
             gamma=self.ppo_config.gamma,
             lam=self.ppo_config.lam,
             device=self.device,
+            normalize=(self.ppo_config.adv_norm == "per_episode"),
         )
         completed_rollouts.append(rollout)
         games[i] = None
