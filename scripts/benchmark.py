@@ -2,6 +2,7 @@
 import time
 import random
 import torch
+from src.config import DataConfig, PPOConfig
 from src.cards.loader import load_trade_deck_cards
 from src.engine.game import Game
 from src.ai.ppo_agent import PPOAgent
@@ -84,8 +85,9 @@ def benchmark_parallel(num_episodes, card_names, cards, device, num_workers=4):
 
 def benchmark(num_episodes=64, device="cpu", mode="both", workers=4):
     set_disabled(True)
-    cards = load_trade_deck_cards("data/cards.csv", filter_sets=["Core Set"], log_cards=False)
-    card_names = list(dict.fromkeys(c.name for c in cards)) + ["Scout", "Viper", "Explorer"]
+    data_cfg = DataConfig()
+    cards = data_cfg.load_cards()
+    card_names = data_cfg.get_card_names(cards)
 
     if mode in ("sequential", "both"):
         total_steps, wins, elapsed = benchmark_sequential(num_episodes, card_names, cards, device)

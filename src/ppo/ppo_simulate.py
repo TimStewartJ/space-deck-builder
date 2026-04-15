@@ -5,6 +5,7 @@ import torch
 import pickle
 from datetime import datetime
 from pathlib import Path
+from src.config import DataConfig
 from src.cards.loader import load_trade_deck_cards
 from src.engine.game import Game
 from src.ai.ppo_agent import PPOAgent
@@ -28,10 +29,11 @@ def main():
     parser.add_argument("--device", type=str, default="cuda")
     args = parser.parse_args()
 
+    data_cfg = DataConfig(cards_path=args.cards_path)
+
     set_verbose(False)
-    cards = load_trade_deck_cards(args.cards_path, filter_sets=["Core Set"], log_cards=False)
-    names = [c.name for c in cards]
-    names = list(dict.fromkeys(names)) + ["Scout", "Viper", "Explorer"]
+    cards = data_cfg.load_cards()
+    names = data_cfg.get_card_names(cards)
 
     # Player 1: PPO agent
     model1_path = args.model1 or get_latest_model()

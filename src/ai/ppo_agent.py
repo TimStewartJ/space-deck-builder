@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from typing import TYPE_CHECKING, List, Optional
 import time
+from src.config import PPOConfig, ModelConfig, DeviceConfig, load_checkpoint
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.encoding.state_utils import unpack_state
 from src.ai.agent import Agent
@@ -19,29 +20,61 @@ class PPOAgent(Agent):
         self,
         name: str,
         card_names: List[str],
-        lr: float = 3e-4,
-        gamma: float = 0.99,
-        lam: float = 0.95,
-        clip_eps: float = 0.2,
-        epochs: int = 4,
-        batch_size: int = 64,
-        entropy_coef: float = 0.01,
+        lr: float | None = None,
+        gamma: float | None = None,
+        lam: float | None = None,
+        clip_eps: float | None = None,
+        epochs: int | None = None,
+        batch_size: int | None = None,
+        entropy_coef: float | None = None,
         device: str = "cuda",
         main_device: str = "cuda",
         simulation_device: str = "cpu",
         model_path: Optional[str] = None,
         log_debug: bool = False,
+        # Config-based construction (preferred)
+        ppo_config: PPOConfig | None = None,
+        model_config: ModelConfig | None = None,
+        device_config: DeviceConfig | None = None,
     ):
         super().__init__(name)
+
+        # Resolve configs: explicit kwargs override config object values
+        ppo = ppo_config or PPOConfig()
+        mdl = model_config or ModelConfig()
+        dev = device_config or DeviceConfig()
+
+        self.ppo_config = PPOConfig(
+            lr=lr if lr is not None else ppo.lr,
+            gamma=gamma if gamma is not None else ppo.gamma,
+            lam=lam if lam is not None else ppo.lam,
+            clip_eps=clip_eps if clip_eps is not None else ppo.clip_eps,
+            epochs=epochs if epochs is not None else ppo.epochs,
+            batch_size=batch_size if batch_size is not None else ppo.batch_size,
+            entropy_coef=entropy_coef if entropy_coef is not None else ppo.entropy_coef,
+            grad_clip=ppo.grad_clip,
+            critic_loss_coef=ppo.critic_loss_coef,
+        )
+        self.model_config = mdl
+
+        # Convenience aliases for backward compat with internal usage
+        self.gamma = self.ppo_config.gamma
+        self.lam = self.ppo_config.lam
+        self.clip_eps = self.ppo_config.clip_eps
+        self.epochs = self.ppo_config.epochs
+        self.batch_size = self.ppo_config.batch_size
+        self.entropy_coef = self.ppo_config.entropy_coef
+
         self.device = torch.device(device if torch.cuda.is_available() else "cpu")
         self.main_device = torch.device(main_device if torch.cuda.is_available() else "cpu")
         self.simulation_device = torch.device(simulation_device if torch.cuda.is_available() else "cpu")
-        self.gamma = gamma
-        self.lam = lam
-        self.clip_eps = clip_eps
-        self.epochs = epochs
-        self.batch_size = batch_size
-        self.entropy_coef = entropy_coef
+        # Apply DeviceConfig if no explicit kwargs were given (detect by checking
+        # if the caller passed non-default values — we use the config values)
+        if device_config is not None:
+            self.device = torch.device(dev.device if torch.cuda.is_available() else "cpu")
+            self.main_device = torch.device(dev.main_device if torch.cuda.is_available() else "cpu")
+            self.simulation_device = torch.device(dev.simulation_device if torch.cuda.is_available() else "cpu")
+
         self.cards = card_names
 
         self.state_dim = get_state_size(card_names)
@@ -51,11 +84,15 @@ class PPOAgent(Agent):
             log(f"State size: {self.state_dim}, Action size: {self.action_dim}")
             log(f"Using device: {self.device}")
 
-        self.model = PPOActorCritic(self.state_dim, self.action_dim, len(card_names)).to(self.device)
+        self.model = PPOActorCritic(
+            self.state_dim, self.action_dim, len(card_names),
+            model_config=self.model_config
+        ).to(self.device)
         if model_path:
             log(f"Loading PPO model from {model_path}")
-            self.model.load_state_dict(torch.load(model_path, map_location=self.device))
-        self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+            ckpt = load_checkpoint(model_path, map_location=self.device)
+            self.model.load_state_dict(ckpt["model_state_dict"])
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.ppo_config.lr)
 
         # rollout buffers
         self.states = []
@@ -214,11 +251,11 @@ class PPOAgent(Agent):
                 actor_loss = -torch.min(s1, s2).mean()  # PPO actor loss (policy update)
                 critic_loss = nn.MSELoss()(vals, R)     # Critic loss (value function update)
                 entropy = dist.entropy().mean()         # entropy bonus term
-                loss = actor_loss + 0.5*critic_loss - self.entropy_coef * entropy  # include entropy bonus
+                loss = actor_loss + self.ppo_config.critic_loss_coef * critic_loss - self.entropy_coef * entropy
 
                 self.optimizer.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=0.5)
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.ppo_config.grad_clip)
                 self.optimizer.step()
 
                 # accumulate for averages

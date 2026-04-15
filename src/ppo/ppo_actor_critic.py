@@ -1,16 +1,35 @@
 import torch
 import torch.nn as nn
 
+from src.config import ModelConfig
 from src.encoding.state_utils import unpack_state
 from src.utils.logger import log
+
+
+def _build_mlp(input_dim: int, hidden_sizes: list[int], output_dim: int) -> nn.Sequential:
+    """Build a multi-layer perceptron from a list of hidden layer sizes."""
+    layers: list[nn.Module] = []
+    prev = input_dim
+    for h in hidden_sizes:
+        layers.append(nn.Linear(prev, h))
+        layers.append(nn.ReLU())
+        prev = h
+    layers.append(nn.Linear(prev, output_dim))
+    return nn.Sequential(*layers)
+
 
 class PPOActorCritic(nn.Module):
     def __init__(self,
                  state_dim: int,
                  action_dim: int,
                  num_cards: int,
-                 card_emb_dim: int = 4):
+                 card_emb_dim: int | None = None,
+                 model_config: ModelConfig | None = None):
         super().__init__()
+        cfg = model_config or ModelConfig()
+        # Legacy kwarg takes precedence for backward compat
+        emb_dim = card_emb_dim if card_emb_dim is not None else cfg.card_emb_dim
+
         self.num_cards = num_cards
         self.action_dim = action_dim
 
@@ -20,32 +39,14 @@ class PPOActorCritic(nn.Module):
             'train_hand','train_disc','train_deck','train_bases',
             'opp_unseen', 'opp_disc', 'opp_bases'
         ]
-        # per-card location embeddings: num_locations * num_cards vectors
-        # self.loc_emb = nn.Embedding(len(self.locations) * self.num_cards, card_emb_dim)
-        self.loc_emb = nn.Embedding(self.num_cards, card_emb_dim)
+        self.loc_emb = nn.Embedding(self.num_cards, emb_dim)
 
         # numeric: 4 flags + 5 training resources + 6 opponent resources
         self.numeric_dim = 4 + 5 + 6
-        combined_dim = self.numeric_dim + len(self.locations)*card_emb_dim*num_cards
+        combined_dim = self.numeric_dim + len(self.locations) * emb_dim * num_cards
 
-        self.actor = nn.Sequential(
-            nn.Linear(combined_dim, 1024),
-            nn.ReLU(),
-            nn.Linear(1024, 1024),
-            nn.ReLU(),
-            nn.Linear(1024, 512),
-            nn.ReLU(),
-            nn.Linear(512, action_dim),
-        )
-        self.critic = nn.Sequential(
-            nn.Linear(combined_dim, 1024),
-            nn.ReLU(),
-            nn.Linear(1024, 1024),
-            nn.ReLU(),
-            nn.Linear(1024, 512),
-            nn.ReLU(),
-            nn.Linear(512, 1),
-        )
+        self.actor = _build_mlp(combined_dim, cfg.actor_hidden_sizes, action_dim)
+        self.critic = _build_mlp(combined_dim, cfg.critic_hidden_sizes, 1)
 
     def forward(self, x: torch.Tensor):
         # x: [B, state_dim] or [state_dim] if single

@@ -6,6 +6,7 @@ import time
 import copy
 import random
 
+from src.config import DataConfig, PPOConfig, RunConfig, DeviceConfig, save_checkpoint
 from src.cards.card import Card
 from src.ai.agent import Agent
 from src.cards.loader import load_trade_deck_cards
@@ -38,11 +39,28 @@ def main():
     parser.add_argument("--eval-games", type=int, default=100, help="Number of evaluation games per eval round")
     args = parser.parse_args()
 
+    # Build config objects from CLI args
+    data_cfg = DataConfig(cards_path=args.cards_path)
+    ppo_cfg = PPOConfig(
+        lr=args.lr, gamma=args.gamma, lam=args.lam,
+        clip_eps=args.clip_eps, epochs=args.epochs,
+        batch_size=args.batch_size, entropy_coef=args.entropy,
+    )
+    run_cfg = RunConfig(
+        episodes=args.episodes, updates=args.updates,
+        eval_every=args.eval_every, eval_games=args.eval_games,
+        self_play=args.self_play,
+    )
+    dev_cfg = DeviceConfig(
+        device=args.device, main_device=args.main_device,
+        simulation_device=args.simulation_device,
+    )
+
     # Determine model path if --load-latest-model is set and --model-path is not provided
     model_path = args.model_path
     if args.load_latest_model and not model_path:
         import glob, os
-        model_files = glob.glob(os.path.join("models", "ppo_agent_*.pth"))
+        model_files = glob.glob(os.path.join(data_cfg.models_dir, "ppo_agent_*.pth"))
         if model_files:
             model_files.sort(key=os.path.getmtime, reverse=True)
             model_path = model_files[0]
@@ -51,21 +69,12 @@ def main():
             log("No PPO model found in models directory to auto-load.")
 
     set_verbose(False)
-    cards = load_trade_deck_cards(args.cards_path, filter_sets=["Core Set"], log_cards=False)
-    # Create list of unique card names
-    card_names = [c.name for c in cards]
-    card_names = list(dict.fromkeys(card_names)) + ["Scout","Viper","Explorer"]
+    cards = data_cfg.load_cards()
+    card_names = data_cfg.get_card_names(cards)
 
     agent    = PPOAgent("PPO", card_names,
-                       lr=args.lr,
-                       gamma=args.gamma,
-                       lam=args.lam,
-                       clip_eps=args.clip_eps,
-                       epochs=args.epochs,
-                       batch_size=args.batch_size,
-                       entropy_coef=args.entropy,
-                       main_device=args.main_device,
-                       simulation_device=args.simulation_device,
+                       ppo_config=ppo_cfg,
+                       device_config=dev_cfg,
                        model_path=model_path)
     # Log the parameter size of the model
     num_params = sum(p.numel() for p in agent.model.parameters() if p.requires_grad)
@@ -90,13 +99,13 @@ def main():
     total_time_spent_on_eval = 0.0
     overall_start_time = time.perf_counter()
 
-    for upd in range(1, args.updates + 1):
+    for upd in range(1, run_cfg.updates + 1):
         # Select training opponent for this update
-        if args.self_play and len(past_agents) > 1:
+        if run_cfg.self_play and len(past_agents) > 1:
             opponent = random.choice(past_agents[:-1])
         else:
             opponent = RandomAgent("Rand")
-        log(f"Starting update {upd}/{args.updates} (training opponent: {opponent.name})")
+        log(f"Starting update {upd}/{run_cfg.updates} (training opponent: {opponent.name})")
         # collect trajectories
         start_time = time.time()
 
@@ -122,12 +131,13 @@ def main():
             action_dim=action_dim,
             device=agent.simulation_device,
             opponent_factory=make_opponent,
-            num_concurrent=min(args.episodes, 64),
+            num_concurrent=min(run_cfg.episodes, run_cfg.num_concurrent),
+            ppo_config=ppo_cfg,
         )
-        states, actions, old_lp, returns, advs, masks = runner.run_episodes(args.episodes)
+        states, actions, old_lp, returns, advs, masks = runner.run_episodes(run_cfg.episodes)
         duration_episodes = time.time() - start_time
         total_time_spent_on_episodes += duration_episodes
-        log(f"Finished {args.episodes} episodes in {duration_episodes:.2f}s.")
+        log(f"Finished {run_cfg.episodes} episodes in {duration_episodes:.2f}s.")
 
         # Move to main device for training
         agent.device = agent.main_device
@@ -154,8 +164,8 @@ def main():
         past_agents.append(past_agent)
 
         # Evaluate performance (every N updates, and always on the last)
-        is_last_update = upd == args.updates
-        if upd % args.eval_every == 0 or is_last_update:
+        is_last_update = upd == run_cfg.updates
+        if upd % run_cfg.eval_every == 0 or is_last_update:
             log(f"Evaluating performance of {agent.name} vs {opponent.name}...")
             start_time = time.time()
 
@@ -166,29 +176,38 @@ def main():
                 action_dim=get_action_space_size(card_names),
                 device=agent.simulation_device,
                 opponent_factory=make_opponent,
-                num_concurrent=min(args.eval_games, 64),
+                num_concurrent=min(run_cfg.eval_games, run_cfg.num_concurrent),
+                ppo_config=ppo_cfg,
             )
-            wins, losses, eval_steps = eval_runner.run_eval(args.eval_games)
+            wins, losses, eval_steps = eval_runner.run_eval(run_cfg.eval_games)
             agent.clear_buffers()
-            win_rate = wins / args.eval_games
+            win_rate = wins / run_cfg.eval_games
             duration_eval = time.time() - start_time
             total_time_spent_on_eval += duration_eval
-            avg_steps = eval_steps / args.eval_games if args.eval_games > 0 else 0
-            log(f"Evaluation after update {upd}: {wins}/{args.eval_games} wins, {losses} losses (win rate {win_rate:.2%}) in {duration_eval:.2f}s.")
+            avg_steps = eval_steps / run_cfg.eval_games if run_cfg.eval_games > 0 else 0
+            log(f"Evaluation after update {upd}: {wins}/{run_cfg.eval_games} wins, {losses} losses (win rate {win_rate:.2%}) in {duration_eval:.2f}s.")
             log(f"Average steps per game: {avg_steps:.2f}, avg time per step {duration_eval/max(eval_steps,1):.6f} seconds.")
         else:
             wins = -1  # no eval this round
-            log(f"Skipping eval (next eval at update {upd + args.eval_every - upd % args.eval_every}).")
+            log(f"Skipping eval (next eval at update {upd + run_cfg.eval_every - upd % run_cfg.eval_every}).")
 
         # save checkpoint per update
         ts = datetime.now().strftime("%m%d_%H%M")
-        Path("models").mkdir(exist_ok=True)
-        torch.save(agent.model.state_dict(),
-                   f"models/ppo_agent_{ts}_upd{upd}_wins{wins}.pth")
+        Path(data_cfg.models_dir).mkdir(exist_ok=True)
+        ckpt_path = f"{data_cfg.models_dir}/ppo_agent_{ts}_upd{upd}_wins{wins}.pth"
+        save_checkpoint(
+            ckpt_path,
+            agent.model.state_dict(),
+            ppo_config=ppo_cfg,
+            model_config=agent.model_config,
+            run_config=run_cfg,
+            device_config=dev_cfg,
+            update=upd,
+        )
         log(f"Checkpoint saved.")
 
-    log(f"Total time spent on episodes: {total_time_spent_on_episodes:.2f}s\n\tAverage per update: {total_time_spent_on_episodes / args.updates:.2f}s")
-    log(f"Total time spent on PPO updates: {total_time_spent_on_updates:.2f}s\n\tAverage per update: {total_time_spent_on_updates / args.updates:.2f}s")
+    log(f"Total time spent on episodes: {total_time_spent_on_episodes:.2f}s\n\tAverage per update: {total_time_spent_on_episodes / run_cfg.updates:.2f}s")
+    log(f"Total time spent on PPO updates: {total_time_spent_on_updates:.2f}s\n\tAverage per update: {total_time_spent_on_updates / run_cfg.updates:.2f}s")
     log(f"Total time spent on evaluation: {total_time_spent_on_eval:.2f}s\n\tAverage per update: {total_time_spent_on_eval / args.updates:.2f}s")
     log("All updates finished.")
     # Log average decision time per decision

@@ -3,6 +3,7 @@ import random
 import torch
 from typing import Callable, Optional
 from concurrent.futures import ProcessPoolExecutor
+from src.config import PPOConfig
 from src.engine.game import Game
 from src.engine.actions import ActionType, get_available_actions
 from src.ai.agent import Agent
@@ -37,6 +38,7 @@ class BatchRunner:
         device: torch.device,
         opponent_factory: Callable[[], Agent] = lambda: RandomAgent("Rand"),
         num_concurrent: int = 64,
+        ppo_config: PPOConfig | None = None,
     ):
         self.model = model
         self.card_names = card_names
@@ -45,6 +47,7 @@ class BatchRunner:
         self.device = device
         self.opponent_factory = opponent_factory
         self.num_concurrent = num_concurrent
+        self.ppo_config = ppo_config or PPOConfig()
         self.training_agent_name = "PPO"
         # Pre-compute O(1) card name → index lookup
         from src.encoding.state_encoder import build_card_index_map
@@ -204,7 +207,11 @@ class BatchRunner:
         winner = games[i].get_winner()
         reward = 1.0 if winner == self.training_agent_name else -1.0
         buffers[i].fill_last_reward(reward)
-        rollout = buffers[i].finish(gamma=0.995, lam=0.99, device=self.device)
+        rollout = buffers[i].finish(
+            gamma=self.ppo_config.gamma,
+            lam=self.ppo_config.lam,
+            device=self.device,
+        )
         completed_rollouts.append(rollout)
         games[i] = None
         buffers[i] = None
