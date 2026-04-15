@@ -1,5 +1,6 @@
 """BatchRunner: runs N concurrent games with batched GPU inference."""
 import random
+import numpy as np
 import torch
 from typing import Callable, Optional
 from concurrent.futures import ProcessPoolExecutor
@@ -50,8 +51,11 @@ class BatchRunner:
         self.ppo_config = ppo_config or PPOConfig()
         self.training_agent_name = "PPO"
         # Pre-compute O(1) card name → index lookup
-        from src.encoding.state_encoder import build_card_index_map
+        from src.encoding.state_encoder import build_card_index_map, get_state_size
         self.card_index_map = build_card_index_map(card_names)
+        # Pre-allocate reusable numpy buffer for state encoding
+        self._state_size = get_state_size(card_names)
+        self._state_buf = np.zeros(self._state_size, dtype=np.float32)
 
     def run_episodes(self, num_episodes: int) -> tuple:
         """Run num_episodes games and return aggregated rollout data.
@@ -124,7 +128,8 @@ class BatchRunner:
                 state = encode_state(
                     games[i], is_current_player_training=True,
                     cards=self.card_names, available_actions=available,
-                    card_index_map=self.card_index_map
+                    card_index_map=self.card_index_map,
+                    state_buf=self._state_buf,
                 )
 
                 pending_indices.append(i)
@@ -154,12 +159,14 @@ class BatchRunner:
             log_probs = dist.log_prob(act_indices)
 
             # Step 5: Distribute actions and apply
+            # Move action indices to CPU in bulk (one sync) instead of per-element .item()
+            act_indices_cpu = act_indices.tolist()
             for j, i in enumerate(pending_indices):
-                act_idx = act_indices[j].item()
+                act_idx = act_indices_cpu[j]
                 encoded = pending_encoded[j]
                 available = pending_available[j]
 
-                action = available[encoded.index(int(act_idx))]
+                action = available[encoded.index(act_idx)]
 
                 buffers[i].add(
                     pending_states[j],
@@ -194,7 +201,7 @@ class BatchRunner:
     def _start_game(self):
         """Initialize a new game."""
         opponent = self.opponent_factory()
-        game = Game(self.cards)
+        game = Game(self.cards, card_index_map=self.card_index_map)
         game.add_player(self.training_agent_name, _DummyAgent(self.training_agent_name))
         game.add_player(opponent.name, opponent)
         game.start_game()
@@ -311,7 +318,8 @@ class BatchRunner:
                 state = encode_state(
                     games[i], is_current_player_training=True,
                     cards=self.card_names, available_actions=available,
-                    card_index_map=self.card_index_map
+                    card_index_map=self.card_index_map,
+                    state_buf=self._state_buf,
                 )
 
                 pending_indices.append(i)
@@ -338,9 +346,10 @@ class BatchRunner:
             dist = torch.distributions.Categorical(logits=logits_batch)
             act_indices = dist.sample()
 
+            act_indices_cpu = act_indices.tolist()
             for j, i in enumerate(pending_indices):
-                act_idx = act_indices[j].item()
-                action = pending_available[j][pending_encoded[j].index(int(act_idx))]
+                act_idx = act_indices_cpu[j]
+                action = pending_available[j][pending_encoded[j].index(act_idx)]
                 games[i].apply_decision(action)
                 step_counts[i] += 1
 
@@ -349,7 +358,7 @@ class BatchRunner:
     def _start_eval_game(self):
         """Initialize a new game for evaluation (no rollout buffer needed)."""
         opponent = self.opponent_factory()
-        game = Game(self.cards)
+        game = Game(self.cards, card_index_map=self.card_index_map)
         game.add_player(self.training_agent_name, _DummyAgent(self.training_agent_name))
         game.add_player(opponent.name, opponent)
         game.start_game()
