@@ -17,44 +17,6 @@ from src.nn.action_encoder import get_action_space_size
 from src.ppo.batch_runner import BatchRunner
 from src.utils.logger import log, set_disabled, set_verbose
 
-def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card]):
-    game = Game(cards)
-    game.add_player(agent.name, agent)
-    game.add_player(opponent.name, opponent)
-    game.start_game()
-    done = False
-    while not done:
-        current_player = game.current_player
-        # Determine if the current player is the training agent
-        is_agent = current_player.name == agent.name
-        done = game.step()
-        reward = 0.0
-        if done:
-            # agent.create_dummy_state(game)
-
-            if game.get_winner() == agent.name:
-                reward = 1.0
-            else:
-                reward = -1.0
-            agent.fill_last_reward(reward)
-    return agent.finish_batch()
-
-def run_episode_worker(state_dict, agent_kwargs, opponent_type, opponent_state_dict, opponent_kwargs, cards, seed):
-    random.seed(seed)
-    torch.manual_seed(seed)
-    set_disabled(True)
-
-    # Reconstruct agent with same weights
-    agent = PPOAgent("PPO", **agent_kwargs)
-    agent.model.load_state_dict(state_dict)
-    # Reconstruct opponent based on type
-    if opponent_type == "ppo":
-        opponent = PPOAgent("Opp", **opponent_kwargs)
-        opponent.model.load_state_dict(opponent_state_dict)
-    else:
-        opponent = RandomAgent("Rand")
-    return run_episode(agent, opponent, cards)
-
 def run_eval_game_worker(agent_state_dict, agent_kwargs, opponent_type, opponent_state_dict, opponent_kwargs, cards, seed):
     random.seed(seed)
     set_disabled(True)
