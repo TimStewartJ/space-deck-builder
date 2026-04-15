@@ -23,6 +23,7 @@ class InferenceRequest:
     request_id: int
     states: np.ndarray      # [batch, state_size] float32
     masks: np.ndarray        # [batch, action_dim] uint8 (1=valid, 0=invalid)
+    model_id: str = "training"  # which model to use ("training" or snapshot name)
 
 
 @dataclass
@@ -79,9 +80,11 @@ class InferenceServer:
         device: torch.device,
         num_workers: int,
         ctx: mp.context.BaseContext | None = None,
+        opponent_snapshots: list[tuple[str, dict]] | None = None,
     ):
         self.model = model
         self.device = device
+        self._opponent_snapshots = opponent_snapshots or []
         _mp = ctx or mp
         self.request_queue: mp.Queue = _mp.Queue()
         self.response_queues: list[mp.Queue] = [_mp.Queue() for _ in range(num_workers)]
@@ -108,9 +111,23 @@ class InferenceServer:
         return self._requests_served
 
     def _serve_loop(self):
-        """Main inference loop — drains queue and batches across workers."""
+        """Main inference loop — drains queue and batches across workers.
+
+        Supports multiple models: the training model and optional opponent
+        snapshots. Requests are grouped by model_id for batched forward passes.
+        """
         self.model.to(self.device)
         self.model.eval()
+
+        # Build model lookup: "training" → main model, snapshot names → clones
+        models: dict[str, PPOActorCritic] = {"training": self.model}
+        for snap_name, snap_sd in self._opponent_snapshots:
+            import copy
+            opp_model = copy.deepcopy(self.model)
+            opp_model.load_state_dict(snap_sd)
+            opp_model.to(self.device)
+            opp_model.eval()
+            models[snap_name] = opp_model
 
         while not self._shutdown.is_set():
             # Block for the first request
@@ -133,46 +150,50 @@ class InferenceServer:
                 except queue.Empty:
                     break
 
-            # Concatenate all requests into one batch for a single forward pass
-            all_states = np.concatenate([r.states for r in requests], axis=0)
-            all_masks = np.concatenate([r.masks for r in requests], axis=0)
-
-            with torch.no_grad():
-                states_t = torch.from_numpy(all_states).to(self.device)
-                # Convert uint8 masks to float32 on GPU
-                masks_t = torch.from_numpy(all_masks.astype(np.float32)).to(self.device)
-                logits, values = self.model(states_t)
-
-                logits = logits.masked_fill(masks_t == 0, float('-inf'))
-
-                # Safety: ensure every row has at least one valid action
-                valid_counts = (masks_t > 0).sum(dim=-1)
-                bad_rows = (valid_counts == 0).nonzero(as_tuple=True)[0]
-                if len(bad_rows) > 0:
-                    logits[bad_rows, END_TURN_INDEX] = 0.0
-
-                dist = torch.distributions.Categorical(
-                    logits=logits, validate_args=False
-                )
-                actions = dist.sample()
-                log_probs = dist.log_prob(actions)
-
-            # Split results back per request and send responses
-            # Model forward returns values with shape [B] (already squeezed).
-            # Use reshape(-1) to ensure 1D even when batch=1.
-            actions_np = actions.cpu().numpy().reshape(-1)
-            log_probs_np = log_probs.cpu().numpy().reshape(-1)
-            values_np = values.cpu().numpy().reshape(-1)
-
-            offset = 0
+            # Group requests by model_id for batched processing
+            by_model: dict[str, list] = {}
             for req in requests:
-                batch_size = req.states.shape[0]
-                resp = InferenceResponse(
-                    request_id=req.request_id,
-                    action_indices=actions_np[offset:offset + batch_size],
-                    log_probs=log_probs_np[offset:offset + batch_size],
-                    values=values_np[offset:offset + batch_size],
-                )
-                self.response_queues[req.worker_id].put(resp)
-                offset += batch_size
-                self._requests_served += 1
+                by_model.setdefault(req.model_id, []).append(req)
+
+            for model_id, model_reqs in by_model.items():
+                model = models.get(model_id, self.model)
+
+                all_states = np.concatenate([r.states for r in model_reqs], axis=0)
+                all_masks = np.concatenate([r.masks for r in model_reqs], axis=0)
+
+                with torch.no_grad():
+                    states_t = torch.from_numpy(all_states).to(self.device)
+                    masks_t = torch.from_numpy(all_masks.astype(np.float32)).to(self.device)
+                    logits, values = model(states_t)
+
+                    logits = logits.masked_fill(masks_t == 0, float('-inf'))
+
+                    # Safety: ensure every row has at least one valid action
+                    valid_counts = (masks_t > 0).sum(dim=-1)
+                    bad_rows = (valid_counts == 0).nonzero(as_tuple=True)[0]
+                    if len(bad_rows) > 0:
+                        logits[bad_rows, END_TURN_INDEX] = 0.0
+
+                    dist = torch.distributions.Categorical(
+                        logits=logits, validate_args=False
+                    )
+                    actions = dist.sample()
+                    log_probs = dist.log_prob(actions)
+
+                # Split results back per request and send responses
+                actions_np = actions.cpu().numpy().reshape(-1)
+                log_probs_np = log_probs.cpu().numpy().reshape(-1)
+                values_np = values.cpu().numpy().reshape(-1)
+
+                offset = 0
+                for req in model_reqs:
+                    batch_size = req.states.shape[0]
+                    resp = InferenceResponse(
+                        request_id=req.request_id,
+                        action_indices=actions_np[offset:offset + batch_size],
+                        log_probs=log_probs_np[offset:offset + batch_size],
+                        values=values_np[offset:offset + batch_size],
+                    )
+                    self.response_queues[req.worker_id].put(resp)
+                    offset += batch_size
+                    self._requests_served += 1

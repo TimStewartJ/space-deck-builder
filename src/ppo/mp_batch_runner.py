@@ -56,6 +56,9 @@ class MultiProcessBatchRunner:
         num_workers: int = 4,
         ppo_config: PPOConfig | None = None,
         registry: CardRegistry | None = None,
+        snapshot_state_dicts: list[tuple[str, dict]] | None = None,
+        self_play_ratio: float = 0.5,
+        pfsp_weights: list[float] | None = None,
     ):
         self.model = model
         self.card_names = card_names
@@ -68,6 +71,9 @@ class MultiProcessBatchRunner:
         self.num_workers = num_workers
         self.ppo_config = ppo_config or PPOConfig()
         self.training_agent_name = "PPO"
+        self.snapshot_state_dicts = snapshot_state_dicts
+        self.self_play_ratio = self_play_ratio
+        self.pfsp_weights = pfsp_weights
 
         if registry is not None:
             self.card_index_map = registry.card_index_map
@@ -102,11 +108,18 @@ class MultiProcessBatchRunner:
         episodes_per_worker = _divide_work(num_episodes, actual_workers)
         concurrent_per_worker = _divide_work(self.num_concurrent, actual_workers)
 
-        # Start inference server
+        # Start inference server with opponent snapshots loaded on GPU
         server = InferenceServer(
             self.model, self.device, actual_workers, ctx=self._mp_ctx,
+            opponent_snapshots=self.snapshot_state_dicts,
         )
         server.start()
+
+        # Extract snapshot names for workers (state_dicts stay on server)
+        snapshot_names = (
+            [name for name, _ in self.snapshot_state_dicts]
+            if self.snapshot_state_dicts else None
+        )
 
         # Spawn worker processes
         result_queue = self._mp_ctx.Queue()
@@ -116,6 +129,7 @@ class MultiProcessBatchRunner:
         for i in range(actual_workers):
             if episodes_per_worker[i] == 0:
                 continue
+
             p = self._mp_ctx.Process(
                 target=sim_worker_main,
                 args=(
@@ -134,6 +148,11 @@ class MultiProcessBatchRunner:
                     server.response_queues[i],
                     result_queue,
                 ),
+                kwargs={
+                    "snapshot_names": snapshot_names,
+                    "self_play_ratio": self.self_play_ratio,
+                    "pfsp_weights": self.pfsp_weights,
+                },
             )
             p.start()
             processes.append(p)

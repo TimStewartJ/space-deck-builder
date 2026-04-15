@@ -47,6 +47,75 @@ class _DummyAgent(Agent):
         raise RuntimeError("DummyAgent.make_decision should never be called")
 
 
+class _ServerPPOAgent(Agent):
+    """PPO opponent that routes inference through the InferenceServer on GPU.
+
+    Instead of running a local model on CPU, this agent encodes the game
+    state and sends it to the central InferenceServer for GPU inference.
+    Used for self-play opponents in multiprocess training.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        model_id: str,
+        card_names: list[str],
+        card_index_map: dict[str, int],
+        action_dim: int,
+        worker_id: int,
+        request_queue,
+        response_queue,
+    ):
+        super().__init__(name)
+        self.model_id = model_id
+        self.card_names = card_names
+        self.card_index_map = card_index_map
+        self.action_dim = action_dim
+        self.worker_id = worker_id
+        self.request_queue = request_queue
+        self.response_queue = response_queue
+        self._request_counter = 0
+        self._state_buf = np.zeros(get_state_size(card_names), dtype=np.float32)
+        self._mask_buf = np.zeros(action_dim, dtype=bool)
+
+    def make_decision(self, game_state):
+        """Encode state, send to GPU server, return chosen action."""
+        player = game_state.current_player
+
+        ctx = build_action_context(
+            game_state, player, self.card_index_map,
+            self.action_dim, mask_buf=self._mask_buf,
+        )
+        encode_state(
+            game_state, is_current_player_training=True,
+            cards=self.card_names,
+            card_index_map=self.card_index_map,
+            state_buf=self._state_buf,
+            can_buy=ctx.can_buy,
+            has_actions=ctx.has_meaningful,
+        )
+
+        # Build single-element batch
+        states_np = self._state_buf.copy().reshape(1, -1)
+        masks_np = ctx.mask.astype(np.uint8).reshape(1, -1)
+        if ctx.has_meaningful:
+            masks_np[0, END_TURN_INDEX] = 0
+
+        req_id = self._request_counter
+        self._request_counter += 1
+        self.request_queue.put(InferenceRequest(
+            worker_id=self.worker_id,
+            request_id=req_id,
+            states=states_np,
+            masks=masks_np,
+            model_id=self.model_id,
+        ))
+
+        response = self.response_queue.get()
+        act_idx = int(response.action_indices[0])
+        return ctx.resolvers[act_idx]
+
+
 def _parse_opponent_spec(spec: str) -> list[tuple[str, float]]:
     """Parse opponent spec into (name, weight) pairs."""
     entries = []
@@ -67,13 +136,47 @@ def _parse_opponent_spec(spec: str) -> list[tuple[str, float]]:
     return [(n, w / total) for n, w in entries] if total > 0 else entries
 
 
-def _build_opponent_factory(opponent_spec: str):
-    """Build an opponent factory function from a serializable spec string."""
+def _build_opponent_factory(
+    opponent_spec: str,
+    snapshot_names: list[str] | None = None,
+    self_play_ratio: float = 0.5,
+    pfsp_weights: list[float] | None = None,
+    card_names: list[str] | None = None,
+    card_index_map: dict[str, int] | None = None,
+    action_dim: int = 0,
+    worker_id: int = 0,
+    request_queue=None,
+    response_queue=None,
+    registry=None,
+):
+    """Build an opponent factory from a spec string and optional snapshot config.
+
+    When snapshot_names are provided, self_play_ratio fraction of calls return
+    a _ServerPPOAgent that routes inference through the InferenceServer on GPU.
+    Only snapshot names are needed — the actual state_dicts live on the server.
+    """
     entries = _parse_opponent_spec(opponent_spec)
     names = [n for n, _ in entries]
     weights = [w for _, w in entries]
 
+    snaps = snapshot_names or []
+    pfsp_w = pfsp_weights or [1.0] * len(snaps)
+
     def factory() -> Agent:
+        # Decide snapshot vs fixed opponent
+        if snaps and random.random() < self_play_ratio:
+            idx = random.choices(range(len(snaps)), weights=pfsp_w, k=1)[0]
+            snap_name = snaps[idx]
+            return _ServerPPOAgent(
+                name=snap_name,
+                model_id=snap_name,
+                card_names=card_names,
+                card_index_map=card_index_map,
+                action_dim=action_dim,
+                worker_id=worker_id,
+                request_queue=request_queue,
+                response_queue=response_queue,
+            )
         chosen = random.choices(names, weights=weights, k=1)[0]
         return _AGENT_FACTORIES[chosen](chosen.capitalize())
 
@@ -81,10 +184,16 @@ def _build_opponent_factory(opponent_spec: str):
 
 
 def _advance_non_ppo(game: Game, training_agent_name: str):
-    """Advance the game while the current player is NOT the PPO training agent."""
+    """Advance the game past non-neural-net decisions.
+
+    Stops when the current player is either the training agent or a
+    _ServerPPOAgent opponent (both need GPU inference via the server).
+    """
     while not game.is_game_over:
         player = game.current_player
         if player.name == training_agent_name:
+            break
+        if isinstance(player.agent, _ServerPPOAgent):
             break
         action = player.make_decision(game)
         game.apply_decision(action)
@@ -166,6 +275,9 @@ def sim_worker_main(
     request_queue: mp.Queue,
     response_queue: mp.Queue,
     result_queue: mp.Queue,
+    snapshot_names: list[str] | None = None,
+    self_play_ratio: float = 0.5,
+    pfsp_weights: list[float] | None = None,
 ):
     """Entry point for a simulation worker process.
 
@@ -175,6 +287,10 @@ def sim_worker_main(
 
     card_names and card_index_map are passed from the parent process to
     guarantee encoding consistency across all workers.
+
+    For self-play, snapshot_names lists the opponent models available on
+    the InferenceServer. Workers create _ServerPPOAgent opponents that
+    route decisions through the server for GPU inference.
     """
     try:
         _sim_worker_inner(
@@ -182,6 +298,9 @@ def sim_worker_main(
             card_names, card_index_map, action_dim, state_size,
             ppo_config_dict, opponent_spec, seed,
             request_queue, response_queue, result_queue,
+            snapshot_names=snapshot_names,
+            self_play_ratio=self_play_ratio,
+            pfsp_weights=pfsp_weights,
         )
     except Exception:
         result_queue.put(WorkerError(
@@ -195,6 +314,7 @@ def _sim_worker_inner(
     card_names, card_index_map, action_dim, state_size,
     ppo_config_dict, opponent_spec, seed,
     request_queue, response_queue, result_queue,
+    snapshot_names=None, self_play_ratio=0.5, pfsp_weights=None,
 ):
     """Core worker logic, separated for clean error wrapping."""
     # Worker initialization
@@ -218,7 +338,19 @@ def _sim_worker_inner(
     )
 
     training_agent_name = "PPO"
-    opponent_factory = _build_opponent_factory(opponent_spec)
+    opponent_factory = _build_opponent_factory(
+        opponent_spec,
+        snapshot_names=snapshot_names,
+        self_play_ratio=self_play_ratio,
+        pfsp_weights=pfsp_weights,
+        card_names=card_names,
+        card_index_map=card_index_map,
+        action_dim=action_dim,
+        worker_id=worker_id,
+        request_queue=request_queue,
+        response_queue=response_queue,
+        registry=registry,
+    )
 
     # Pre-allocate reusable buffers for encoding
     state_buf = np.zeros(state_size, dtype=np.float32)
@@ -244,7 +376,7 @@ def _sim_worker_inner(
         episodes_started += 1
 
     while episodes_completed < num_episodes:
-        # Step 1: Advance all active games past non-PPO decisions
+        # Step 1: Advance all active games past non-neural-net decisions
         for i in range(num_concurrent):
             if games[i] is not None and not games[i].is_game_over:
                 _advance_non_ppo(games[i], training_agent_name)
@@ -274,16 +406,23 @@ def _sim_worker_inner(
                     games[i] = None
                     buffers[i] = None
 
-        # Step 3: Collect pending PPO decisions
+        # Step 3: Collect ALL pending neural-net decisions — both training
+        # agent and opponent PPO. Send as a single batched request (the server
+        # groups by model_id internally). This avoids desync where opponent
+        # decisions end up as batch-size-1 requests.
         pending_indices: list[int] = []
-        pending_states: list[torch.Tensor] = []
+        pending_states: list[np.ndarray] = []
         pending_contexts: list[ActionContext] = []
+        pending_is_training: list[bool] = []
+        pending_model_ids: list[str] = []
 
         for i in range(num_concurrent):
             if games[i] is None or games[i].is_game_over:
                 continue
             player = games[i].current_player
-            if player.name != training_agent_name:
+            is_training = (player.name == training_agent_name)
+            is_server_opp = isinstance(player.agent, _ServerPPOAgent)
+            if not is_training and not is_server_opp:
                 continue
 
             ctx = build_action_context(
@@ -291,7 +430,7 @@ def _sim_worker_inner(
                 action_dim, mask_buf=mask_buf,
             )
             state = encode_state(
-                games[i], is_current_player_training=True,
+                games[i], is_current_player_training=is_training,
                 cards=card_names,
                 card_index_map=card_index_map,
                 state_buf=state_buf,
@@ -300,51 +439,66 @@ def _sim_worker_inner(
             )
 
             pending_indices.append(i)
-            pending_states.append(state)
+            pending_states.append(state.numpy().copy())
             pending_contexts.append(ActionContext(
                 mask=ctx.mask.copy(),
                 has_meaningful=ctx.has_meaningful,
                 can_buy=ctx.can_buy,
                 resolvers=ctx.resolvers,
             ))
+            pending_is_training.append(is_training)
+            pending_model_ids.append(
+                "training" if is_training else player.agent.model_id
+            )
 
         if not pending_states:
             continue
 
-        # Step 4: Build numpy batch with END_TURN suppression, send to GPU
-        # Use uint8 masks to reduce IPC payload size
-        states_np = np.stack([s.numpy() for s in pending_states])
+        # Step 4: Build batch, group by model_id, send to GPU
+        states_np = np.stack(pending_states)
         masks_np = np.zeros((len(pending_states), action_dim), dtype=np.uint8)
         for j, ctx in enumerate(pending_contexts):
             masks_np[j] = ctx.mask.astype(np.uint8)
             if ctx.has_meaningful:
                 masks_np[j, END_TURN_INDEX] = 0
 
-        request_queue.put(InferenceRequest(
-            worker_id=worker_id,
-            request_id=request_id,
-            states=states_np,
-            masks=masks_np,
-        ))
-        request_id += 1
+        model_groups: dict[str, list[int]] = {}
+        for j, mid in enumerate(pending_model_ids):
+            model_groups.setdefault(mid, []).append(j)
 
-        # Step 5: Block waiting for response
-        response: InferenceResponse = response_queue.get()
+        all_responses: dict[int, tuple] = {}
+        for mid, indices in model_groups.items():
+            request_queue.put(InferenceRequest(
+                worker_id=worker_id,
+                request_id=request_id,
+                states=states_np[indices],
+                masks=masks_np[indices],
+                model_id=mid,
+            ))
+            request_id += 1
+            response: InferenceResponse = response_queue.get()
+            for k, j in enumerate(indices):
+                all_responses[j] = (
+                    int(response.action_indices[k]),
+                    response.log_probs[k],
+                    response.values[k],
+                )
 
-        # Step 6: Distribute actions and record in buffers
+        # Step 5: Distribute actions — record in buffer only for training
         for j, i in enumerate(pending_indices):
-            act_idx = int(response.action_indices[j])
+            act_idx, log_prob, value = all_responses[j]
             action = pending_contexts[j].resolvers[act_idx]
 
-            buffers[i].add(
-                pending_states[j],
-                act_idx,
-                torch.tensor(response.log_probs[j]),
-                torch.tensor(response.values[j]),
-                reward=0.0,
-                done=False,
-                mask=torch.from_numpy(masks_np[j].astype(np.float32)).bool(),
-            )
+            if pending_is_training[j]:
+                buffers[i].add(
+                    torch.from_numpy(pending_states[j]),
+                    act_idx,
+                    torch.tensor(log_prob),
+                    torch.tensor(value),
+                    reward=0.0,
+                    done=False,
+                    mask=torch.from_numpy(masks_np[j].astype(np.float32)).bool(),
+                )
 
             games[i].apply_decision(action)
 

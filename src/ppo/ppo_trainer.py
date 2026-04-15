@@ -15,15 +15,23 @@ from src.utils.logger import log, set_disabled, set_verbose
 
 
 def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cfg,
-                 make_opponent, registry):
+                 make_opponent, registry, pool=None):
     """Create the appropriate batch runner based on num_workers config."""
     sim_device = agent.simulation_device
     num_concurrent = min(run_cfg.episodes, run_cfg.num_concurrent)
 
     if run_cfg.num_workers > 1:
         from src.ppo.mp_batch_runner import MultiProcessBatchRunner
-        from src.ppo.opponent_pool import _parse_opponent_spec
-        # Extract opponent spec string for serialization to workers
+
+        # Extract snapshot data from the pool for serialization to workers
+        snapshot_state_dicts = None
+        self_play_ratio = run_cfg.self_play_ratio
+        pfsp_weights = None
+        if pool is not None and pool.has_snapshots:
+            snapshot_state_dicts = list(pool._snapshots)
+            snap_names = [n for n, _ in snapshot_state_dicts]
+            pfsp_weights = pool._pfsp_weights(snap_names)
+
         return MultiProcessBatchRunner(
             model=agent.model,
             card_names=card_names,
@@ -36,6 +44,9 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
             num_workers=run_cfg.num_workers,
             ppo_config=ppo_cfg,
             registry=registry,
+            snapshot_state_dicts=snapshot_state_dicts,
+            self_play_ratio=self_play_ratio,
+            pfsp_weights=pfsp_weights,
         )
     else:
         return BatchRunner(
@@ -126,7 +137,7 @@ def train(
         action_dim = get_action_space_size(card_names)
         runner = _make_runner(
             agent, cards, card_names, action_dim,
-            ppo_cfg, run_cfg, data_cfg, make_opponent, registry,
+            ppo_cfg, run_cfg, data_cfg, make_opponent, registry, pool=pool,
         )
         states, actions, old_lp, returns, advs, masks = runner.run_episodes(run_cfg.episodes)
         duration_episodes = time.time() - start_time
@@ -180,7 +191,7 @@ def train(
             start_time = time.time()
             wins = _run_per_opponent_eval(
                 agent, pool, card_names, cards, run_cfg, ppo_cfg, upd,
-                registry=registry,
+                registry=registry, data_cfg=data_cfg,
             )
             agent.clear_buffers()
             duration_eval = time.time() - start_time
@@ -222,8 +233,11 @@ def _run_per_opponent_eval(
     ppo_cfg: PPOConfig,
     upd: int,
     registry=None,
+    data_cfg: DataConfig | None = None,
 ) -> int:
     """Run evaluation against each opponent type separately, log per-type results.
+
+    Uses MultiProcessBatchRunner when num_workers > 1 and data_cfg is provided.
 
     Returns the total wins across all opponent types.
     """
@@ -232,22 +246,39 @@ def _run_per_opponent_eval(
     games_per_type = max(1, run_cfg.eval_games // len(opp_types))
     total_wins = 0
     total_games = 0
+    use_mp = run_cfg.num_workers > 1 and data_cfg is not None
 
     print(f"Evaluating after update {upd} ({games_per_type} games × {len(opp_types)} opponent types)...")
 
     for opp_type in opp_types:
-        factory = pool.make_factory_for_type(opp_type)
-        eval_runner = BatchRunner(
-            model=agent.model,
-            card_names=card_names,
-            cards=cards,
-            action_dim=action_dim,
-            device=agent.simulation_device,
-            opponent_factory=factory,
-            num_concurrent=min(games_per_type, run_cfg.num_concurrent),
-            ppo_config=ppo_cfg,
-            registry=registry,
-        )
+        if use_mp:
+            from src.ppo.mp_batch_runner import MultiProcessBatchRunner
+            eval_runner = MultiProcessBatchRunner(
+                model=agent.model,
+                card_names=card_names,
+                cards=cards,
+                action_dim=action_dim,
+                device=agent.simulation_device,
+                data_config=data_cfg,
+                opponent_spec=opp_type,
+                num_concurrent=min(games_per_type, run_cfg.num_concurrent),
+                num_workers=run_cfg.num_workers,
+                ppo_config=ppo_cfg,
+                registry=registry,
+            )
+        else:
+            factory = pool.make_factory_for_type(opp_type)
+            eval_runner = BatchRunner(
+                model=agent.model,
+                card_names=card_names,
+                cards=cards,
+                action_dim=action_dim,
+                device=agent.simulation_device,
+                opponent_factory=factory,
+                num_concurrent=min(games_per_type, run_cfg.num_concurrent),
+                ppo_config=ppo_cfg,
+                registry=registry,
+            )
         wins, losses, eval_steps = eval_runner.run_eval(games_per_type)
         win_rate = wins / games_per_type
         avg_steps = eval_steps / games_per_type if games_per_type > 0 else 0
