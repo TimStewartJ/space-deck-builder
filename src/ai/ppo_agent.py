@@ -8,7 +8,7 @@ from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.encoding.state_utils import unpack_state
 from src.ai.agent import Agent
 from src.engine.actions import ActionType, get_available_actions
-from src.encoding.state_encoder import encode_state, get_state_size
+from src.encoding.state_encoder import encode_state, get_state_size, build_card_index_map
 from src.encoding.action_encoder import encode_action, decode_action, get_action_space_size
 from src.utils.logger import log
 
@@ -36,8 +36,15 @@ class PPOAgent(Agent):
         ppo_config: PPOConfig | None = None,
         model_config: ModelConfig | None = None,
         device_config: DeviceConfig | None = None,
+        registry=None,
     ):
         super().__init__(name)
+
+        # Store registry's pre-built card_index_map to avoid per-call rebuilds
+        if registry is not None:
+            self.card_index_map = registry.card_index_map
+        else:
+            self.card_index_map = build_card_index_map(card_names)
 
         # Resolve configs: explicit kwargs override config object values
         ppo = ppo_config or PPOConfig()
@@ -129,7 +136,7 @@ class PPOAgent(Agent):
         # No per-call model.to() — that would be expensive in self-play.
         start_time = time.perf_counter()
         available = get_available_actions(game_state, game_state.current_player)
-        encoded_actions = [encode_action(a, cards=self.cards) for a in available]
+        encoded_actions = [encode_action(a, cards=self.cards, card_index_map=self.card_index_map) for a in available]
         has_available_actions = True if any(
             action.type == ActionType.ATTACK_PLAYER or action.type == ActionType.PLAY_CARD
             for action in available
@@ -137,7 +144,8 @@ class PPOAgent(Agent):
         state = encode_state(
             game_state, is_current_player_training=True,
             cards=self.cards,
-            available_actions=available
+            available_actions=available,
+            card_index_map=self.card_index_map,
         ).to(self.device)
 
         logits: torch.Tensor

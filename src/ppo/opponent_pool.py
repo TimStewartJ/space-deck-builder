@@ -64,6 +64,7 @@ class OpponentPool:
         self,
         card_names: list[str],
         device: str = "cpu",
+        registry=None,
     ) -> Callable[[], Agent]:
         """Return a factory that samples an opponent per call.
 
@@ -82,7 +83,8 @@ class OpponentPool:
             # Decide whether to use a snapshot or fixed agent
             if snapshots and random.random() < sp_ratio:
                 snap_name, snap_sd = random.choice(snapshots)
-                return _make_ppo_opponent(snap_name, snap_sd, card_names, device)
+                return _make_ppo_opponent(snap_name, snap_sd, card_names, device,
+                                          registry=registry)
             # Weighted sample from fixed pool
             chosen = random.choices(names, weights=weights, k=1)[0]
             return AGENT_REGISTRY[chosen](chosen.capitalize())
@@ -112,11 +114,13 @@ def _make_ppo_opponent(
     state_dict: dict,
     card_names: list[str],
     device: str,
+    registry=None,
 ) -> Agent:
     """Create a fresh PPOAgent and load a snapshot state_dict."""
     from src.ai.ppo_agent import PPOAgent
     opp = PPOAgent(name, card_names, device=device,
-                   main_device=device, simulation_device=device)
+                   main_device=device, simulation_device=device,
+                   registry=registry)
     opp.model.load_state_dict(state_dict)
     return opp
 

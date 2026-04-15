@@ -35,12 +35,14 @@ def train(
 
     set_verbose(False)
     cards = data_cfg.load_cards()
-    card_names = data_cfg.get_card_names(cards)
+    registry = data_cfg.build_registry(cards)
+    card_names = registry.card_names
 
     agent    = PPOAgent("PPO", card_names,
                        ppo_config=ppo_cfg,
                        device_config=dev_cfg,
-                       model_path=model_path)
+                       model_path=model_path,
+                       registry=registry)
     # Log the parameter size of the model
     num_params = sum(p.numel() for p in agent.model.parameters() if p.requires_grad)
     # Get input and output size of the actor model
@@ -73,7 +75,7 @@ def train(
     sim_device = str(agent.simulation_device)
 
     for upd in range(1, run_cfg.updates + 1):
-        make_opponent = pool.make_factory(card_names, device=sim_device)
+        make_opponent = pool.make_factory(card_names, device=sim_device, registry=registry)
         log(f"Starting update {upd}/{run_cfg.updates} "
             f"(opponents: {', '.join(opp_types)}"
             f"{' + snapshots' if pool.has_snapshots else ''})")
@@ -90,6 +92,7 @@ def train(
             opponent_factory=make_opponent,
             num_concurrent=min(run_cfg.episodes, run_cfg.num_concurrent),
             ppo_config=ppo_cfg,
+            registry=registry,
         )
         states, actions, old_lp, returns, advs, masks = runner.run_episodes(run_cfg.episodes)
         duration_episodes = time.time() - start_time
@@ -129,6 +132,7 @@ def train(
             start_time = time.time()
             wins = _run_per_opponent_eval(
                 agent, pool, card_names, cards, run_cfg, ppo_cfg, upd,
+                registry=registry,
             )
             agent.clear_buffers()
             duration_eval = time.time() - start_time
@@ -169,6 +173,7 @@ def _run_per_opponent_eval(
     run_cfg: RunConfig,
     ppo_cfg: PPOConfig,
     upd: int,
+    registry=None,
 ) -> int:
     """Run evaluation against each opponent type separately, log per-type results.
 
@@ -193,6 +198,7 @@ def _run_per_opponent_eval(
             opponent_factory=factory,
             num_concurrent=min(games_per_type, run_cfg.num_concurrent),
             ppo_config=ppo_cfg,
+            registry=registry,
         )
         wins, losses, eval_steps = eval_runner.run_eval(games_per_type)
         win_rate = wins / games_per_type

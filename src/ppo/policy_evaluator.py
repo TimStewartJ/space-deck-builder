@@ -3,7 +3,7 @@ import torch
 from typing import List
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.engine.actions import ActionType, Action
-from src.encoding.state_encoder import encode_state, get_state_size
+from src.encoding.state_encoder import encode_state, get_state_size, build_card_index_map
 from src.encoding.action_encoder import encode_action, get_action_space_size
 
 
@@ -15,22 +15,28 @@ class PolicyEvaluator:
     """
 
     def __init__(self, model: PPOActorCritic, card_names: List[str],
-                 action_dim: int, device: torch.device):
+                 action_dim: int, device: torch.device, registry=None):
         self.model = model
         self.card_names = card_names
         self.action_dim = action_dim
         self.device = device
+        # Use registry's pre-built map, or build one on the fly for compat
+        if registry is not None:
+            self.card_index_map = registry.card_index_map
+        else:
+            self.card_index_map = build_card_index_map(card_names)
 
     def evaluate_single(self, game_state, available_actions: List[Action]):
         """Evaluate a single game state. Returns (action, act_idx, log_prob, value, encoded_state)."""
-        encoded_actions = [encode_action(a, cards=self.card_names) for a in available_actions]
+        encoded_actions = [encode_action(a, cards=self.card_names, card_index_map=self.card_index_map) for a in available_actions]
         has_meaningful_actions = any(
             a.type in (ActionType.ATTACK_PLAYER, ActionType.PLAY_CARD)
             for a in available_actions
         )
         state = encode_state(
             game_state, is_current_player_training=True,
-            cards=self.card_names, available_actions=available_actions
+            cards=self.card_names, available_actions=available_actions,
+            card_index_map=self.card_index_map,
         ).to(self.device)
 
         logits, value = self.model(state)

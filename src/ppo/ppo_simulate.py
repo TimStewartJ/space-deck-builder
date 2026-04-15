@@ -29,14 +29,15 @@ def simulate(
     """Run PPO vs opponent simulation."""
     set_verbose(False)
     cards = data_cfg.load_cards()
-    names = data_cfg.get_card_names(cards)
+    registry = data_cfg.build_registry(cards)
+    names = registry.card_names
 
     # Player 1: PPO agent
     resolved_model1 = model1_path or get_latest_model(data_cfg.models_dir)
     if not resolved_model1:
         raise RuntimeError("No PPO model found for player 1.")
     log(f"Loading PPO model for player 1 from {resolved_model1}")
-    agent1 = PPOAgent("PPO_1", names, model_path=resolved_model1)
+    agent1 = PPOAgent("PPO_1", names, model_path=resolved_model1, registry=registry)
 
     # Player 2: PPO agent or random agent
     if sim_cfg.player2_random or not model2_path:
@@ -44,7 +45,7 @@ def simulate(
         log("Player 2 set to RandomAgent.")
     else:
         log(f"Loading PPO model for player 2 from {model2_path}")
-        agent2 = PPOAgent("PPO_2", names, model_path=model2_path)
+        agent2 = PPOAgent("PPO_2", names, model_path=model2_path, registry=registry)
 
     wins1, wins2 = 0, 0
     all_experiences = []

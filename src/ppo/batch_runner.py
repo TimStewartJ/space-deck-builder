@@ -9,6 +9,7 @@ from src.engine.actions import ActionType, get_available_actions
 from src.ai.agent import Agent
 from src.ai.random_agent import RandomAgent
 from src.cards.card import Card
+from src.cards.registry import CardRegistry
 from src.encoding.state_encoder import encode_state, get_state_size
 from src.encoding.action_encoder import encode_action, get_action_space_size
 from src.ppo.rollout_buffer import RolloutBuffer
@@ -39,6 +40,7 @@ class BatchRunner:
         opponent_factory: Callable[[], Agent] = lambda: RandomAgent("Rand"),
         num_concurrent: int = 64,
         ppo_config: PPOConfig | None = None,
+        registry: CardRegistry | None = None,
     ):
         self.model = model
         self.card_names = card_names
@@ -49,9 +51,12 @@ class BatchRunner:
         self.num_concurrent = num_concurrent
         self.ppo_config = ppo_config or PPOConfig()
         self.training_agent_name = "PPO"
-        # Pre-compute O(1) card name → index lookup
-        from src.encoding.state_encoder import build_card_index_map
-        self.card_index_map = build_card_index_map(card_names)
+        # Use registry's pre-built map, or build one on the fly for compat
+        if registry is not None:
+            self.card_index_map = registry.card_index_map
+        else:
+            from src.encoding.state_encoder import build_card_index_map
+            self.card_index_map = build_card_index_map(card_names)
 
     def run_episodes(self, num_episodes: int) -> tuple:
         """Run num_episodes games and return aggregated rollout data.

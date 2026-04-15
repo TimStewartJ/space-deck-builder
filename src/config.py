@@ -58,6 +58,17 @@ class DataConfig:
                 names.append(starter)
         return names
 
+    def build_registry(self, cards=None):
+        """Build a CardRegistry from loaded cards.
+
+        If *cards* is not provided, loads them from CSV first.
+        The registry owns the canonical card_names and card_index_map.
+        """
+        from src.cards.registry import build_registry
+        if cards is None:
+            cards = self.load_cards()
+        return build_registry(cards, self.starter_card_names)
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
