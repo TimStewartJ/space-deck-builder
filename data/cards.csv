@@ -1255,7 +1255,8 @@ Core Set,3,Trade Bot,"{Gain 1 Trade}
 You may scrap a card in your hand or discard pile.
 <hr>
 {Machine Cult Ally}: {Gain 2 Combat}",Ship,Machine Cult,1,,Trade Deck,
-Core Set,1,Battlecruiser,"{Gain 5 Combat} Draw a card.
+Core Set,1,Battlecruiser,"{Gain 5 Combat}
+Draw a card.
 <hr>
 {Star Empire Ally}: Target opponent discards a card.
 <hr>
@@ -1273,7 +1274,8 @@ Core Set,3,Imperial Fighter,"{Gain 2 Combat}
 Target opponent discards a card.
 <hr>
 {Star Empire Ally}: {Gain 2 Combat}",Ship,Star Empire,1,,Trade Deck,
-Core Set,3,Imperial Frigate,"{Gain 4 Combat} Target opponent discards a card.
+Core Set,3,Imperial Frigate,"{Gain 4 Combat}
+Target opponent discards a card.
 <hr>
 {Star Empire Ally}: {Gain 2 Combat}
 <hr>
@@ -1298,7 +1300,8 @@ Core Set,1,War World,"{Gain 3 Combat}
 Core Set,2,Barter World,"{Gain 2 Authority} OR {Gain 2 Trade}
 <hr>
 {Scrap}: {Gain 5 Combat}",Base,Trade Federation,4,4,Trade Deck,
-Core Set,1,Central Office,"{Gain 2 Trade} You may put the next ship you acquire this turn on top of your deck.
+Core Set,1,Central Office,"{Gain 2 Trade}
+You may put the next ship you acquire this turn on top of your deck.
 <hr>
 {Trade Federation Ally}: Draw a card.",Base,Trade Federation,7,6,Trade Deck,
 Core Set,1,Command Ship,"{Gain 4 Authority} {Gain 5 Combat}
