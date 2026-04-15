@@ -123,9 +123,9 @@ class PPOAgent(Agent):
         self.num_decisions = 0
 
     def make_decision(self, game_state: 'Game'):
-        self.device = self.simulation_device
-        self.model.to(self.simulation_device)
-
+        # Device contract: model is placed on the correct device at
+        # construction or by the caller (e.g. OpponentPool factory).
+        # No per-call model.to() — that would be expensive in self-play.
         start_time = time.perf_counter()
         available = get_available_actions(game_state, game_state.current_player)
         encoded_actions = [encode_action(a, cards=self.cards) for a in available]
@@ -195,14 +195,12 @@ class PPOAgent(Agent):
         self.dones.append(True)         # marks bootstrap point
 
     def finish_batch(self):
-        self.device = self.simulation_device
-        self.model.to(self.device)
-        # compute GAE & returns
+        # Device contract: tensors are already on self.device from make_decision().
+        # No model.to() needed — model stays on its current device.
         returns: list[torch.Tensor] = []
         advs: list[torch.Tensor] = []
-        # Initialize GAE to 0.0
         gae = 0.0
-        vals = self.values + [torch.tensor(0.0, device=self.device)]  # add terminal value
+        vals = self.values + [torch.tensor(0.0, device=self.device)]
         # Compute Generalized Advantage Estimation (GAE) and returns
         for step in reversed(range(len(self.rewards))):
             # Temporal difference error (delta)
@@ -216,14 +214,15 @@ class PPOAgent(Agent):
             advs.insert(0, gae)  # Insert advantage at the beginning
             returns.insert(0, gae + vals[step])  # Return = advantage + value
 
-        # to tensors
+        # log_probs, values, masks are already on self.device (from model output).
+        # states originate from encode_state() on CPU and need device placement.
         states   = torch.stack(self.states).to(self.device)
         actions  = torch.tensor(self.actions, dtype=torch.int64, device=self.device)
-        old_lp   = torch.stack(self.log_probs).to(self.device)
+        old_lp   = torch.stack(self.log_probs)
         returnsTensor  = torch.stack(returns).to(self.device)
         advsTensor     = torch.stack(advs).to(self.device)
         advsTensor = (advsTensor - advsTensor.mean()) / (advsTensor.std(unbiased=False) + 1e-8) # normalize advantages
-        masksTensor = torch.stack(self.masks).to(self.device) if self.masks else None
+        masksTensor = torch.stack(self.masks) if self.masks else None
 
         # clear buffers
         self.clear_buffers()
@@ -231,8 +230,8 @@ class PPOAgent(Agent):
         return states, actions, old_lp, returnsTensor, advsTensor, masksTensor
 
     def update(self, states, actions, old_lp, returns, advs, masks=None):
-        self.device = self.main_device
-        self.model.to(self.main_device)
+        # Device contract: caller (ppo_trainer) is responsible for moving
+        # model and tensors to main_device before calling update().
 
         actor_loss_sum  = 0.0
         critic_loss_sum = 0.0
