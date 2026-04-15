@@ -29,7 +29,7 @@ class PPOAgent(Agent):
         entropy_coef: float | None = None,
         device: str | None = None,
         main_device: str = "cuda",
-        simulation_device: str = "cpu",
+        simulation_device: str = "cuda",
         model_path: Optional[str] = None,
         log_debug: bool = False,
         # Config-based construction (preferred)

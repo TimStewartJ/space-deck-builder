@@ -132,7 +132,7 @@ class RunConfig:
 class DeviceConfig:
     """Device placement for training and simulation."""
     main_device: str = "cuda"
-    simulation_device: str = "cpu"
+    simulation_device: str = "cuda"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

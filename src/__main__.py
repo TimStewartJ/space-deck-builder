@@ -40,7 +40,7 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     # Devices
     p.add_argument("--main-device",       type=str, default="cuda",
                    help="Device for training updates")
-    p.add_argument("--simulation-device", type=str, default="cpu",
+    p.add_argument("--simulation-device", type=str, default="cuda",
                    help="Device for episode simulation")
     # Model loading
     p.add_argument("--model-path",        type=str, default=None,
