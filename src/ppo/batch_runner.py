@@ -164,7 +164,7 @@ class BatchRunner:
                     values_batch[j],
                     reward=0.0,
                     done=False,
-                    mask=pending_masks[j],
+                    mask=masks_batch[j],
                 )
 
                 games[i].apply_decision(action)

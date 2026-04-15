@@ -8,17 +8,25 @@
 - NVIDIA GPU: Use the CUDA index in pyproject.toml
 - CPU-only: Works but slower
 
-### GPU Setup (AMD ROCm)
+### GPU Setup
 ```bash
-# In the project venv:
-uv pip install --reinstall --index-url https://rocm.nightlies.amd.com/v2/gfx120X-all/ --pre torch
+# Install base dependencies (CPU torch by default):
+uv sync
+
+# Then install GPU-accelerated PyTorch for your hardware:
+python scripts/setup_gpu.py rocm     # AMD GPUs (RX 7000/9000 series)
+python scripts/setup_gpu.py cuda     # NVIDIA GPUs
+python scripts/setup_gpu.py cpu      # CPU-only (already installed by uv sync)
+python scripts/setup_gpu.py detect   # Auto-detect GPU and install
 ```
+
+> **Note:** `uv sync` reinstalls CPU torch from the lockfile. Rerun `setup_gpu.py` after any `uv sync`.
 
 Verify:
 ```python
 import torch
 print(torch.cuda.is_available())        # True
-print(torch.cuda.get_device_name(0))    # AMD Radeon RX 9070
+print(torch.cuda.get_device_name(0))    # e.g., AMD Radeon RX 9070 or NVIDIA GeForce RTX 4090
 ```
 
 ## Training
