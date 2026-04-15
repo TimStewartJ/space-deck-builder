@@ -15,32 +15,37 @@ def _add_common_args(parser: argparse.ArgumentParser):
 
 
 def _build_train_parser(sub: argparse._SubParsersAction):
+    from src.config import PPOConfig, RunConfig, DeviceConfig
+    _ppo = PPOConfig()
+    _run = RunConfig()
+    _dev = DeviceConfig()
+
     p = sub.add_parser("train", help="Run PPO training")
     _add_common_args(p)
-    # PPO hyperparameters
-    p.add_argument("--lr",          type=float, default=3e-4)
-    p.add_argument("--gamma",       type=float, default=0.995)
-    p.add_argument("--lam",         type=float, default=0.99)
-    p.add_argument("--clip-eps",    type=float, default=0.3)
-    p.add_argument("--epochs",      type=int,   default=4)
-    p.add_argument("--batch-size",  type=int,   default=1024)
-    p.add_argument("--entropy",     type=float, default=0.025,
+    # PPO hyperparameters (defaults sourced from PPOConfig dataclass)
+    p.add_argument("--lr",          type=float, default=_ppo.lr)
+    p.add_argument("--gamma",       type=float, default=_ppo.gamma)
+    p.add_argument("--lam",         type=float, default=_ppo.lam)
+    p.add_argument("--clip-eps",    type=float, default=_ppo.clip_eps)
+    p.add_argument("--epochs",      type=int,   default=_ppo.epochs)
+    p.add_argument("--batch-size",  type=int,   default=_ppo.batch_size)
+    p.add_argument("--entropy",     type=float, default=_ppo.entropy_coef,
                    help="Entropy bonus coefficient")
-    # Run topology
-    p.add_argument("--episodes",    type=int,   default=1024)
-    p.add_argument("--updates",     type=int,   default=4)
-    p.add_argument("--eval-every",  type=int,   default=5,
+    # Run topology (defaults sourced from RunConfig dataclass)
+    p.add_argument("--episodes",    type=int,   default=_run.episodes)
+    p.add_argument("--updates",     type=int,   default=_run.updates)
+    p.add_argument("--eval-every",  type=int,   default=_run.eval_every,
                    help="Evaluate every N updates (always on last)")
-    p.add_argument("--eval-games",  type=int,   default=100)
+    p.add_argument("--eval-games",  type=int,   default=_run.eval_games)
     p.add_argument("--self-play",   action="store_true")
-    p.add_argument("--opponents",   type=str, default="random",
+    p.add_argument("--opponents",   type=str, default=_run.opponents,
                    help="Opponent mix: 'random,heuristic' or 'random:0.6,heuristic:0.4'")
-    p.add_argument("--self-play-ratio", type=float, default=0.5,
+    p.add_argument("--self-play-ratio", type=float, default=_run.self_play_ratio,
                    help="Fraction of games using PPO snapshots when self-play is active")
-    # Devices
-    p.add_argument("--main-device",       type=str, default="cuda",
+    # Devices (defaults sourced from DeviceConfig dataclass)
+    p.add_argument("--main-device",       type=str, default=_dev.main_device,
                    help="Device for training updates")
-    p.add_argument("--simulation-device", type=str, default="cuda",
+    p.add_argument("--simulation-device", type=str, default=_dev.simulation_device,
                    help="Device for episode simulation")
     # Model loading
     p.add_argument("--model-path",        type=str, default=None,

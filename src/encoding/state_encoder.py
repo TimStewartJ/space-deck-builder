@@ -42,7 +42,7 @@ def get_state_size(cards: list[str]) -> int:
 
 def encode_card_presence(cards_list: list['Card'], num_cards: int, card_index_map: dict[str, int], out: np.ndarray = None, offset: int = 0) -> np.ndarray:
     """Encode card presence using O(1) lookups into a pre-allocated array."""
-    card_presence_worth = 0.0125
+    card_presence_worth = 0.125
 
     if out is None:
         out = np.zeros(num_cards, dtype=np.float32)

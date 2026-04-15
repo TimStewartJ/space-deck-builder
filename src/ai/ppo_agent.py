@@ -90,13 +90,22 @@ class PPOAgent(Agent):
             log(f"State size: {self.state_dim}, Action size: {self.action_dim}")
             log(f"Using device: {self.device}")
 
+        # When loading a checkpoint, use its saved ModelConfig so the
+        # architecture matches the stored weights (e.g. embedding dims,
+        # hidden sizes). Fall back to the current default if the checkpoint
+        # predates config storage.
+        if model_path:
+            log(f"Loading PPO model from {model_path}")
+            ckpt = load_checkpoint(model_path, map_location=self.device)
+            saved_model_cfg = ckpt.get("config", {}).get("model")
+            if saved_model_cfg:
+                self.model_config = ModelConfig.from_dict(saved_model_cfg)
+
         self.model = PPOActorCritic(
             self.state_dim, self.action_dim, len(card_names),
             model_config=self.model_config
         ).to(self.device)
         if model_path:
-            log(f"Loading PPO model from {model_path}")
-            ckpt = load_checkpoint(model_path, map_location=self.device)
             self.model.load_state_dict(ckpt["model_state_dict"])
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.ppo_config.lr)
 

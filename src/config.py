@@ -69,12 +69,12 @@ class DataConfig:
 @dataclass
 class ModelConfig:
     """Neural network architecture parameters."""
-    card_emb_dim: int = 4
+    card_emb_dim: int = 16
     actor_hidden_sizes: list[int] = field(
-        default_factory=lambda: [1024, 1024, 512]
+        default_factory=lambda: [256, 256]
     )
     critic_hidden_sizes: list[int] = field(
-        default_factory=lambda: [1024, 1024, 512]
+        default_factory=lambda: [256, 256]
     )
 
     def to_dict(self) -> dict[str, Any]:
@@ -89,9 +89,9 @@ class ModelConfig:
 class PPOConfig:
     """PPO algorithm hyperparameters."""
     lr: float = 3e-4
-    gamma: float = 0.995
-    lam: float = 0.99
-    clip_eps: float = 0.3
+    gamma: float = 0.99
+    lam: float = 0.95
+    clip_eps: float = 0.2
     epochs: int = 4
     batch_size: int = 1024
     entropy_coef: float = 0.025
@@ -110,7 +110,7 @@ class PPOConfig:
 class RunConfig:
     """Training run topology and schedule."""
     episodes: int = 1024
-    updates: int = 4
+    updates: int = 200
     num_workers: int = 4
     games_per_worker: int = 16
     num_concurrent: int = 64
