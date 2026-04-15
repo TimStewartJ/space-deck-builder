@@ -124,7 +124,7 @@ def main():
             opponent_factory=make_opponent,
             num_concurrent=min(args.episodes, 64),
         )
-        states, actions, old_lp, returns, advs = runner.run_episodes(args.episodes)
+        states, actions, old_lp, returns, advs, masks = runner.run_episodes(args.episodes)
         duration_episodes = time.time() - start_time
         total_time_spent_on_episodes += duration_episodes
         log(f"Finished {args.episodes} episodes in {duration_episodes:.2f}s.")
@@ -136,10 +136,12 @@ def main():
         old_lp = old_lp.to(agent.device)
         returns = returns.to(agent.device)
         advs = advs.to(agent.device)
+        if masks is not None:
+            masks = masks.to(agent.device)
 
         # perform PPO update
         start_time = time.time()
-        agent.update(states, actions, old_lp, returns, advs)
+        agent.update(states, actions, old_lp, returns, advs, masks)
         duration_update = time.time() - start_time
         total_time_spent_on_updates += duration_update
         log(f"Update {upd} complete in {duration_update:.2f}s. State size: {states.shape}")

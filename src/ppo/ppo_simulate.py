@@ -67,7 +67,10 @@ def main():
         if isinstance(agent1, PPOAgent):
             batch = agent1.finish_batch()
             # Convert tensors to cpu and numpy for pickling
-            cpu_batch = tuple(x.cpu().numpy() if hasattr(x, 'cpu') else x for x in batch)
+            cpu_batch = tuple(
+                x.cpu().numpy() if hasattr(x, 'cpu') else x
+                for x in batch if x is not None
+            )
             all_experiences.append(cpu_batch)
     # Save all experiences to a file after all games
     if all_experiences:

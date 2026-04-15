@@ -64,6 +64,7 @@ class PPOAgent(Agent):
         self.rewards: list[float] = []
         self.values: list[torch.Tensor] = []
         self.dones: list[bool] = []
+        self.masks: list[torch.Tensor] = []
 
         # decision timing
         self.total_decision_time = 0.0
@@ -90,15 +91,15 @@ class PPOAgent(Agent):
         value: torch.Tensor
         logits, value = self.model(state)
         # mask out unavailable actions using encoded_actions
-        mask = torch.zeros(self.action_dim, device=self.device)
-        mask[encoded_actions] = 1
-        # # mark end turn as unavailable if there are other actions available
+        mask = torch.zeros(self.action_dim, dtype=torch.bool, device=self.device)
+        mask[encoded_actions] = True
+        # mark end turn as unavailable if there are other actions available
         if has_available_actions and 1 in encoded_actions:
             # End turn has a value of 1 in the encoded_actions list
-            mask[1] = 0
-        logits = logits.masked_fill(mask == 0, float('-inf'))
+            mask[1] = False
+        logits = logits.masked_fill(~mask, float('-inf'))
 
-        dist = torch.distributions.Categorical(torch.softmax(logits, -1))
+        dist = torch.distributions.Categorical(logits=logits)
         act_idx = dist.sample().item()
         logp: torch.Tensor = dist.log_prob(torch.tensor(act_idx, device=self.device))
 
@@ -118,6 +119,7 @@ class PPOAgent(Agent):
         self.values.append(value.detach())
         self.rewards.append(reward)
         self.dones.append(False)
+        self.masks.append(mask.detach())
 
         # timing
         elapsed = time.perf_counter() - start_time
@@ -169,13 +171,14 @@ class PPOAgent(Agent):
         returnsTensor  = torch.stack(returns).to(self.device)
         advsTensor     = torch.stack(advs).to(self.device)
         advsTensor = (advsTensor - advsTensor.mean()) / (advsTensor.std(unbiased=False) + 1e-8) # normalize advantages
+        masksTensor = torch.stack(self.masks).to(self.device) if self.masks else None
 
         # clear buffers
         self.clear_buffers()
 
-        return states, actions, old_lp, returnsTensor, advsTensor
+        return states, actions, old_lp, returnsTensor, advsTensor, masksTensor
 
-    def update(self, states, actions, old_lp, returns, advs):
+    def update(self, states, actions, old_lp, returns, advs, masks=None):
         self.device = self.main_device
         self.model.to(self.main_device)
 
@@ -196,7 +199,13 @@ class PPOAgent(Agent):
                 A = advs[b]          # Batch of advantages
 
                 logits, vals = self.model(s)  # Forward pass: get action logits and value estimates
-                dist = torch.distributions.Categorical(torch.softmax(logits, -1))  # Action distribution
+
+                # Apply action masks to ensure consistency with the behavior policy
+                if masks is not None:
+                    m = masks[b]
+                    logits = logits.masked_fill(~m, float('-inf'))
+
+                dist = torch.distributions.Categorical(logits=logits)  # Action distribution from masked logits
                 nl = dist.log_prob(a)  # New log probabilities for taken actions
                 ratio = (nl - olp).exp()  # Probability ratio for PPO objective
 
@@ -245,6 +254,7 @@ class PPOAgent(Agent):
         self.rewards = []
         self.values = []
         self.dones = []
+        self.masks = []
 
     def get_average_decision_time(self, reset: bool = True):
         if self.num_decisions == 0:

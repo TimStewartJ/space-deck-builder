@@ -145,8 +145,7 @@ class BatchRunner:
                 logits_batch, values_batch = self.model(states_batch)
 
             logits_batch = logits_batch.masked_fill(masks_batch == 0, float('-inf'))
-            probs_batch = torch.softmax(logits_batch, dim=-1)
-            dist = torch.distributions.Categorical(probs_batch)
+            dist = torch.distributions.Categorical(logits=logits_batch)
             act_indices = dist.sample()
             log_probs = dist.log_prob(act_indices)
 
@@ -165,6 +164,7 @@ class BatchRunner:
                     values_batch[j],
                     reward=0.0,
                     done=False,
+                    mask=pending_masks[j],
                 )
 
                 games[i].apply_decision(action)
@@ -173,13 +173,15 @@ class BatchRunner:
         if not completed_rollouts:
             raise RuntimeError("No completed rollouts")
 
-        S, A, OL, R, Adv = zip(*completed_rollouts)
+        S, A, OL, R, Adv, M = zip(*completed_rollouts)
+        has_masks = all(m is not None for m in M)
         return (
             torch.cat(S).to(self.device),
             torch.cat(A).to(self.device),
             torch.cat(OL).to(self.device),
             torch.cat(R).to(self.device),
             torch.cat(Adv).to(self.device),
+            torch.cat(M).to(self.device) if has_masks else None,
         )
 
     def _start_game(self):
@@ -321,8 +323,7 @@ class BatchRunner:
                 logits_batch, values_batch = self.model(states_batch)
 
             logits_batch = logits_batch.masked_fill(masks_batch == 0, float('-inf'))
-            probs_batch = torch.softmax(logits_batch, dim=-1)
-            dist = torch.distributions.Categorical(probs_batch)
+            dist = torch.distributions.Categorical(logits=logits_batch)
             act_indices = dist.sample()
 
             for j, i in enumerate(pending_indices):

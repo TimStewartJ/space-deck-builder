@@ -40,7 +40,7 @@ class PolicyEvaluator:
             mask[1] = 0
         logits = logits.masked_fill(mask == 0, float('-inf'))
 
-        dist = torch.distributions.Categorical(torch.softmax(logits, -1))
+        dist = torch.distributions.Categorical(logits=logits)
         act_idx = dist.sample().item()
         log_prob = dist.log_prob(torch.tensor(act_idx, device=self.device))
         action = available_actions[encoded_actions.index(int(act_idx))]
@@ -65,7 +65,7 @@ class PolicyEvaluator:
         masks_adj[end_turn_suppress, 1] = 0
 
         logits = logits.masked_fill(masks_adj == 0, float('-inf'))
-        dist = torch.distributions.Categorical(torch.softmax(logits, -1))
+        dist = torch.distributions.Categorical(logits=logits)
         act_indices = dist.sample()
         log_probs = dist.log_prob(act_indices)
 
