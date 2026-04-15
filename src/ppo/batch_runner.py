@@ -1,16 +1,18 @@
 """BatchRunner: runs N concurrent games with batched GPU inference."""
+import random
 import torch
 from typing import Callable, Optional
+from concurrent.futures import ProcessPoolExecutor
 from src.engine.game import Game
 from src.engine.actions import ActionType, get_available_actions
 from src.ai.agent import Agent
 from src.ai.random_agent import RandomAgent
 from src.cards.card import Card
-from src.nn.state_encoder import encode_state
-from src.nn.action_encoder import encode_action
+from src.nn.state_encoder import encode_state, get_state_size
+from src.nn.action_encoder import encode_action, get_action_space_size
 from src.ppo.rollout_buffer import RolloutBuffer
 from src.ppo.ppo_actor_critic import PPOActorCritic
-from src.utils.logger import log
+from src.utils.logger import log, set_disabled
 
 
 class _DummyAgent(Agent):
@@ -335,3 +337,90 @@ class BatchRunner:
         game.add_player(opponent.name, opponent)
         game.start_game()
         return game
+
+
+def _worker_run_episodes(state_dict, card_names, cards, action_dim,
+                         num_episodes, num_concurrent, opponent_type,
+                         opponent_state_dict, seed):
+    """Top-level worker function for ProcessPoolExecutor.
+    
+    Reconstructs model + BatchRunner in a subprocess, runs episodes on CPU,
+    returns rollout tensors.
+    """
+    random.seed(seed)
+    torch.manual_seed(seed)
+    set_disabled(True)
+
+    device = torch.device("cpu")
+    model = PPOActorCritic(
+        get_state_size(card_names), action_dim, len(card_names)
+    ).to(device)
+    model.load_state_dict(state_dict)
+
+    if opponent_type == "ppo":
+        opp_sd = opponent_state_dict
+        def make_opponent():
+            from src.ai.ppo_agent import PPOAgent
+            opp = PPOAgent("Opp", card_names, device="cpu",
+                           main_device="cpu", simulation_device="cpu")
+            opp.model.load_state_dict(opp_sd)
+            return opp
+    elif opponent_type == "heuristic":
+        def make_opponent():
+            from src.ai.heuristic_agent import HeuristicAgent
+            return HeuristicAgent("Heuristic")
+    else:
+        def make_opponent():
+            return RandomAgent("Rand")
+
+    runner = BatchRunner(
+        model=model,
+        card_names=card_names,
+        cards=cards,
+        action_dim=action_dim,
+        device=device,
+        opponent_factory=make_opponent,
+        num_concurrent=num_concurrent,
+    )
+    return runner.run_episodes(num_episodes)
+
+
+def run_episodes_parallel(model, card_names, cards, action_dim,
+                          num_episodes, num_workers=4,
+                          games_per_worker=16,
+                          opponent_type="random",
+                          opponent_state_dict=None,
+                          device=torch.device("cpu")):
+    """Run episodes across multiple worker processes, each with its own BatchRunner.
+    
+    Returns merged (states, actions, old_lp, returns, advantages) on the given device.
+    """
+    state_dict = model.cpu().state_dict()
+
+    # Divide episodes across workers
+    base = num_episodes // num_workers
+    remainder = num_episodes % num_workers
+    episode_counts = [base + (1 if i < remainder else 0) for i in range(num_workers)]
+
+    seeds = [random.randint(0, 1_000_000_000) for _ in range(num_workers)]
+
+    with ProcessPoolExecutor(max_workers=num_workers) as executor:
+        futures = [
+            executor.submit(
+                _worker_run_episodes,
+                state_dict, card_names, cards, action_dim,
+                ep_count, games_per_worker, opponent_type,
+                opponent_state_dict, seed
+            )
+            for ep_count, seed in zip(episode_counts, seeds)
+        ]
+        results = [f.result() for f in futures]
+
+    S, A, OL, R, Adv = zip(*results)
+    return (
+        torch.cat(S).to(device),
+        torch.cat(A).to(device),
+        torch.cat(OL).to(device),
+        torch.cat(R).to(device),
+        torch.cat(Adv).to(device),
+    )

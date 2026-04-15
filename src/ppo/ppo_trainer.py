@@ -11,8 +11,9 @@ from src.ai.agent import Agent
 from src.cards.loader import load_trade_deck_cards
 from src.ai.ppo_agent import PPOAgent
 from src.ai.random_agent import RandomAgent
+from src.ai.heuristic_agent import HeuristicAgent
 from src.nn.action_encoder import get_action_space_size
-from src.ppo.batch_runner import BatchRunner
+from src.ppo.batch_runner import BatchRunner, run_episodes_parallel
 from src.utils.logger import log, set_disabled, set_verbose
 
 
@@ -34,6 +35,8 @@ def main():
     parser.add_argument("--main-device", type=str, default="cuda", help="Device for training/updates (cuda or cpu)")
     parser.add_argument("--simulation-device", type=str, default="cpu", help="Device for episode simulation (cpu or cuda)")
     parser.add_argument("--self-play", action="store_true", help="If set, the agent will play against itself instead of a random agent.")
+    parser.add_argument("--opponent", type=str, default="random", choices=["random", "heuristic"],
+                        help="Opponent type for training when not using self-play (default: random)")
     parser.add_argument("--eval-every", type=int, default=5, help="Run evaluation every N updates (always evals on last update)")
     parser.add_argument("--eval-games", type=int, default=100, help="Number of evaluation games per eval round")
     parser.add_argument("--workers", type=int, default=8, help="Number of parallel processes for episodes")
@@ -83,6 +86,12 @@ def main():
     log(f"Model has {num_params / 1_000_000:.2f}M parameters. Actor input size: {input_size}, output size: {output_size}.")
     opponent = RandomAgent("Rand")
 
+    # Build default opponent factory based on --opponent flag
+    def _make_default_opponent():
+        if args.opponent == "heuristic":
+            return HeuristicAgent("Heuristic")
+        return RandomAgent("Rand")
+
     # Keep a record of all past agent iterations
     past_agents: list[Agent] = [opponent]  # Start with the random agent as the first opponent
 
@@ -96,7 +105,7 @@ def main():
         if args.self_play and len(past_agents) > 1:
             opponent = random.choice(past_agents[:-1])
         else:
-            opponent = RandomAgent("Rand")
+            opponent = _make_default_opponent()
         log(f"Starting update {upd}/{args.updates} (training opponent: {opponent.name})")
         # collect trajectories
         start_time = time.time()
@@ -114,18 +123,43 @@ def main():
                 return opp
         else:
             def make_opponent():
-                return RandomAgent("Rand")
+                return _make_default_opponent()
+        if isinstance(opponent, PPOAgent):
+            opp_type = "ppo"
+            opp_state_dict = opponent.model.cpu().state_dict()
+        elif isinstance(opponent, HeuristicAgent):
+            opp_type = "heuristic"
+            opp_state_dict = None
+        else:
+            opp_type = "random"
+            opp_state_dict = None
 
-        runner = BatchRunner(
-            model=agent.model,
-            card_names=card_names,
-            cards=cards,
-            action_dim=get_action_space_size(card_names),
-            device=agent.simulation_device,
-            opponent_factory=make_opponent,
-            num_concurrent=min(args.episodes, 64),
-        )
-        states, actions, old_lp, returns, advs = runner.run_episodes(args.episodes)
+        action_dim = get_action_space_size(card_names)
+
+        if args.workers > 1:
+            states, actions, old_lp, returns, advs = run_episodes_parallel(
+                model=agent.model,
+                card_names=card_names,
+                cards=cards,
+                action_dim=action_dim,
+                num_episodes=args.episodes,
+                num_workers=args.workers,
+                games_per_worker=max(1, min(args.episodes // args.workers, 32)),
+                opponent_type=opp_type,
+                opponent_state_dict=opp_state_dict,
+                device=agent.main_device,
+            )
+        else:
+            runner = BatchRunner(
+                model=agent.model,
+                card_names=card_names,
+                cards=cards,
+                action_dim=action_dim,
+                device=agent.simulation_device,
+                opponent_factory=make_opponent,
+                num_concurrent=min(args.episodes, 64),
+            )
+            states, actions, old_lp, returns, advs = runner.run_episodes(args.episodes)
         duration_episodes = time.time() - start_time
         total_time_spent_on_episodes += duration_episodes
         log(f"Finished {args.episodes} episodes in {duration_episodes:.2f}s.")
