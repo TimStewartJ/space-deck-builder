@@ -62,11 +62,13 @@ def train(
     pool = OpponentPool(
         opponent_spec=run_cfg.opponents,
         self_play_ratio=run_cfg.self_play_ratio,
+        pfsp_mode=run_cfg.pfsp_mode,
     )
     opp_types = pool.opponent_types
     pool_msg = f"Opponent pool: {', '.join(opp_types)}"
     if run_cfg.self_play:
-        pool_msg += f" + self-play (self-play ratio: {run_cfg.self_play_ratio})"
+        pfsp_info = f", pfsp: {run_cfg.pfsp_mode}" if run_cfg.pfsp_mode != "uniform" else ""
+        pool_msg += f" + self-play (ratio: {run_cfg.self_play_ratio}{pfsp_info})"
     print(pool_msg)
 
     total_time_spent_on_updates = 0.0
@@ -100,6 +102,19 @@ def train(
         duration_episodes = time.time() - start_time
         total_time_spent_on_episodes += duration_episodes
         print(f"Finished {run_cfg.episodes} episodes in {duration_episodes:.2f}s.")
+
+        # Update PFSP win rate estimates from batch results
+        if run_cfg.self_play and run_cfg.pfsp_mode != "uniform":
+            pool.update_results(
+                {k: tuple(v) for k, v in runner.opponent_results.items()}
+            )
+            pfsp_summary = pool.get_pfsp_summary()
+            if pfsp_summary:
+                parts = [
+                    f"{k}: wr={v['ema_win_rate']:.0%} w={v['weight']:.2f}"
+                    for k, v in pfsp_summary.items()
+                ]
+                print(f"  PFSP: {', '.join(parts)}")
 
         # --- Device boundary: sim_device → main_device ---
         # run_episodes() returns tensors on simulation_device.

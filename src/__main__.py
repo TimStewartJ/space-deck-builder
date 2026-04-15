@@ -46,6 +46,9 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                    help="Opponent mix: 'random,heuristic' or 'random:0.6,heuristic:0.4'")
     p.add_argument("--self-play-ratio", type=float, default=_run.self_play_ratio,
                    help="Fraction of games using PPO snapshots when self-play is active")
+    p.add_argument("--pfsp", type=str, default=_run.pfsp_mode,
+                   choices=["uniform", "hard", "variance"],
+                   help="PFSP snapshot weighting: uniform (default), hard, or variance")
     # Devices (defaults sourced from DeviceConfig dataclass)
     p.add_argument("--main-device",       type=str, default=_dev.main_device,
                    help="Device for training updates")
@@ -146,6 +149,7 @@ def _run_train(args):
         self_play=args.self_play,
         opponents=args.opponents,
         self_play_ratio=args.self_play_ratio,
+        pfsp_mode=args.pfsp,
     )
     dev_cfg = DeviceConfig(
         main_device=args.main_device,
