@@ -122,6 +122,44 @@ def parse_effect_text(text: str) -> Effect:
     # Returns a COMPLEX effect with marker text; the loader sets ally_factions on the Card.
     if "counts as an ally for all factions" in text.lower():
         return Effect(CardEffectType.COMPLEX, 0, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)
-    
-    # Default case - store as text for complex effects
+
+    # --- Precompiled complex effects (no runtime text parsing) ---
+
+    # "Draw a card for each <Faction> card" (e.g. Blob World)
+    draw_per_faction = re.search(r"Draw a card for each (\w+) card", text)
+    if draw_per_faction:
+        faction_name = draw_per_faction.group(1)
+        return Effect(CardEffectType.DRAW_PER_FACTION, 0, text,
+                      faction_requirement=faction_requirement,
+                      is_scrap_effect=is_scrap, is_ally_effect=is_ally,
+                      faction_requirement_count=faction_requirement_count,
+                      faction_target=faction_name)
+
+    # "If you have two or more bases in play, draw two cards" (Embassy Yacht)
+    if "two or more bases in play" in text.lower():
+        return Effect(CardEffectType.CONDITIONAL_DRAW, 2, "bases_ge_2",
+                      is_scrap_effect=is_scrap, is_ally_effect=is_ally,
+                      faction_requirement_count=faction_requirement_count)
+
+    # "Scrap up to N cards from your hand and/or discard pile" (Brain World)
+    scrap_up_to = re.search(r"Scrap up to (\w+) cards? from your hand and/or discard pile", text)
+    if scrap_up_to:
+        count_word = scrap_up_to.group(1)
+        count_map = {"one": 1, "two": 2, "three": 3}
+        max_scrap = count_map.get(count_word, int(count_word) if count_word.isdigit() else 1)
+        return Effect(CardEffectType.SCRAP_FROM_HAND_DISCARD, max_scrap, text,
+                      is_scrap_effect=is_scrap, is_ally_effect=is_ally,
+                      faction_requirement_count=faction_requirement_count)
+
+    # "discard up to N cards, then draw that many" (Recycling Station)
+    discard_draw = re.search(r"discard up to (\w+) cards?, then draw that many", text)
+    if discard_draw:
+        count_word = discard_draw.group(1)
+        count_map = {"one": 1, "two": 2, "three": 3}
+        max_discard = count_map.get(count_word, int(count_word) if count_word.isdigit() else 1)
+        return Effect(CardEffectType.DISCARD_DRAW, max_discard, text,
+                      is_scrap_effect=is_scrap, is_ally_effect=is_ally,
+                      faction_requirement_count=faction_requirement_count)
+
+    # Default case — unimplemented effects kept for documentation
     return Effect(CardEffectType.COMPLEX, 0, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)
