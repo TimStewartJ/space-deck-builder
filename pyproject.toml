@@ -14,8 +14,14 @@ dependencies = [
 
 [tool.uv.sources]
 torch = [
-  { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" }
+  { index = "therock-gfx120x", marker = "sys_platform == 'win32'" },
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux'" }
 ]
+
+[[tool.uv.index]]
+name = "therock-gfx120x"
+url = "https://rocm.nightlies.amd.com/v2/gfx120X-all/"
+explicit = true
 
 [[tool.uv.index]]
 name = "pytorch-cu128"
