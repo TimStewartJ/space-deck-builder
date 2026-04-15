@@ -202,52 +202,36 @@ class Game:
                     self.stats.record_card_play(self.current_player.name)
                     if _log_enabled:
                         log(f"{self.current_player.name} played {card.name}", v=True)
-                    played_card = card
-                    # Apply first card effect if ship
-                    if played_card.card_type == "ship" and played_card.effects:
-                        played_card.effects[0].apply(self, self.current_player, played_card)
-                    # Apply auto-effects for the just-played card
-                    for effect in played_card.effects:
-                        if (
-                            effect.effect_type in (
-                                CardEffectType.COMBAT,
-                                CardEffectType.TRADE,
-                                CardEffectType.HEAL,
-                                CardEffectType.DRAW,
-                                CardEffectType.TARGET_DISCARD,
-                                CardEffectType.PARENT,
-                            )
-                            and not effect.is_or_effect
-                        ):
-                            effect.apply(self, self.current_player, played_card)
-                    # Re-check only unapplied faction-gated auto-resolve effects
-                    # on other played cards, since the new card may unlock ally abilities.
-                    # Only auto-resolve types are rechecked — effects like DESTROY_BASE
-                    # and SCRAP remain explicit APPLY_EFFECT decisions for the player.
-                    if played_card.faction:
-                        for other in self.current_player.played_cards:
-                            if other is played_card:
-                                continue
-                            for effect in other.effects:
-                                if (
-                                    not effect.applied
-                                    and effect.faction_requirement
-                                    and not effect.is_or_effect
-                                    and effect.effect_type in (
-                                        CardEffectType.COMBAT,
-                                        CardEffectType.TRADE,
-                                        CardEffectType.HEAL,
-                                        CardEffectType.DRAW,
-                                        CardEffectType.TARGET_DISCARD,
-                                        CardEffectType.PARENT,
-                                    )
-                                ):
-                                    effect.apply(self, self.current_player, other)
+                    # Auto-apply simple resource effects across all played cards.
+                    # Skip scrap effects (must be explicitly chosen), OR effects
+                    # (require a choice), and ally effects (surfaced as APPLY_EFFECT actions).
+                    for pc in list(self.current_player.played_cards):
+                        for effect in pc.effects:
+                            if (
+                                effect.effect_type in (
+                                    CardEffectType.COMBAT,
+                                    CardEffectType.TRADE,
+                                    CardEffectType.HEAL,
+                                    CardEffectType.DRAW,
+                                    CardEffectType.TARGET_DISCARD,
+                                    CardEffectType.PARENT,
+                                )
+                                and not effect.is_or_effect
+                                and not effect.is_scrap_effect
+                                and not effect.faction_requirement
+                            ):
+                                effect.apply(self, self.current_player, pc)
                     break
         
         elif action.type == ActionType.APPLY_EFFECT and action.card_effect is not None:
-            # Apply the effect directly
-            action.card_effect.apply(self, self.current_player)
+            # Resolve source card for scrap-from-play effects
+            source_card = action.card
+            if source_card is None:
+                for c in self.current_player.played_cards + self.current_player.bases:
+                    if c.name == action.card_id:
+                        source_card = c
+                        break
+            action.card_effect.apply(self, self.current_player, source_card)
             if _log_enabled:
                 log(f"{self.current_player.name} applied effect: {action.card_effect}", v=True)
                     
@@ -353,21 +337,31 @@ class Game:
                         if _log_enabled:
                             log(f"{self.current_player.name} scrapped {card.name} from trade row", v=True)
                         break
-                # If this was the last pending action in the current set, refresh the trade row
-                if pending_set_completed <= 0:
+                # Refill trade row after all scraps from the pending set are done
+                if not pending_set or pending_set_completed:
                     self.fill_trade_row()
             # Return explorers to the explorer pile
             if action.card_id == "Explorer" and action.card:
                 self.explorer_pile.append(action.card)
         elif action.type == ActionType.DISCARD_CARDS:
-            # Discard card from hand
-            self.stats.record_cards_discarded_from_hand(self.current_player.name, 1)
-            for card in self.current_player.hand:
+            # Determine target: opponent's hand if forced discard, else current player
+            if action.card_source == "opponent":
+                opponent = self.get_opponent(self.current_player)
+                if opponent is None:
+                    return False
+                target_hand = opponent.hand
+                target_discard = opponent.discard_pile
+                self.stats.record_cards_discarded_from_hand(opponent.name, 1)
+            else:
+                target_hand = self.current_player.hand
+                target_discard = self.current_player.discard_pile
+                self.stats.record_cards_discarded_from_hand(self.current_player.name, 1)
+            for card in target_hand:
                 if card.name == action.card_id:
-                    self.current_player.hand.remove(card)
-                    self.current_player.discard_pile.append(card)
+                    target_hand.remove(card)
+                    target_discard.append(card)
                     if _log_enabled:
-                        log(f"{self.current_player.name} discarded {card.name}", v=True)
+                        log(f"{self.current_player.name} discarded {card.name} from {'opponent' if action.card_source == 'opponent' else 'hand'}", v=True)
                     break
 
         return False  # Turn continues
