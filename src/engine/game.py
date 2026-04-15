@@ -198,9 +198,10 @@ class Game:
         # Handle pending action sets — use identity first, then semantic match
         pending_set = self.current_player.get_current_pending_set()
         pending_set_completed = False
+        pending_skipped = False
         if pending_set:
             if action.type == ActionType.SKIP_DECISION and not pending_set.mandatory:
-                self.current_player.advance_pending_set()
+                pending_skipped = True
             else:
                 # Remove by identity first (fast path for action context resolvers),
                 # then by semantic match (type + card_id + source/target) for legacy
@@ -213,7 +214,6 @@ class Game:
                         break
                 if pending_set.decisions_left <= 0:
                     pending_set_completed = True
-                    self.current_player.advance_pending_set()
 
         if action.type == ActionType.END_TURN:
             return True
@@ -471,6 +471,16 @@ class Game:
             if _log_enabled and target_card:
                 log(f"{self.current_player.name} discarded {target_card.name} from {'opponent' if action.card_source == 'opponent' else 'hand'}", v=True)
 
+        # Finalize pending set after action execution so that card moves
+        # (discard, scrap) happen before any completion effects (draw-on-complete).
+        if pending_set and (pending_skipped or pending_set_completed):
+            if not pending_skipped:
+                pending_set.resolved_count += 1
+            self._complete_pending_set(pending_set)
+        elif pending_set and not pending_skipped and not pending_set_completed:
+            # Action executed successfully within a pending set but set isn't done yet
+            pending_set.resolved_count += 1
+
         return False  # Turn continues
     
     def play(self):
@@ -484,6 +494,18 @@ class Game:
         self.is_running = False
         # Logic to determine the winner and end the game
         pass
+
+    def _complete_pending_set(self, pending_set):
+        """Advance past a completed/skipped pending set and run completion effects.
+
+        Called AFTER the final action in the set has executed, so card moves
+        (discard, scrap) have already happened before any draw-on-complete.
+        """
+        if pending_set.on_complete_draw and pending_set.resolved_count > 0:
+            for _ in range(pending_set.resolved_count):
+                self.current_player.draw_card()
+                self.stats.record_card_draw(self.current_player.name)
+        self.current_player.advance_pending_set()
 
     def add_player(self, name: str, agent: 'Agent'):
         if len(self.players) >= 4:

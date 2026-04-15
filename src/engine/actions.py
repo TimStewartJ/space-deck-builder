@@ -57,6 +57,10 @@ class PendingActionSet:
     actions: List[Action]
     decisions_left: int
     mandatory: bool
+    # Completion tracking: when on_complete_draw is True, the player draws
+    # resolved_count cards after the set finishes (all decisions made or skipped).
+    resolved_count: int = 0
+    on_complete_draw: bool = False
 
 def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
     """Return list of available actions for a player given the current game state"""

@@ -712,3 +712,201 @@ class TestD2BlobWorldFactionSafety:
         blob_world_effect.apply(game, p1, None)
 
         assert len(p1.hand) == initial_hand
+
+
+class TestD3RecyclingStation:
+    """D3: Recycling Station discard-then-draw via pending action completion."""
+
+    def _make_recycling_station_effect(self):
+        return Effect(CardEffectType.COMPLEX, 0,
+                      text="discard up to two cards, then draw that many cards")
+
+    def test_discard_two_draw_two(self):
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        c2 = Card("C2", 1, 0, [], "ship")
+        p1.hand.extend([c1, c2])
+        # Cards to draw after discard
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        effect = self._make_recycling_station_effect()
+        effect.apply(game, p1, None)
+
+        # Should have pending discard actions
+        pending = p1.get_current_pending_set()
+        assert pending is not None
+        assert pending.on_complete_draw is True
+
+        # Discard first card
+        discard1 = [a for a in pending.actions if a.card is c1][0]
+        game.execute_action(discard1)
+
+        # Discard second card
+        pending = p1.get_current_pending_set()
+        discard2 = [a for a in pending.actions if a.card is c2][0]
+        game.execute_action(discard2)
+
+        # Pending set should be done, 2 cards drawn
+        assert p1.get_current_pending_set() is None
+        assert c1 not in p1.hand
+        assert c2 not in p1.hand
+        # Drew 2 cards from deck
+        assert any(c.name == "D1" for c in p1.hand)
+        assert any(c.name == "D2" for c in p1.hand)
+
+    def test_discard_one_then_skip_draw_one(self):
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        c2 = Card("C2", 1, 0, [], "ship")
+        p1.hand.extend([c1, c2])
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        effect = self._make_recycling_station_effect()
+        effect.apply(game, p1, None)
+
+        # Discard one card
+        pending = p1.get_current_pending_set()
+        discard1 = [a for a in pending.actions if a.card is c1][0]
+        game.execute_action(discard1)
+
+        # Skip the rest
+        skip = Action(type=ActionType.SKIP_DECISION)
+        game.execute_action(skip)
+
+        assert p1.get_current_pending_set() is None
+        # Only 1 card drawn (c1 discarded, c2 still in hand, 1 drawn from deck)
+        assert c1 not in p1.hand
+        assert c2 in p1.hand
+        assert len(p1.hand) == 2  # c2 + 1 drawn
+
+    def test_skip_immediately_draw_zero(self):
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        p1.hand.append(c1)
+        p1.deck.append(Card("D1", 1, 0, [], "ship"))
+        initial_hand_size = len(p1.hand)
+
+        effect = self._make_recycling_station_effect()
+        effect.apply(game, p1, None)
+
+        # Skip without discarding
+        skip = Action(type=ActionType.SKIP_DECISION)
+        game.execute_action(skip)
+
+        assert p1.get_current_pending_set() is None
+        # No cards drawn, hand unchanged (c1 still there)
+        assert len(p1.hand) == initial_hand_size
+
+    def test_or_branch_trade_no_discard(self):
+        """Choosing the trade branch of Recycling Station should not trigger discard/draw."""
+        game, p1, _ = _make_game_with_players()
+        # Recycling Station as an OR: {Gain 1 Trade} OR discard-then-draw
+        trade_effect = Effect(CardEffectType.TRADE, 1)
+        trade_effect.apply(game, p1, None)
+
+        assert p1.trade == 1
+        assert p1.get_current_pending_set() is None
+
+
+class TestD4BrainWorld:
+    """D4: Brain World scrap-then-draw via pending action completion."""
+
+    def _make_brain_world_effect(self):
+        return Effect(CardEffectType.COMPLEX, 0,
+                      text="Scrap up to two cards from your hand and/or discard pile")
+
+    def test_scrap_two_draw_two(self):
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        c2 = Card("C2", 1, 0, [], "ship")
+        p1.hand.append(c1)
+        p1.discard_pile.append(c2)
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        effect = self._make_brain_world_effect()
+        effect.apply(game, p1, None)
+
+        pending = p1.get_current_pending_set()
+        assert pending is not None
+        assert pending.on_complete_draw is True
+
+        # Scrap from hand
+        scrap1 = [a for a in pending.actions if a.card is c1][0]
+        game.execute_action(scrap1)
+
+        # Scrap from discard
+        pending = p1.get_current_pending_set()
+        scrap2 = [a for a in pending.actions if a.card is c2][0]
+        game.execute_action(scrap2)
+
+        assert p1.get_current_pending_set() is None
+        assert c1 not in p1.hand
+        assert c2 not in p1.discard_pile
+        assert any(c.name == "D1" for c in p1.hand)
+        assert any(c.name == "D2" for c in p1.hand)
+
+    def test_scrap_one_then_skip_draw_one(self):
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        p1.hand.append(c1)
+        p1.deck.extend([Card("D1", 1, 0, [], "ship"), Card("D2", 2, 0, [], "ship")])
+
+        effect = self._make_brain_world_effect()
+        effect.apply(game, p1, None)
+
+        # Scrap one
+        pending = p1.get_current_pending_set()
+        scrap1 = [a for a in pending.actions if a.card is c1][0]
+        game.execute_action(scrap1)
+
+        # Skip remaining
+        skip = Action(type=ActionType.SKIP_DECISION)
+        game.execute_action(skip)
+
+        assert p1.get_current_pending_set() is None
+        # c1 scrapped, 1 card drawn from deck
+        assert c1 not in p1.hand
+        assert len(p1.hand) == 1
+
+    def test_skip_immediately_draw_zero(self):
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        p1.hand.append(c1)
+        p1.deck.append(Card("D1", 1, 0, [], "ship"))
+        initial_hand_size = len(p1.hand)
+
+        effect = self._make_brain_world_effect()
+        effect.apply(game, p1, None)
+
+        skip = Action(type=ActionType.SKIP_DECISION)
+        game.execute_action(skip)
+
+        assert p1.get_current_pending_set() is None
+        assert len(p1.hand) == initial_hand_size  # no draw
+
+    def test_mixed_sources_hand_and_discard(self):
+        """Scrapping one from hand and one from discard should both count."""
+        game, p1, _ = _make_game_with_players()
+        h1 = Card("Hand1", 0, 0, [], "ship")
+        d1 = Card("Disc1", 1, 0, [], "ship")
+        p1.hand.append(h1)
+        p1.discard_pile.append(d1)
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        effect = self._make_brain_world_effect()
+        effect.apply(game, p1, None)
+
+        pending = p1.get_current_pending_set()
+        # Scrap from hand
+        scrap_hand = [a for a in pending.actions if a.card_source == "hand" and a.card is h1][0]
+        game.execute_action(scrap_hand)
+
+        # Scrap from discard
+        pending = p1.get_current_pending_set()
+        scrap_disc = [a for a in pending.actions if a.card_source == "discard" and a.card is d1][0]
+        game.execute_action(scrap_disc)
+
+        assert p1.get_current_pending_set() is None
+        assert h1 not in p1.hand
+        assert d1 not in p1.discard_pile
+        assert len([c for c in p1.hand if c.name in ("D1", "D2")]) == 2
