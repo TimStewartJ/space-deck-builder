@@ -56,7 +56,8 @@ class BatchRunner:
     def run_episodes(self, num_episodes: int) -> tuple:
         """Run num_episodes games and return aggregated rollout data.
         
-        Returns: (states, actions, old_log_probs, returns, advantages)
+        Returns: (states, actions, old_log_probs, returns, advantages, masks)
+            masks is a Tensor of valid-action masks per step, or None if unavailable.
         """
         self.model.to(self.device)
         self.model.eval()
@@ -404,7 +405,8 @@ def run_episodes_parallel(model, card_names, cards, action_dim,
                           device=torch.device("cpu")):
     """Run episodes across multiple worker processes, each with its own BatchRunner.
     
-    Returns merged (states, actions, old_lp, returns, advantages) on the given device.
+    Returns merged (states, actions, old_lp, returns, advantages, masks) on the given device.
+    masks is a Tensor of valid-action masks per step, or None if unavailable.
     """
     state_dict = model.cpu().state_dict()
 
