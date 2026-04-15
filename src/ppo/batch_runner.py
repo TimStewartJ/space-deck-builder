@@ -351,6 +351,9 @@ def _worker_run_episodes(state_dict, card_names, cards, action_dim,
     torch.manual_seed(seed)
     set_disabled(True)
 
+    # Limit PyTorch internal threads to avoid contention across workers
+    torch.set_num_threads(1)
+
     device = torch.device("cpu")
     model = PPOActorCritic(
         get_state_size(card_names), action_dim, len(card_names)
@@ -365,10 +368,6 @@ def _worker_run_episodes(state_dict, card_names, cards, action_dim,
                            main_device="cpu", simulation_device="cpu")
             opp.model.load_state_dict(opp_sd)
             return opp
-    elif opponent_type == "heuristic":
-        def make_opponent():
-            from src.ai.heuristic_agent import HeuristicAgent
-            return HeuristicAgent("Heuristic")
     else:
         def make_opponent():
             return RandomAgent("Rand")

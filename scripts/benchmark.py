@@ -63,7 +63,26 @@ def benchmark_batched(num_episodes, card_names, cards, device):
     total_steps = states.shape[0]
     return total_steps, None, elapsed
 
-def benchmark(num_episodes=64, device="cpu", mode="both"):
+def benchmark_parallel(num_episodes, card_names, cards, device, num_workers=4):
+    """Multi-process batched benchmark."""
+    from src.ppo.batch_runner import run_episodes_parallel
+    state_dim = get_state_size(card_names)
+    action_dim = get_action_space_size(card_names)
+    model = PPOActorCritic(state_dim, action_dim, len(card_names)).to(device)
+
+    start = time.perf_counter()
+    states, actions, old_lp, returns, advs = run_episodes_parallel(
+        model=model, card_names=card_names, cards=cards,
+        action_dim=action_dim, num_episodes=num_episodes,
+        num_workers=num_workers,
+        games_per_worker=max(1, min(num_episodes // num_workers, 32)),
+        device=device,
+    )
+    elapsed = time.perf_counter() - start
+    total_steps = states.shape[0]
+    return total_steps, None, elapsed
+
+def benchmark(num_episodes=64, device="cpu", mode="both", workers=4):
     set_disabled(True)
     cards = load_trade_deck_cards("data/cards.csv", filter_sets=["Core Set"], log_cards=False)
     card_names = list(dict.fromkeys(c.name for c in cards)) + ["Scout", "Viper", "Explorer"]
@@ -81,19 +100,31 @@ def benchmark(num_episodes=64, device="cpu", mode="both"):
 
     if mode in ("batched", "both"):
         total_steps, _, elapsed = benchmark_batched(num_episodes, card_names, cards, device)
-        print(f"=== Batched Benchmark ===")
+        print(f"=== Batched (1 process) ===")
         print(f"Episodes:      {num_episodes}")
         print(f"Total steps:   {total_steps}")
         print(f"Wall time:     {elapsed:.2f}s")
         print(f"Steps/sec:     {total_steps / elapsed:.1f}")
         print(f"Episodes/sec:  {num_episodes / elapsed:.2f}")
         print(f"Device:        {device}")
+        print()
+
+    if mode in ("parallel", "both"):
+        total_steps, _, elapsed = benchmark_parallel(num_episodes, card_names, cards, torch.device("cpu"), workers)
+        print(f"=== Parallel ({workers} workers) ===")
+        print(f"Episodes:      {num_episodes}")
+        print(f"Total steps:   {total_steps}")
+        print(f"Wall time:     {elapsed:.2f}s")
+        print(f"Steps/sec:     {total_steps / elapsed:.1f}")
+        print(f"Episodes/sec:  {num_episodes / elapsed:.2f}")
+        print(f"Device:        cpu (per-worker)")
 
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--episodes", type=int, default=64)
+    parser.add_argument("--episodes", type=int, default=128)
     parser.add_argument("--device", type=str, default="cpu")
-    parser.add_argument("--mode", type=str, default="both", choices=["sequential", "batched", "both"])
+    parser.add_argument("--mode", type=str, default="both", choices=["sequential", "batched", "parallel", "both"])
+    parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args()
-    benchmark(args.episodes, args.device, args.mode)
+    benchmark(args.episodes, args.device, args.mode, args.workers)
