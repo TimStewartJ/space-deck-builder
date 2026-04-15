@@ -1,18 +1,22 @@
 from typing import List, Optional
 from src.cards.card import Card
 from src.ai.agent import Agent
+from src.config import GameConfig
 from src.engine.actions import ActionType, Action, get_available_actions, PendingActionSet
 
 class Player:
-    def __init__(self, name, agent, starting_health: int = 50, hand_size: int = 5):
+    def __init__(self, name, agent, starting_health: int | None = None,
+                 hand_size: int | None = None,
+                 game_config: GameConfig | None = None):
+        cfg = game_config or GameConfig()
         self.name: str = name
         self.hand: List[Card] = []
         self.deck: List[Card] = []
         self.discard_pile: List[Card] = []
         self.bases: List[Card] = []
         self.played_cards: List[Card] = []
-        self.health = starting_health
-        self.hand_size = hand_size
+        self.health = starting_health if starting_health is not None else cfg.starting_health
+        self.hand_size = hand_size if hand_size is not None else cfg.hand_size
         self.agent: Agent = agent  # Could be human or AI
         
         # Resources that reset each turn

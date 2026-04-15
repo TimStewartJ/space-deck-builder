@@ -44,12 +44,20 @@ class OpponentPool:
 
     def __init__(
         self,
-        opponent_spec: str = "random",
-        self_play_ratio: float = 0.5,
+        opponent_spec: str | None = None,
+        self_play_ratio: float | None = None,
         snapshot_cap: int = 10,
-        pfsp_mode: str = "uniform",
+        pfsp_mode: str | None = None,
         pfsp_ema_alpha: float = 0.3,
     ):
+        from src.config import RunConfig
+        _defaults = RunConfig()
+        if opponent_spec is None:
+            opponent_spec = _defaults.opponents
+        if self_play_ratio is None:
+            self_play_ratio = _defaults.self_play_ratio
+        if pfsp_mode is None:
+            pfsp_mode = _defaults.pfsp_mode
         if pfsp_mode not in PFSP_MODES:
             raise ValueError(
                 f"Unknown PFSP mode {pfsp_mode!r}. "

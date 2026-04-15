@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from typing import Callable, Optional
 from concurrent.futures import ProcessPoolExecutor
-from src.config import PPOConfig
+from src.config import PPOConfig, RunConfig
 from src.engine.game import Game
 from src.engine.actions import ActionType, get_available_actions
 from src.ai.agent import Agent
@@ -12,7 +12,7 @@ from src.ai.random_agent import RandomAgent
 from src.cards.card import Card
 from src.cards.registry import CardRegistry
 from src.encoding.state_encoder import encode_state, get_state_size
-from src.encoding.action_encoder import encode_action, get_action_space_size
+from src.encoding.action_encoder import encode_action, get_action_space_size, END_TURN_INDEX
 from src.encoding.action_context import build_action_context, ActionContext
 from src.ppo.rollout_buffer import RolloutBuffer
 from src.ppo.ppo_actor_critic import PPOActorCritic
@@ -40,7 +40,7 @@ class BatchRunner:
         action_dim: int,
         device: torch.device,
         opponent_factory: Callable[[], Agent] = lambda: RandomAgent("Rand"),
-        num_concurrent: int = 64,
+        num_concurrent: int | None = None,
         ppo_config: PPOConfig | None = None,
         registry: CardRegistry | None = None,
     ):
@@ -50,7 +50,7 @@ class BatchRunner:
         self.action_dim = action_dim
         self.device = device
         self.opponent_factory = opponent_factory
-        self.num_concurrent = num_concurrent
+        self.num_concurrent = num_concurrent if num_concurrent is not None else RunConfig().num_concurrent
         self.ppo_config = ppo_config or PPOConfig()
         self.training_agent_name = "PPO"
         # Use registry's pre-built map, or build one on the fly for compat
@@ -67,7 +67,7 @@ class BatchRunner:
         self._mask_buf = np.zeros(action_dim, dtype=bool)
         # Per-opponent result tracking for PFSP
         self.opponent_results: dict[str, list[int]] = {}
-        self._game_opponents: list[str | None] = [None] * num_concurrent
+        self._game_opponents: list[str | None] = [None] * self.num_concurrent
 
     def run_episodes(self, num_episodes: int) -> tuple:
         """Run num_episodes games and return aggregated rollout data.
@@ -164,9 +164,8 @@ class BatchRunner:
             masks_batch = torch.zeros(len(pending_states), self.action_dim, device=self.device)
             for j, ctx in enumerate(pending_contexts):
                 masks_batch[j] = torch.from_numpy(ctx.mask.astype(np.float32))
-                # Suppress END_TURN when meaningful actions exist
                 if ctx.has_meaningful:
-                    masks_batch[j, 1] = 0
+                    masks_batch[j, END_TURN_INDEX] = 0
 
             with torch.no_grad():
                 logits_batch, values_batch = self.model(states_batch)
@@ -367,7 +366,7 @@ class BatchRunner:
             for j, ctx in enumerate(pending_contexts):
                 masks_batch[j] = torch.from_numpy(ctx.mask.astype(np.float32))
                 if ctx.has_meaningful:
-                    masks_batch[j, 1] = 0
+                    masks_batch[j, END_TURN_INDEX] = 0
 
             with torch.no_grad():
                 logits_batch, values_batch = self.model(states_batch)

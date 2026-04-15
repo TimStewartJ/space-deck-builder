@@ -12,7 +12,8 @@ import sys
 
 def _add_common_args(parser: argparse.ArgumentParser):
     """Add args shared across subcommands."""
-    parser.add_argument("--cards-path", type=str, default="data/cards.csv")
+    from src.config import DataConfig
+    parser.add_argument("--cards-path", type=str, default=DataConfig().cards_path)
 
 
 def _build_train_parser(sub: argparse._SubParsersAction):
@@ -63,6 +64,10 @@ def _build_train_parser(sub: argparse._SubParsersAction):
 
 
 def _build_simulate_parser(sub: argparse._SubParsersAction):
+    from src.config import DeviceConfig, SimConfig
+    _dev = DeviceConfig()
+    _sim = SimConfig()
+
     p = sub.add_parser("simulate", help="Run PPO vs opponent simulation")
     _add_common_args(p)
     p.add_argument("--model1", type=str, default=None,
@@ -71,25 +76,32 @@ def _build_simulate_parser(sub: argparse._SubParsersAction):
                    help="PPO model for player 2")
     p.add_argument("--player2-random", action="store_true", default=True,
                    help="Use random agent for player 2")
-    p.add_argument("--games", type=int, default=50)
-    p.add_argument("--simulation-device", type=str, default="cpu",
+    p.add_argument("--games", type=int, default=_sim.games)
+    p.add_argument("--simulation-device", type=str, default=_dev.simulation_device,
                    help="Device for inference (cuda or cpu)")
     return p
 
 
 def _build_benchmark_parser(sub: argparse._SubParsersAction):
+    from src.config import DeviceConfig
+    _dev = DeviceConfig()
+
     p = sub.add_parser("benchmark", help="Benchmark training throughput")
     _add_common_args(p)
     p.add_argument("--episodes", type=int, default=128)
     p.add_argument("--mode", type=str, default="both",
                    choices=["sequential", "batched", "parallel", "both"])
     p.add_argument("--workers", type=int, default=4)
-    p.add_argument("--simulation-device", type=str, default="cpu",
+    p.add_argument("--simulation-device", type=str, default=_dev.simulation_device,
                    help="Device for inference (cuda or cpu)")
     return p
 
 
 def _build_elo_parser(sub: argparse._SubParsersAction):
+    from src.config import DeviceConfig, RunConfig
+    _dev = DeviceConfig()
+    _run = RunConfig()
+
     p = sub.add_parser("elo", help="Run Elo tournament between checkpoints")
     _add_common_args(p)
     p.add_argument("--checkpoints", type=str, nargs="+", required=True,
@@ -97,10 +109,10 @@ def _build_elo_parser(sub: argparse._SubParsersAction):
                         "(e.g. 'models/ppo_agent_0415_*upd*0.pth')")
     p.add_argument("--games-per-pair", type=int, default=50,
                    help="Games to play per pairing (default: 50)")
-    p.add_argument("--simulation-device", type=str, default="cpu",
+    p.add_argument("--simulation-device", type=str, default=_dev.simulation_device,
                    help="Device for inference (cuda or cpu)")
-    p.add_argument("--num-concurrent", type=int, default=32,
-                   help="Concurrent games in BatchRunner (default: 32)")
+    p.add_argument("--num-concurrent", type=int, default=_run.num_concurrent,
+                   help=f"Concurrent games in BatchRunner (default: {_run.num_concurrent})")
     return p
 
 

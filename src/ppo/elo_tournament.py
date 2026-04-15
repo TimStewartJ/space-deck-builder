@@ -149,8 +149,8 @@ def run_tournament(
     checkpoint_paths: list[str],
     data_cfg: DataConfig,
     games_per_pair: int = 50,
-    device: str = "cpu",
-    num_concurrent: int = 32,
+    device: str | None = None,
+    num_concurrent: int | None = None,
 ) -> list[EloResult]:
     """Run a round-robin Elo tournament between checkpoints.
 
@@ -160,6 +160,12 @@ def run_tournament(
 
     Returns a list of EloResult sorted by Elo descending.
     """
+    from src.config import DeviceConfig, RunConfig
+    if device is None:
+        device = DeviceConfig().simulation_device
+    device = DeviceConfig.resolve(device)
+    if num_concurrent is None:
+        num_concurrent = RunConfig().num_concurrent
     if len(checkpoint_paths) < 2:
         raise ValueError("Need at least 2 checkpoints for a tournament")
     if games_per_pair < 1:

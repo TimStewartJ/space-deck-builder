@@ -4,7 +4,7 @@ from typing import List
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.engine.actions import ActionType, Action
 from src.encoding.state_encoder import encode_state, get_state_size, build_card_index_map
-from src.encoding.action_encoder import encode_action, get_action_space_size
+from src.encoding.action_encoder import encode_action, get_action_space_size, END_TURN_INDEX
 
 
 class PolicyEvaluator:
@@ -42,8 +42,8 @@ class PolicyEvaluator:
         logits, value = self.model(state)
         mask = torch.zeros(self.action_dim, device=self.device)
         mask[encoded_actions] = 1
-        if has_meaningful_actions and 1 in encoded_actions:
-            mask[1] = 0
+        if has_meaningful_actions and END_TURN_INDEX in encoded_actions:
+            mask[END_TURN_INDEX] = 0
         logits = logits.masked_fill(mask == 0, float('-inf'))
 
         dist = torch.distributions.Categorical(logits=logits)
@@ -65,10 +65,10 @@ class PolicyEvaluator:
         """
         logits, values = self.model(states)
 
-        # Suppress END_TURN (index 1) when meaningful actions exist
-        end_turn_suppress = meaningful_action_flags & masks[:, 1].bool()
+        # Suppress END_TURN when meaningful actions exist
+        end_turn_suppress = meaningful_action_flags & masks[:, END_TURN_INDEX].bool()
         masks_adj = masks.clone()
-        masks_adj[end_turn_suppress, 1] = 0
+        masks_adj[end_turn_suppress, END_TURN_INDEX] = 0
 
         logits = logits.masked_fill(masks_adj == 0, float('-inf'))
         dist = torch.distributions.Categorical(logits=logits)

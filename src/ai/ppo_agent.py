@@ -9,7 +9,7 @@ from src.encoding.state_utils import unpack_state
 from src.ai.agent import Agent
 from src.engine.actions import ActionType, get_available_actions
 from src.encoding.state_encoder import encode_state, get_state_size, build_card_index_map
-from src.encoding.action_encoder import encode_action, decode_action, get_action_space_size
+from src.encoding.action_encoder import encode_action, decode_action, get_action_space_size, END_TURN_INDEX
 from src.utils.logger import log
 
 if TYPE_CHECKING:
@@ -28,8 +28,8 @@ class PPOAgent(Agent):
         batch_size: int | None = None,
         entropy_coef: float | None = None,
         device: str | None = None,
-        main_device: str = "cuda",
-        simulation_device: str = "cuda",
+        main_device: str | None = None,
+        simulation_device: str | None = None,
         model_path: Optional[str] = None,
         log_debug: bool = False,
         # Config-based construction (preferred)
@@ -73,20 +73,20 @@ class PPOAgent(Agent):
         self.batch_size = self.ppo_config.batch_size
         self.entropy_coef = self.ppo_config.entropy_coef
 
-        # Resolve devices: DeviceConfig > explicit kwargs > defaults
+        # Resolve devices: DeviceConfig > explicit kwargs > DeviceConfig defaults
         if device_config is not None:
             main_dev_str = dev.main_device
             sim_dev_str = dev.simulation_device
         else:
-            main_dev_str = main_device
-            sim_dev_str = simulation_device
+            main_dev_str = main_device if main_device is not None else dev.main_device
+            sim_dev_str = simulation_device if simulation_device is not None else dev.simulation_device
         # Legacy `device` kwarg overrides both if provided
         if device is not None:
             main_dev_str = device
             sim_dev_str = device
 
-        self.main_device = torch.device(main_dev_str if torch.cuda.is_available() else "cpu")
-        self.simulation_device = torch.device(sim_dev_str if torch.cuda.is_available() else "cpu")
+        self.main_device = torch.device(DeviceConfig.resolve(main_dev_str))
+        self.simulation_device = torch.device(DeviceConfig.resolve(sim_dev_str))
         self.device = self.simulation_device  # active device starts as simulation
 
         self.cards = card_names
@@ -154,10 +154,9 @@ class PPOAgent(Agent):
         # mask out unavailable actions using encoded_actions
         mask = torch.zeros(self.action_dim, dtype=torch.bool, device=self.device)
         mask[encoded_actions] = True
-        # mark end turn as unavailable if there are other actions available
-        if has_available_actions and 1 in encoded_actions:
-            # End turn has a value of 1 in the encoded_actions list
-            mask[1] = False
+        # Suppress END_TURN when meaningful actions are available
+        if has_available_actions and END_TURN_INDEX in encoded_actions:
+            mask[END_TURN_INDEX] = False
         logits = logits.masked_fill(~mask, float('-inf'))
 
         dist = torch.distributions.Categorical(logits=logits)

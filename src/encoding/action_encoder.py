@@ -3,6 +3,13 @@ from src.engine.actions import Action, ActionType
 from src.utils.logger import log
 from src.cards.effects import Effect, CardEffectType
 
+# Canonical action-index constants. Import these instead of hardcoding
+# magic numbers when building or inspecting action masks.
+INVALID_INDEX = 0
+END_TURN_INDEX = 1
+SKIP_INDEX = 2
+
+
 def get_action_space_size(cards: list[str]) -> int:
     """Calculate the total size of the action space based on the encoding scheme.
 

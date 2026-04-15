@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from src.engine.actions import Action, ActionType, PendingActionSet
 from src.cards.effects import CardEffectType
+from src.encoding.action_encoder import END_TURN_INDEX, SKIP_INDEX
 
 if TYPE_CHECKING:
     from src.engine.game import Game
@@ -83,8 +84,8 @@ def build_action_context(
     num_cards = len(card_index_map)
 
     # Pre-compute offset bases (must match action_encoder.py encoding scheme)
-    IDX_END_TURN = 1
-    IDX_SKIP = 2
+    IDX_END_TURN = END_TURN_INDEX
+    IDX_SKIP = SKIP_INDEX
     OFF_PLAY = 3
     OFF_BUY = OFF_PLAY + num_cards
     IDX_ATTACK_PLAYER = OFF_BUY + num_cards
@@ -256,9 +257,9 @@ def _encode_action_index(action, card_index_map, num_cards,
     ci = card_index_map.get(action.card_id) if action.card_id else None
 
     if action.type == ActionType.END_TURN:
-        return 1
+        return END_TURN_INDEX
     if action.type == ActionType.SKIP_DECISION:
-        return 2
+        return SKIP_INDEX
     if action.type == ActionType.PLAY_CARD and ci is not None:
         return off_play + ci
     if action.type == ActionType.BUY_CARD and ci is not None:

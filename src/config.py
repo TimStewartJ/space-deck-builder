@@ -125,7 +125,7 @@ class RunConfig:
     updates: int = 200
     num_workers: int = 4
     games_per_worker: int = 16
-    num_concurrent: int = 64
+    num_concurrent: int = 256
     eval_every: int = 5
     eval_games: int = 100
     self_play: bool = False
@@ -146,6 +146,23 @@ class DeviceConfig:
     """Device placement for training and simulation."""
     main_device: str = "cuda"
     simulation_device: str = "cuda"
+
+    @staticmethod
+    def resolve(device: str) -> str:
+        """Return *device* if available, falling back to ``"cpu"``.
+
+        Call this before any ``torch.device()`` / ``.to()`` to safely
+        default to CUDA without crashing on CPU-only machines.
+        """
+        if device in ("cpu", ""):
+            return "cpu"
+        try:
+            import torch
+            if torch.cuda.is_available():
+                return device
+        except Exception:
+            pass
+        return "cpu"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

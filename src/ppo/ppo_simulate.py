@@ -11,7 +11,10 @@ from src.ai.random_agent import RandomAgent
 from src.utils.logger import log, set_verbose
 
 
-def get_latest_model(models_dir="models"):
+def get_latest_model(models_dir=None):
+    if models_dir is None:
+        from src.config import DataConfig
+        models_dir = DataConfig().models_dir
     model_files = glob.glob(os.path.join(models_dir, "ppo_agent_*.pth"))
     if not model_files:
         return None
@@ -24,9 +27,13 @@ def simulate(
     sim_cfg: SimConfig,
     model1_path: str | None = None,
     model2_path: str | None = None,
-    device: str = "cuda",
+    device: str | None = None,
 ):
     """Run PPO vs opponent simulation."""
+    from src.config import DeviceConfig
+    if device is None:
+        device = DeviceConfig().simulation_device
+    device = DeviceConfig.resolve(device)
     set_verbose(False)
     cards = data_cfg.load_cards()
     registry = data_cfg.build_registry(cards)
@@ -37,7 +44,8 @@ def simulate(
     if not resolved_model1:
         raise RuntimeError("No PPO model found for player 1.")
     log(f"Loading PPO model for player 1 from {resolved_model1}")
-    agent1 = PPOAgent("PPO_1", names, model_path=resolved_model1, registry=registry)
+    agent1 = PPOAgent("PPO_1", names, model_path=resolved_model1, registry=registry,
+                      device=device)
 
     # Player 2: PPO agent or random agent
     if sim_cfg.player2_random or not model2_path:
@@ -45,7 +53,8 @@ def simulate(
         log("Player 2 set to RandomAgent.")
     else:
         log(f"Loading PPO model for player 2 from {model2_path}")
-        agent2 = PPOAgent("PPO_2", names, model_path=model2_path, registry=registry)
+        agent2 = PPOAgent("PPO_2", names, model_path=model2_path, registry=registry,
+                          device=device)
 
     wins1, wins2 = 0, 0
     all_experiences = []

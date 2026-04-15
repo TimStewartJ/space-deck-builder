@@ -14,7 +14,9 @@ from src.ppo.ppo_trainer import train
 
 
 def run_profiled_training(device: str = "cpu"):
-    data_cfg = DataConfig(cards_path="data/cards.csv")
+    data_cfg = DataConfig()
+    # Intentional overrides for profiling: these differ from PPOConfig/RunConfig
+    # defaults to keep profiling runs short and exercise all opponent types.
     ppo_cfg = PPOConfig(
         lr=3e-4, gamma=0.995, lam=0.99,
         clip_eps=0.3, epochs=4, batch_size=1024,
@@ -79,8 +81,9 @@ def run_profiled_training(device: str = "cpu"):
 
 
 if __name__ == "__main__":
+    from src.config import DeviceConfig
     parser = argparse.ArgumentParser()
-    parser.add_argument("--device", type=str, default="cpu",
+    parser.add_argument("--device", type=str, default=DeviceConfig().simulation_device,
                         help="Device for training (cpu or cuda)")
     args = parser.parse_args()
     run_profiled_training(args.device)

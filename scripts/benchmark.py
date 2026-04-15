@@ -83,7 +83,11 @@ def benchmark_parallel(num_episodes, card_names, cards, device, num_workers=4):
     total_steps = states.shape[0]
     return total_steps, None, elapsed
 
-def benchmark(num_episodes=64, device="cpu", mode="both", workers=4):
+def benchmark(num_episodes=64, device=None, mode="both", workers=4):
+    from src.config import DeviceConfig
+    if device is None:
+        device = DeviceConfig().simulation_device
+    device = DeviceConfig.resolve(device)
     set_disabled(True)
     data_cfg = DataConfig()
     cards = data_cfg.load_cards()

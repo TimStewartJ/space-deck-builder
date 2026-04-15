@@ -40,8 +40,7 @@ class Game:
         self.explorer_pile: List[Card] = []
         self.is_running = False
         self.current_player: Player = Player("none", Agent("none"),
-                                             starting_health=self.config.starting_health,
-                                             hand_size=self.config.hand_size)
+                                             game_config=self.config)
         self.stats = GameStats()
         self.first_player_name = None
 
@@ -530,9 +529,7 @@ class Game:
         if len(self.players) >= 4:
             raise ValueError("Maximum number of players reached")
         from src.engine.player import Player
-        player = Player(name, agent,
-                        starting_health=self.config.starting_health,
-                        hand_size=self.config.hand_size)
+        player = Player(name, agent, game_config=self.config)
         self.players.append(player)
         return player
         

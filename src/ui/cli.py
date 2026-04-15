@@ -1,5 +1,5 @@
 from src.engine.game import Game
-from src.cards.loader import load_trade_deck_cards
+from src.config import DataConfig
 from src.engine.aggregate_stats import AggregateStats
 from src.utils.logger import log, set_disabled, set_verbose
 import os
@@ -187,7 +187,7 @@ class CLI:
                     if self.games_count > 1:
                         print(f"\nStarting game {game_num + 1} of {self.games_count}")
                     
-                    cards = load_trade_deck_cards('data/cards.csv', filter_sets=["Core Set"])
+                    cards = DataConfig().load_cards()
                     self.game = Game(cards)
                     
                     # Add both players with their selected agents

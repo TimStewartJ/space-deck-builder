@@ -7,9 +7,13 @@ from src.utils.logger import log
 from .card import Card
 from .effects import Effect
 
-def load_trade_deck_cards(file_path='data/cards.csv', filter_names=None, filter_sets=['Core Set'], log_cards = True) -> list[Card]:
+def load_trade_deck_cards(file_path=None, filter_names=None, filter_sets=None, log_cards=True) -> list[Card]:
     """
     Load cards from a CSV file with optional filtering by name and set.
+
+    Defaults for *file_path* and *filter_sets* are sourced from
+    :class:`~src.config.DataConfig` so that all paths and filters have a
+    single source of truth.
     
     Args:
         file_path (str): Path to the CSV file containing card data
@@ -19,6 +23,13 @@ def load_trade_deck_cards(file_path='data/cards.csv', filter_names=None, filter_
     Returns:
         list[Card]: List of card objects that match the filters
     """
+    if file_path is None or filter_sets is None:
+        from src.config import DataConfig
+        _defaults = DataConfig()
+        if file_path is None:
+            file_path = _defaults.cards_path
+        if filter_sets is None:
+            filter_sets = _defaults.filter_sets
 
     cards: list[Card] = []
     with open(file_path, mode='r', newline='', encoding='utf-8') as csvfile:
