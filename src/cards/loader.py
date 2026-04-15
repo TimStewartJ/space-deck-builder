@@ -83,6 +83,12 @@ def load_trade_deck_cards(file_path='data/cards.csv', filter_names=None, filter_
                 set=row['Set']
             )
 
+            # Detect ally_factions from effect text (e.g. Mech World)
+            for effect in effects:
+                if effect.effect_type.name == "COMPLEX" and "counts as an ally for all factions" in effect.text.lower():
+                    card.ally_factions = ["*"]
+                    break
+
             index += 1
                 
             # Add multiple copies based on Qty

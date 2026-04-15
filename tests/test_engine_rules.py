@@ -189,6 +189,102 @@ class TestA3MultiFactionAllyCount:
         assert player.get_faction_ally_count("Blob") == 2
 
 
+class TestE1AllyFactions:
+    """E1: Extensible ally_factions system — wildcard, specific list, fallback."""
+
+    def test_wildcard_counts_for_any_faction(self):
+        """A card with ally_factions=["*"] counts as ally for every faction."""
+        player = Player("P1", Agent("P1"))
+        mech_world = _make_outpost(name="Mech World", faction="Machine Cult")
+        mech_world.ally_factions = ["*"]
+        player.hand.append(mech_world)
+        player.play_card(mech_world)
+
+        assert player.get_faction_ally_count("Blob") == 1
+        assert player.get_faction_ally_count("Star Empire") == 1
+        assert player.get_faction_ally_count("Trade Federation") == 1
+        assert player.get_faction_ally_count("Machine Cult") == 1
+
+    def test_specific_ally_factions_list(self):
+        """A card with ally_factions=["Blob","SE"] counts only for those."""
+        player = Player("P1", Agent("P1"))
+        card = Card("DualAlly", 0, 3, [], "ship",
+                     faction="Blob", ally_factions=["Blob", "Star Empire"])
+        player.played_cards.append(card)
+
+        assert player.get_faction_ally_count("Blob") == 1
+        assert player.get_faction_ally_count("Star Empire") == 1
+        assert player.get_faction_ally_count("Trade Federation") == 0
+        assert player.get_faction_ally_count("Machine Cult") == 0
+
+    def test_none_ally_factions_falls_back_to_faction(self):
+        """Default behavior: ally_factions=None uses card.faction."""
+        player = Player("P1", Agent("P1"))
+        card = Card("Ship", 0, 1, [], "ship", faction="Blob")
+        assert card.ally_factions is None
+        player.played_cards.append(card)
+
+        assert player.get_faction_ally_count("Blob") == 1
+        assert player.get_faction_ally_count("Star Empire") == 0
+
+    def test_ally_factions_case_insensitive(self):
+        player = Player("P1", Agent("P1"))
+        card = Card("Ship", 0, 1, [], "ship",
+                     ally_factions=["blob", "STAR EMPIRE"])
+        player.played_cards.append(card)
+
+        assert player.get_faction_ally_count("Blob") == 1
+        assert player.get_faction_ally_count("Star Empire") == 1
+
+    def test_clone_preserves_ally_factions(self):
+        card = Card("Mech World", 0, 5, [], "outpost",
+                     faction="Machine Cult", ally_factions=["*"])
+        cloned = card.clone()
+
+        assert cloned.ally_factions == ["*"]
+        assert cloned.ally_factions is not card.ally_factions
+
+    def test_clone_none_ally_factions(self):
+        card = Card("Ship", 0, 1, [], "ship")
+        cloned = card.clone()
+        assert cloned.ally_factions is None
+
+    def test_mech_world_loaded_from_csv(self):
+        """Integration: Mech World from cards.csv gets ally_factions=["*"]."""
+        from src.config import DataConfig
+        cfg = DataConfig()
+        cards = cfg.load_cards()
+        mech_worlds = [c for c in cards if c.name == "Mech World"]
+        assert len(mech_worlds) == 1
+        assert mech_worlds[0].ally_factions == ["*"]
+
+    def test_wildcard_enables_ally_ability(self):
+        """Mech World should satisfy any faction's ally requirement."""
+        game, p1, _ = _make_game_with_players()
+        mech_world = _make_outpost(name="Mech World", faction="Machine Cult")
+        mech_world.ally_factions = ["*"]
+        p1.hand.append(mech_world)
+        p1.play_card(mech_world)
+
+        # Play a Blob ship with a Blob ally effect
+        blob_ship = Card("BlobShip", 0, 1, [
+            Effect(CardEffectType.COMBAT, 3),
+            Effect(CardEffectType.COMBAT, 2, faction_requirement="Blob"),
+        ], "ship", faction="Blob")
+        p1.hand.append(blob_ship)
+        p1.play_card(blob_ship)
+
+        # Mech World counts as Blob ally → ally count = 2 (Mech World + BlobShip)
+        assert p1.get_faction_ally_count("Blob") == 2
+        # The ally effect should now be available as an action
+        actions = get_available_actions(game, p1)
+        ally_effects = [a for a in actions
+                        if a.type == ActionType.APPLY_EFFECT
+                        and a.card_effect
+                        and a.card_effect.faction_requirement == "Blob"]
+        assert len(ally_effects) == 1
+
+
 class TestA4ScrapRemovesFromBases:
     """A4: Scrapping a base/outpost from play must remove it from bases list."""
 

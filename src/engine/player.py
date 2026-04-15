@@ -118,10 +118,20 @@ class Player:
         self.advance_pending_set()
     
     def get_faction_ally_count(self, faction):
-        """Count cards of the specified faction across played cards and bases."""
+        """Count cards that count as allies for the specified faction.
+
+        Uses card.ally_factions if set (with "*" as wildcard for all factions),
+        otherwise falls back to the card's own faction field.
+        """
         target = faction.lower()
         count = 0
         for card in set(self.played_cards) | set(self.bases):
+            # Check ally_factions override first
+            if card.ally_factions is not None:
+                if "*" in card.ally_factions or any(f.lower() == target for f in card.ally_factions):
+                    count += 1
+                continue
+            # Fall back to card's own faction
             if not card.faction:
                 continue
             if isinstance(card.faction, list):
