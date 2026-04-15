@@ -37,7 +37,7 @@ def run_episode(agent: PPOAgent, opponent: Agent, cards: list[Card]):
             agent.fill_last_reward(reward)
     return agent.finish_batch()
 
-def run_episode_worker(state_dict, agent_kwargs, cards, seed):
+def run_episode_worker(state_dict, agent_kwargs, opponent_type, opponent_state_dict, opponent_kwargs, cards, seed):
     random.seed(seed)
     torch.manual_seed(seed)
     set_disabled(True)
@@ -45,8 +45,12 @@ def run_episode_worker(state_dict, agent_kwargs, cards, seed):
     # Reconstruct agent with same weights
     agent = PPOAgent("PPO", **agent_kwargs)
     agent.model.load_state_dict(state_dict)
-    # Always use a random opponent in worker
-    opponent = RandomAgent("Rand")
+    # Reconstruct opponent based on type
+    if opponent_type == "ppo":
+        opponent = PPOAgent("Opp", **opponent_kwargs)
+        opponent.model.load_state_dict(opponent_state_dict)
+    else:
+        opponent = RandomAgent("Rand")
     return run_episode(agent, opponent, cards)
 
 def run_eval_game_worker(agent_state_dict, agent_kwargs, opponent_type, opponent_state_dict, opponent_kwargs, cards, seed):
@@ -149,7 +153,12 @@ def main():
     overall_start_time = time.perf_counter()
 
     for upd in range(1, args.updates + 1):
-        log(f"Starting update {upd}/{args.updates}")
+        # Select training opponent for this update
+        if args.self_play and len(past_agents) > 1:
+            opponent = random.choice(past_agents[:-1])
+        else:
+            opponent = RandomAgent("Rand")
+        log(f"Starting update {upd}/{args.updates} (training opponent: {opponent.name})")
         # collect trajectories
         start_time = time.time()
 
@@ -167,10 +176,21 @@ def main():
             "simulation_device": args.simulation_device,
             "log_debug": False,
         }
+        # Prepare opponent info for workers
+        if isinstance(opponent, PPOAgent):
+            opponent_type = "ppo"
+            opponent_state_dict = opponent.model.cpu().state_dict()
+            opponent_kwargs = agent_kwargs.copy()
+        else:
+            opponent_type = "random"
+            opponent_state_dict = None
+            opponent_kwargs = {}
         # Generate random seeds for reproducibility
         seeds = [random.randint(0, 1_000_000_000) for _ in range(args.episodes)]
         with ProcessPoolExecutor(max_workers=args.workers) as executor:
-            futures = [executor.submit(run_episode_worker, state_dict, agent_kwargs, cards, s)
+            futures = [executor.submit(run_episode_worker, state_dict, agent_kwargs,
+                                       opponent_type, opponent_state_dict, opponent_kwargs,
+                                       cards, s)
                        for s in seeds]
             all_data = [f.result() for f in futures]
         duration_episodes = time.time() - start_time
@@ -201,13 +221,7 @@ def main():
         past_agent.name = f"PPO_{upd}"
         past_agents.append(past_agent)
 
-        # Set opponent to a randomly chosen past agent (excluding current agent)
-        if args.self_play:
-            if len(past_agents) > 1:
-                opponent = random.choice(past_agents[:-1])
-            else:
-                opponent = RandomAgent("Rand")
-            log(f"Opponent set to {opponent.name}.")
+        # Select eval opponent (same logic as training: past agent or random)
 
         # Evaluate performance
         log(f"Evaluating performance of {agent.name} vs {opponent.name}...")
