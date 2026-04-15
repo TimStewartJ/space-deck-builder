@@ -4,14 +4,15 @@ from src.ai.agent import Agent
 from src.engine.actions import ActionType, Action, get_available_actions, PendingActionSet
 
 class Player:
-    def __init__(self, name, agent):
+    def __init__(self, name, agent, starting_health: int = 50, hand_size: int = 5):
         self.name: str = name
         self.hand: List[Card] = []
         self.deck: List[Card] = []
         self.discard_pile: List[Card] = []
         self.bases: List[Card] = []
         self.played_cards: List[Card] = []
-        self.health = 50  # Starting authority
+        self.health = starting_health
+        self.hand_size = hand_size
         self.agent: Agent = agent  # Could be human or AI
         
         # Resources that reset each turn
@@ -82,7 +83,7 @@ class Player:
         self.hand = []
         
         # Draw a new hand
-        for _ in range(5):
+        for _ in range(self.hand_size):
             self.draw_card()
         
         self.reset_resources()

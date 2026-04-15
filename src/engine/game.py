@@ -3,12 +3,15 @@ from src.ai.agent import Agent
 from src.cards.effects import CardEffectType
 from src.utils.logger import log
 from src.cards.card import Card
+from src.config import GameConfig
 from src.engine.player import Player
 from src.engine.actions import ActionType, Action
 from src.engine.game_stats import GameStats
 
 class Game:
-    def __init__(self, cards=None, card_names: list[str] | None = None):
+    def __init__(self, cards=None, card_names: list[str] | None = None,
+                 game_config: GameConfig | None = None):
+        self.config = game_config or GameConfig()
         self.players: List[Player] = []
         self.current_turn = 0
         self.is_game_over = False
@@ -17,7 +20,9 @@ class Game:
         self.trade_row: List[Card] = []
         self.explorer_pile: List[Card] = []
         self.is_running = False
-        self.current_player: Player = Player("none", Agent("none"))
+        self.current_player: Player = Player("none", Agent("none"),
+                                             starting_health=self.config.starting_health,
+                                             hand_size=self.config.hand_size)
         self.stats = GameStats()
         self.first_player_name = None
 
@@ -36,11 +41,10 @@ class Game:
         self.fill_trade_row()
 
     def setup_explorer_pile(self):
-        # Create a pile of 10 Explorer cards
         from src.cards.card import Card
         from src.cards.effects import Effect, CardEffectType
 
-        for _ in range(10):
+        for _ in range(self.config.explorer_count):
             explorer_card = Card(
                 "Explorer",
                 len(self.card_names) - 1,
@@ -53,8 +57,7 @@ class Game:
             )
             self.explorer_pile.append(explorer_card)
     def fill_trade_row(self):
-        # Fill the trade row with 5 cards
-        while len(self.trade_row) < 5 and self.trade_deck:
+        while len(self.trade_row) < self.config.trade_row_size and self.trade_deck:
             card = self.trade_deck.pop()
             self.trade_row.append(card)
             log(f"Added {card.name} to trade row", v=True)
@@ -78,7 +81,8 @@ class Game:
             player.deck.extend(starting_deck)
             player.shuffle_deck()
             # Draw initial hand
-            starting_hand_size = 3 if is_first_player else 5
+            starting_hand_size = (self.config.first_player_hand_size
+                                  if is_first_player else self.config.hand_size)
             for _ in range(starting_hand_size):
                 player.draw_card()
                 self.stats.record_card_draw(player.name)
@@ -88,15 +92,11 @@ class Game:
 
     def create_starting_deck(self):
         from src.cards.effects import Effect
-
-        # Create a deck of 8 Scouts and 2 Vipers
         from src.cards.card import Card
         starting_deck = []
-        # Add 8 Scouts
-        for _ in range(8):
+        for _ in range(self.config.num_scouts):
             starting_deck.append(Card("Scout", len(self.card_names) - 2, 0, [Effect(CardEffectType.TRADE, 1)], "ship"))
-        # Add 2 Vipers
-        for _ in range(2):
+        for _ in range(self.config.num_vipers):
             starting_deck.append(Card("Viper", len(self.card_names) - 1, 0, [Effect(CardEffectType.COMBAT, 1)], "ship"))
         return starting_deck
     
@@ -149,8 +149,8 @@ class Game:
 
             # Increment turn counter and move onto next player
             self.stats.total_turns += 1
-            if self.stats.total_turns > 1000:
-                log("Game has exceeded 1000 turns, ending game.", v=True)
+            if self.stats.total_turns > self.config.turn_cap:
+                log(f"Game has exceeded {self.config.turn_cap} turns, ending game.", v=True)
                 self.end_game()
             self.current_turn = (self.current_turn + 1) % len(self.players)
             self.current_player = self.players[self.current_turn]
@@ -337,13 +337,14 @@ class Game:
         pass
 
     def add_player(self, name: str, agent: 'Agent'):
-        if len(self.players) < 4:  # Maximum 4 players
-            from src.engine.player import Player
-            player = Player(name, agent)
-            self.players.append(player)
-            return player
-        else:
+        if len(self.players) >= 4:
             raise ValueError("Maximum number of players reached")
+        from src.engine.player import Player
+        player = Player(name, agent,
+                        starting_health=self.config.starting_health,
+                        hand_size=self.config.hand_size)
+        self.players.append(player)
+        return player
         
     def get_opponent(self, player: Player):
         """Get the opponent of the given player"""
