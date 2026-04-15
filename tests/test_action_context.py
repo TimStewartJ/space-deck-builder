@@ -23,9 +23,9 @@ def game_setup():
     return cards, card_names, card_index_map, action_dim
 
 
-def _play_random_game_to_step(cards, n_steps=0):
+def _play_random_game_to_step(cards, n_steps=0, card_names=None, card_index_map=None):
     """Create a game and advance it n_steps with random actions."""
-    game = Game(cards)
+    game = Game(cards, card_names=card_names, card_index_map=card_index_map)
     game.add_player("P1", RandomAgent("P1"))
     game.add_player("P2", RandomAgent("P2"))
     game.start_game()
@@ -87,14 +87,14 @@ class TestMaskParity:
 
     def test_parity_at_game_start(self, game_setup):
         cards, card_names, card_index_map, action_dim = game_setup
-        game = _play_random_game_to_step(cards, 0)
+        game = _play_random_game_to_step(cards, card_names=card_names, card_index_map=card_index_map, n_steps=0)
         player = game.current_player
         self._compare_paths(game, player, card_names, card_index_map, action_dim)
 
     def test_parity_after_several_steps(self, game_setup):
         cards, card_names, card_index_map, action_dim = game_setup
         for step_count in [5, 10, 20, 50]:
-            game = _play_random_game_to_step(cards, step_count)
+            game = _play_random_game_to_step(cards, card_names=card_names, card_index_map=card_index_map, n_steps=step_count)
             if not game.is_game_over:
                 player = game.current_player
                 self._compare_paths(game, player, card_names, card_index_map, action_dim)
@@ -108,7 +108,7 @@ class TestMaskParity:
         checks = 0
         for _ in range(50):
             steps = random.randint(0, 100)
-            game = _play_random_game_to_step(cards, steps)
+            game = _play_random_game_to_step(cards, card_names=card_names, card_index_map=card_index_map, n_steps=steps)
             if not game.is_game_over:
                 player = game.current_player
                 self._compare_paths(game, player, card_names, card_index_map, action_dim)
@@ -123,7 +123,7 @@ class TestMaskParity:
         pending_checks = 0
         for _ in range(200):
             steps = random.randint(5, 150)
-            game = _play_random_game_to_step(cards, steps)
+            game = _play_random_game_to_step(cards, card_names=card_names, card_index_map=card_index_map, n_steps=steps)
             if game.is_game_over:
                 continue
             player = game.current_player
@@ -135,7 +135,7 @@ class TestMaskParity:
 
     def test_non_current_player_gets_empty_mask(self, game_setup):
         cards, card_names, card_index_map, action_dim = game_setup
-        game = _play_random_game_to_step(cards, 0)
+        game = _play_random_game_to_step(cards, card_names=card_names, card_index_map=card_index_map, n_steps=0)
         opponent = game.get_opponent(game.current_player)
         ctx = build_action_context(game, opponent, card_index_map, action_dim)
         assert not ctx.mask.any()
@@ -146,7 +146,7 @@ class TestActionContextFlags:
     def test_end_turn_always_present(self, game_setup):
         """END_TURN (index 1) should always be in the mask for normal turns."""
         cards, card_names, card_index_map, action_dim = game_setup
-        game = _play_random_game_to_step(cards, 0)
+        game = _play_random_game_to_step(cards, card_names=card_names, card_index_map=card_index_map, n_steps=0)
         player = game.current_player
         if player.get_current_pending_set() is None:
             ctx = build_action_context(game, player, card_index_map, action_dim)
@@ -155,7 +155,7 @@ class TestActionContextFlags:
     def test_mask_buffer_reuse(self, game_setup):
         """Using a pre-allocated mask buffer should produce same result."""
         cards, card_names, card_index_map, action_dim = game_setup
-        game = _play_random_game_to_step(cards, 10)
+        game = _play_random_game_to_step(cards, card_names=card_names, card_index_map=card_index_map, n_steps=10)
         if game.is_game_over:
             return
         player = game.current_player

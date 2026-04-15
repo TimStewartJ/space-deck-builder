@@ -223,10 +223,10 @@ class Game:
             if card is not None and card in self.current_player.hand:
                 self.current_player.play_card(card)
             else:
-                # Fallback: scan by name for legacy callers
+                # Fallback: scan by index
                 card = None
                 for c in self.current_player.hand:
-                    if c.name == action.card_id:
+                    if c.index == action.card_id:
                         card = c
                         self.current_player.play_card(c)
                         break
@@ -244,7 +244,7 @@ class Game:
             source_card = action.card
             if source_card is None:
                 for c in self.current_player.played_cards + self.current_player.bases:
-                    if c.name == action.card_id:
+                    if c.index == action.card_id:
                         source_card = c
                         break
             action.card_effect.apply(self, self.current_player, source_card)
@@ -279,8 +279,9 @@ class Game:
                             if _log_enabled:
                                 log(f"Added {new_card.name} to trade row", v=True)
                         return False
-            # Fallback: name-based scan for legacy callers
-            if action.card_id == "Explorer":
+            # Fallback: index-based scan
+            explorer_idx = self.card_index_map.get("Explorer") if self.card_index_map else None
+            if action.card_id is not None and action.card_id == explorer_idx:
                 if self.explorer_pile:
                     card = self.explorer_pile.pop()
                     self.current_player.trade -= card.cost
@@ -290,7 +291,7 @@ class Game:
                         log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
                     return False
             for i, card in enumerate(self.trade_row):
-                if card.name == action.card_id and self.current_player.trade >= card.cost:
+                if card.index == action.card_id and self.current_player.trade >= card.cost:
                     self.current_player.trade -= card.cost
                     self.current_player.discard_pile.append(card)
                     self.stats.record_card_buy(self.current_player.name)
@@ -321,11 +322,11 @@ class Game:
                                 log(f"{self.current_player.name} destroyed {player.name}'s {target_base.name}", v=True)
                         break
             else:
-                # Fallback: name-based scan
+                # Fallback: index-based scan
                 for player in self.players:
                     if player != self.current_player:
                         for base in player.bases:
-                            if base.name == action.target_id and base.defense and self.current_player.combat >= base.defense:
+                            if base.index == action.target_id and base.defense and self.current_player.combat >= base.defense:
                                 self.current_player.combat -= base.defense
                                 player.bases.remove(base)
                                 player.discard_pile.append(base)
@@ -349,11 +350,11 @@ class Game:
                             log(f"{self.current_player.name} destroyed {player.name}'s {target_base.name}", v=True)
                         break
             else:
-                # Fallback: name-based scan
+                # Fallback: index-based scan
                 for player in self.players:
                     if player != self.current_player:
                         for base in player.bases:
-                            if base.name == action.target_id:
+                            if base.index == action.target_id:
                                 self.stats.record_base_destroy(self.current_player.name)
                                 player.bases.remove(base)
                                 player.discard_pile.append(base)
@@ -363,13 +364,11 @@ class Game:
                                 break
 
         elif action.type == ActionType.ATTACK_PLAYER:
-            # Find target by target_id, fall back to sole opponent in 2-player
+            # Find target by player index, fall back to sole opponent in 2-player
             target = None
-            if action.target_id:
-                for player in self.players:
-                    if player is not self.current_player and player.name == action.target_id:
-                        target = player
-                        break
+            if action.target_id is not None:
+                if 0 <= action.target_id < len(self.players):
+                    target = self.players[action.target_id]
             if target is None:
                 target = self.get_opponent(self.current_player)
             if target is not None:
@@ -394,7 +393,7 @@ class Game:
                     self.current_player.hand.remove(target_card)
                 else:
                     for card in self.current_player.hand:
-                        if card.name == action.card_id:
+                        if card.index == action.card_id:
                             target_card = card
                             self.current_player.hand.remove(card)
                             break
@@ -405,7 +404,7 @@ class Game:
                     self.current_player.discard_pile.remove(target_card)
                 else:
                     for card in self.current_player.discard_pile:
-                        if card.name == action.card_id:
+                        if card.index == action.card_id:
                             target_card = card
                             self.current_player.discard_pile.remove(card)
                             break
@@ -419,7 +418,7 @@ class Game:
                             break
                 else:
                     for i, card in enumerate(self.trade_row):
-                        if card.name == action.card_id:
+                        if card.index == action.card_id:
                             target_card = card
                             self.trade_row.pop(i)
                             break
@@ -451,7 +450,7 @@ class Game:
                 target_discard.append(target_card)
             else:
                 for card in target_hand:
-                    if card.name == action.card_id:
+                    if card.index == action.card_id:
                         target_card = card
                         target_hand.remove(card)
                         target_discard.append(card)

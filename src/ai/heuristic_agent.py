@@ -89,10 +89,10 @@ class HeuristicAgent(Agent):
         total_deck_size = len(player.hand) + len(player.deck) + len(player.discard_pile) + len(player.played_cards)
         is_early_game = total_deck_size <= 14
 
-        # Categorize scrap targets by priority
-        scrap_vipers = [a for a in scrap_actions if a.card_id == "Viper"]
-        scrap_scouts = [a for a in scrap_actions if a.card_id == "Scout"]
-        scrap_explorers = [a for a in scrap_actions if a.card_id == "Explorer"]
+        # Categorize scrap targets by priority (use card name from card ref)
+        scrap_vipers = [a for a in scrap_actions if a.card and a.card.name == "Viper"]
+        scrap_scouts = [a for a in scrap_actions if a.card and a.card.name == "Scout"]
+        scrap_explorers = [a for a in scrap_actions if a.card and a.card.name == "Explorer"]
 
         # Early game: scrap Vipers first (preserve economy for buying)
         if is_early_game:
@@ -131,7 +131,7 @@ class HeuristicAgent(Agent):
         if not discard_actions:
             return actions[0]
         # Discard the cheapest card (Scouts/Vipers first)
-        discard_actions.sort(key=lambda a: self._card_value(a.card_id))
+        discard_actions.sort(key=lambda a: self._card_value(a.card))
         return discard_actions[0]
 
     # ── Play cards ─────────────────────────────────────────────────────
@@ -201,8 +201,8 @@ class HeuristicAgent(Agent):
         if attack_base:
             opponent = game_state.get_opponent(player)
             if opponent:
-                outpost_names = {b.name for b in opponent.bases if b.is_outpost()}
-                outpost_attacks = [a for a in attack_base if a.card_id in outpost_names]
+                outpost_indices = {b.index for b in opponent.bases if b.is_outpost()}
+                outpost_attacks = [a for a in attack_base if a.card_id in outpost_indices]
 
         if outpost_attacks:
             # Prefer destroying the cheapest outpost first (efficient combat use)
@@ -310,30 +310,32 @@ class HeuristicAgent(Agent):
                 return a
         return actions[-1]
 
-    def _card_value(self, card_id):
+    def _card_value(self, card):
         """Rough card value for discard priority (lower = discard first)."""
-        if card_id == "Scout":
+        if card is None:
+            return 10
+        name = card.name
+        if name == "Scout":
             return 1
-        if card_id == "Viper":
+        if name == "Viper":
             return 2
-        if card_id == "Explorer":
+        if name == "Explorer":
             return 3
         return 10  # Keep purchased cards
 
     def _card_cost(self, action, game_state):
-        """Get cost of a card from an action, looking it up from trade row if needed."""
+        """Get cost of a card from an action."""
         if action.card and hasattr(action.card, 'cost'):
             return action.card.cost or 0
-        for card in game_state.trade_row:
-            if card.name == action.card_id:
-                return card.cost or 0
         return 0
 
     def _base_defense(self, action, game_state):
         """Get defense value of a base target."""
+        if action.card and hasattr(action.card, 'defense'):
+            return action.card.defense or 0
         opponent = game_state.get_opponent(game_state.current_player)
         if opponent:
             for base in opponent.bases:
-                if base.name == action.card_id:
+                if base.index == action.card_id:
                     return base.defense or 0
         return 0

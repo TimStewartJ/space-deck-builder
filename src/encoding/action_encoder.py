@@ -39,7 +39,8 @@ def get_action_space_size(cards: list[str]) -> int:
 def encode_action(action: Action | None, cards: list[str], card_index_map: dict[str, int] = None) -> int:
     """Convert an Action object to a numerical index for neural network processing
     
-    Maps different action types to different index ranges
+    Maps different action types to different index ranges.
+    Action.card_id is already an integer card index.
     
     Returns an integer representation of the action.
     """
@@ -58,12 +59,7 @@ def encode_action(action: Action | None, cards: list[str], card_index_map: dict[
     current_act_index += 1
 
     cards_length = len(cards)
-    card_index = None
-    if action.card_id is not None:
-        if card_index_map is not None:
-            card_index = card_index_map.get(action.card_id)
-        else:
-            card_index = next((i for i, card in enumerate(cards) if card == action.card_id), None)
+    card_index = action.card_id  # Already an int index
 
     # Encode play card action based on the card
     if action.type == ActionType.PLAY_CARD:
@@ -132,14 +128,13 @@ def encode_action(action: Action | None, cards: list[str], card_index_map: dict[
     return 0
 
 def decode_action(action_idx: int, card_names: list[str]) -> Action:
-    """Decode an action index into a new Action object, using only the index and card_names.
-    Args:
-        action_idx: The output index from the neural network
-        card_names: List of unique card names (used for index mapping, must match encode_action)
-    Returns:
-        A new Action object corresponding to the decoded index.
+    """Decode an action index into a new Action object.
+
+    Returns Actions with integer card_id (card index) instead of string names.
+    The card reference (action.card) is NOT set — callers that need it must
+    resolve from live game state.
     """
-    from src.engine.actions import Action, ActionType
+    from src.engine.actions import Action, ActionType, CardSource
     cards_length = len(card_names)
     current_act_index = 1
 
@@ -161,14 +156,14 @@ def decode_action(action_idx: int, card_names: list[str]) -> Action:
     if current_act_index <= action_idx < current_act_index + cards_length:
         card_idx = action_idx - current_act_index
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.PLAY_CARD, card_id=card_names[card_idx])
+            return Action(type=ActionType.PLAY_CARD, card_id=card_idx)
     current_act_index += cards_length
 
     # BUY_CARD
     if current_act_index <= action_idx < current_act_index + cards_length:
         card_idx = action_idx - current_act_index
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.BUY_CARD, card_id=card_names[card_idx])
+            return Action(type=ActionType.BUY_CARD, card_id=card_idx)
     current_act_index += cards_length
 
     # ATTACK_PLAYER
@@ -180,14 +175,14 @@ def decode_action(action_idx: int, card_names: list[str]) -> Action:
     if current_act_index <= action_idx < current_act_index + cards_length:
         card_idx = action_idx - current_act_index
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.ATTACK_BASE, card_id=card_names[card_idx])
+            return Action(type=ActionType.ATTACK_BASE, card_id=card_idx, target_id=card_idx)
     current_act_index += cards_length
 
     # DESTROY_BASE
     if current_act_index <= action_idx < current_act_index + cards_length:
         card_idx = action_idx - current_act_index
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.DESTROY_BASE, card_id=card_names[card_idx])
+            return Action(type=ActionType.DESTROY_BASE, card_id=card_idx, target_id=card_idx)
     current_act_index += cards_length
 
     # APPLY_EFFECT (non-scrap and scrap)
@@ -196,12 +191,12 @@ def decode_action(action_idx: int, card_names: list[str]) -> Action:
     if apply_effect_start <= action_idx < apply_effect_start + cards_length:
         card_idx = action_idx - apply_effect_start
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.APPLY_EFFECT, card_id=card_names[card_idx], card_effect=Effect(effect_type=CardEffectType.DRAW, is_scrap_effect=False))
+            return Action(type=ActionType.APPLY_EFFECT, card_id=card_idx, card_effect=Effect(effect_type=CardEffectType.DRAW, is_scrap_effect=False))
     # Scrap
     if apply_effect_start + cards_length <= action_idx < apply_effect_start + 2 * cards_length:
         card_idx = action_idx - (apply_effect_start + cards_length)
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.APPLY_EFFECT, card_id=card_names[card_idx], card_effect=Effect(effect_type=CardEffectType.SCRAP, is_scrap_effect=True))
+            return Action(type=ActionType.APPLY_EFFECT, card_id=card_idx, card_effect=Effect(effect_type=CardEffectType.SCRAP, is_scrap_effect=True))
     current_act_index += 2 * cards_length
 
     # SCRAP_CARD (hand, discard, trade)
@@ -212,17 +207,17 @@ def decode_action(action_idx: int, card_names: list[str]) -> Action:
     if scrap_hand_start <= action_idx < scrap_hand_start + cards_length:
         card_idx = action_idx - scrap_hand_start
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.SCRAP_CARD, card_id=card_names[card_idx], card_source=CardSource.HAND)
+            return Action(type=ActionType.SCRAP_CARD, card_id=card_idx, card_source=CardSource.HAND)
     # discard
     if scrap_discard_start <= action_idx < scrap_discard_start + cards_length:
         card_idx = action_idx - scrap_discard_start
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.SCRAP_CARD, card_id=card_names[card_idx], card_source=CardSource.DISCARD)
+            return Action(type=ActionType.SCRAP_CARD, card_id=card_idx, card_source=CardSource.DISCARD)
     # trade
     if scrap_trade_start <= action_idx < scrap_trade_start + cards_length:
         card_idx = action_idx - scrap_trade_start
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.SCRAP_CARD, card_id=card_names[card_idx], card_source=CardSource.TRADE)
+            return Action(type=ActionType.SCRAP_CARD, card_id=card_idx, card_source=CardSource.TRADE)
     current_act_index += 3 * cards_length
 
     # DISCARD_CARDS (target discard by card index)
@@ -230,7 +225,7 @@ def decode_action(action_idx: int, card_names: list[str]) -> Action:
     if discard_start_index <= action_idx < discard_start_index + cards_length:
         card_idx = action_idx - discard_start_index
         if 0 <= card_idx < cards_length:
-            return Action(type=ActionType.DISCARD_CARDS, card_id=card_names[card_idx], card_source=CardSource.OPPONENT)
+            return Action(type=ActionType.DISCARD_CARDS, card_id=card_idx, card_source=CardSource.OPPONENT)
     current_act_index += cards_length
 
     # Fallback: return END_TURN

@@ -118,7 +118,7 @@ class Effect:
                 for target in player.discard_pile:
                     pending_actions.append(Action(
                         ActionType.SCRAP_CARD,
-                        card_id=target.name,
+                        card_id=target.index,
                         card=target,
                         card_source=CardSource.DISCARD
                     ))
@@ -126,7 +126,7 @@ class Effect:
                 for target in player.hand:
                     pending_actions.append(Action(
                         ActionType.SCRAP_CARD,
-                        card_id=target.name,
+                        card_id=target.index,
                         card=target,
                         card_source=CardSource.HAND
                     ))
@@ -134,7 +134,7 @@ class Effect:
                 for target in game.trade_row:
                     pending_actions.append(Action(
                         ActionType.SCRAP_CARD,
-                        card_id=target.name,
+                        card_id=target.index,
                         card=target,
                         card_source=CardSource.TRADE
                     ))
@@ -150,7 +150,7 @@ class Effect:
                 for target in opponent.hand:
                     action = Action(
                         ActionType.DISCARD_CARDS,
-                        card_id=target.name,
+                        card_id=target.index,
                         card=target,
                         card_source=CardSource.OPPONENT
                     )
@@ -168,8 +168,8 @@ class Effect:
             for base in opponent.bases:
                 pending_actions.append(Action(
                     ActionType.DESTROY_BASE,
-                    target_id=base.name,
-                    card_id=base.name,
+                    target_id=base.index,
+                    card_id=base.index,
                     card=base,
                 ))
             if pending_actions:
@@ -232,12 +232,12 @@ class Effect:
             pending_actions = []
             for target in player.hand:
                 pending_actions.append(Action(
-                    ActionType.SCRAP_CARD, card_id=target.name,
+                    ActionType.SCRAP_CARD, card_id=target.index,
                     card=target, card_source=CardSource.HAND
                 ))
             for target in player.discard_pile:
                 pending_actions.append(Action(
-                    ActionType.SCRAP_CARD, card_id=target.name,
+                    ActionType.SCRAP_CARD, card_id=target.index,
                     card=target, card_source=CardSource.DISCARD
                 ))
             if pending_actions:
@@ -256,7 +256,7 @@ class Effect:
             pending_actions = []
             for target in player.hand:
                 pending_actions.append(Action(
-                    ActionType.DISCARD_CARDS, card_id=target.name,
+                    ActionType.DISCARD_CARDS, card_id=target.index,
                     card=target, card_source=CardSource.SELF
                 ))
             if pending_actions:

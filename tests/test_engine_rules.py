@@ -484,7 +484,7 @@ class TestB4TradeRowScrapRefresh:
         initial_row_size = len(game.trade_row)
 
         scrap_action = Action(type=ActionType.SCRAP_CARD,
-                              card_id="Target", card_source=CardSource.TRADE)
+                              card_id=1, card=target, card_source=CardSource.TRADE)
         game.execute_action(scrap_action)
 
         # Row should have refilled with the filler card
@@ -576,10 +576,10 @@ class TestC2DestroyBase:
         effect.apply(game, p1, None)
 
         pending = p1.get_current_pending_set()
-        target_names = [a.target_id for a in pending.actions]
+        target_cards = [a.card for a in pending.actions]
         # Both should be targetable
-        assert "EnemyOutpost" in target_names
-        assert "EnemyBase" in target_names
+        assert outpost in target_cards
+        assert base in target_cards
 
     def test_destroy_base_removes_from_opponent_bases(self):
         """Executing DESTROY_BASE should remove the base from opponent."""

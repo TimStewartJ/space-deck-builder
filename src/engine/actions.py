@@ -32,9 +32,9 @@ class CardSource(Enum):
 @dataclass
 class Action:
     type: ActionType
-    card_id: Optional[str] = None
+    card_id: Optional[int] = None
     card: Optional['Card'] = None
-    target_id: Optional[str] = None
+    target_id: Optional[int] = None
     card_source: Optional[CardSource] = None
     card_effect: Optional['Effect'] = None
     additional_params: Optional[dict] = None
@@ -46,22 +46,23 @@ class Action:
     
     def __str__(self):
         """String representation for display in CLI"""
+        card_name = self.card.name if self.card else f"idx:{self.card_id}"
         if self.type == ActionType.PLAY_CARD and self.card:
             return f"Play card: {self.card}"
-        elif self.type == ActionType.APPLY_EFFECT and self.card_id:
-            return f"{self.card_id}: {self.card_effect}"
-        elif self.type == ActionType.BUY_CARD and self.card_id:
+        elif self.type == ActionType.APPLY_EFFECT and self.card_id is not None:
+            return f"{card_name}: {self.card_effect}"
+        elif self.type == ActionType.BUY_CARD and self.card_id is not None:
             return f"Buy card: {self.card}"
         elif self.type == ActionType.ATTACK_BASE:
-            return f"Attack base: {self.target_id}"
+            return f"Attack base: {card_name}"
         elif self.type == ActionType.ATTACK_PLAYER:
             return f"Attack player: {self.target_id}"
         elif self.type == ActionType.SCRAP_CARD:
-            return f"Scrap card: {self.card_id} from {self.card_source.value if self.card_source else 'unknown'}"
+            return f"Scrap card: {card_name} from {self.card_source.value if self.card_source else 'unknown'}"
         elif self.type == ActionType.DISCARD_CARDS:
-            return f"Discard cards: {self.card_id} from {self.card_source.value if self.card_source else 'unknown'}"
+            return f"Discard cards: {card_name} from {self.card_source.value if self.card_source else 'unknown'}"
         elif self.type == ActionType.DESTROY_BASE:
-            return f"Destroy base: {self.target_id}"
+            return f"Destroy base: {card_name}"
         elif self.type == ActionType.END_TURN:
             return "End turn"
         return f"{self.type}"
@@ -96,16 +97,16 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
 
     # Add play card actions for each card in hand
     for card in player.hand:
-        actions.append(Action(type=ActionType.PLAY_CARD, card=card, card_id=card.name))
+        actions.append(Action(type=ActionType.PLAY_CARD, card=card, card_id=card.index))
     
     # Add buy card actions for affordable cards in trade row
     for card in game_state.trade_row:
         if player.trade >= card.cost:
-            actions.append(Action(type=ActionType.BUY_CARD, card=card, card_id=card.name))
+            actions.append(Action(type=ActionType.BUY_CARD, card=card, card_id=card.index))
 
     # Allow buying explorer if possible
     if len(game_state.explorer_pile) > 0 and player.trade >= game_state.explorer_pile[0].cost:
-        actions.append(Action(type=ActionType.BUY_CARD, card=game_state.explorer_pile[0], card_id=game_state.explorer_pile[0].name))
+        actions.append(Action(type=ActionType.BUY_CARD, card=game_state.explorer_pile[0], card_id=game_state.explorer_pile[0].index))
 
     # Add attack actions if player has combat available
     if player.combat > 0:
@@ -119,8 +120,8 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                         if outpost.defense and player.combat >= outpost.defense:
                             actions.append(Action(
                                 type=ActionType.ATTACK_BASE,
-                                target_id=outpost.name,
-                                card_id=outpost.name,
+                                target_id=outpost.index,
+                                card_id=outpost.index,
                             ))
                 else:
                     # If no outposts, can attack other bases or player directly
@@ -128,13 +129,13 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                         if base.defense and player.combat >= base.defense:
                             actions.append(Action(
                                 type=ActionType.ATTACK_BASE,
-                                target_id=base.name,
-                                card_id=base.name,
+                                target_id=base.index,
+                                card_id=base.index,
                             ))
                     # Can attack player directly only if no outposts
                     actions.append(Action(
                         type=ActionType.ATTACK_PLAYER,
-                        target_id=opponent.name
+                        target_id=game_state.players.index(opponent)
                     ))
     
     # Add unused actions from played cards and bases
@@ -149,12 +150,12 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                 if effect.faction_requirement:
                     faction_count = player.get_faction_ally_count(effect.faction_requirement)
                     if faction_count > effect.faction_requirement_count:
-                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card=card, card_effect=effect))
+                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.index, card=card, card_effect=effect))
                 elif effect.is_or_effect and effect.child_effects and not effect.any_child_effects_used():
                     for child_effect in effect.child_effects:
-                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card=card, card_effect=child_effect))
+                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.index, card=card, card_effect=child_effect))
                 else:
-                    actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.name, card=card, card_effect=effect))
+                    actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.index, card=card, card_effect=effect))
 
     # Always allow ending turn
     actions.append(Action(type=ActionType.END_TURN))
