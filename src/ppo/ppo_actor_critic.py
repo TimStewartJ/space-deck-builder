@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from src.nn.state_utils import unpack_state
+from src.encoding.state_utils import unpack_state
 from src.utils.logger import log
 
 class PPOActorCritic(nn.Module):

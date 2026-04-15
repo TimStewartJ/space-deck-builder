@@ -3,7 +3,7 @@ import numpy as np
 from typing import TYPE_CHECKING
 
 from src.engine.actions import ActionType, get_available_actions
-from src.nn.action_encoder import encode_action, get_action_space_size
+from src.encoding.action_encoder import encode_action, get_action_space_size
 
 if TYPE_CHECKING:
     from src.engine.game import Game
@@ -18,19 +18,26 @@ def build_card_index_map(cards: list[str]) -> dict[str, int]:
 
 
 def get_state_size(cards: list[str]) -> int:
-    """Get the size of the state vector"""
-    cards_length = len(cards)
-    player_encoding_size = (
-        5 + # Player resources (trade, combat, health, deck size, discard pile size)
-        cards_length * 4 # Player hand, discard pile, deck, bases
+    """Get the size of the state vector.
+
+    Training player and opponent have asymmetric encodings because
+    the opponent's hand and deck are hidden information — they are
+    merged into a single 'unseen' zone.
+    """
+    n = len(cards)
+    training_player_size = (
+        5 +     # Scalars: trade, combat, health, deck_size, discard_size
+        n * 4   # Zones: hand, discard, deck, bases
+    )
+    opponent_size = (
+        6 +     # Scalars: trade, combat, health, deck_size, hand_size, discard_size
+        n * 3   # Zones: unseen (hand+deck), discard, bases
     )
     return (
-        1 + # is_training_player flag
-        1 + # is_first_player flag
-        1 + # can_buy_anything flag
-        1 + # has_available_actions flag
-        cards_length + # Trade row
-        player_encoding_size * 2 # Players
+        4 +     # Flags: is_training_player, is_first_player, can_buy, has_actions
+        n +     # Trade row
+        training_player_size +
+        opponent_size
     )
 
 def encode_card_presence(cards_list: list['Card'], num_cards: int, card_index_map: dict[str, int], out: np.ndarray = None, offset: int = 0) -> np.ndarray:
@@ -63,6 +70,33 @@ def encode_player_into(player: 'Player', num_cards: int, card_index_map: dict[st
     encode_card_presence(player.discard_pile, num_cards, card_index_map, out, offset)
     offset += num_cards
     encode_card_presence(player.deck, num_cards, card_index_map, out, offset)
+    offset += num_cards
+    encode_card_presence(player.bases, num_cards, card_index_map, out, offset)
+    offset += num_cards
+
+    return offset
+
+def encode_opponent_into(player: 'Player', num_cards: int, card_index_map: dict[str, int], out: np.ndarray, offset: int) -> int:
+    """Encode opponent info with hidden-information-aware zones.
+
+    Unlike encode_player_into(), the opponent's hand and deck are merged
+    into a single 'unseen' zone since the active player cannot observe
+    which cards the opponent drew vs. which remain in their deck.
+    Hand size is encoded as an explicit scalar since it is observable.
+    """
+    # Opponent resources (6 scalars)
+    out[offset] = player.trade / 100.0
+    out[offset + 1] = player.combat / 100.0
+    out[offset + 2] = player.health / 100.0
+    out[offset + 3] = len(player.deck) / 40.0
+    out[offset + 4] = len(player.hand) / 10.0
+    out[offset + 5] = len(player.discard_pile) / 40.0
+    offset += 6
+
+    # Unseen (hand + deck combined), discard, bases — 3 zones
+    encode_card_presence(player.hand + player.deck, num_cards, card_index_map, out, offset)
+    offset += num_cards
+    encode_card_presence(player.discard_pile, num_cards, card_index_map, out, offset)
     offset += num_cards
     encode_card_presence(player.bases, num_cards, card_index_map, out, offset)
     offset += num_cards

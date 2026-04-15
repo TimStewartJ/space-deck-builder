@@ -6,8 +6,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from src.nn.experience import Experience
-from src.nn.state_encoder import encode_state, get_state_size
-from src.nn.action_encoder import decode_action, encode_action, get_action_space_size
+from src.encoding.state_encoder import encode_state, get_state_size
+from src.encoding.action_encoder import decode_action, encode_action, get_action_space_size
 from src.ai.agent import Agent
 from src.engine.actions import get_available_actions, Action, ActionType
 from src.utils.logger import log

@@ -6,9 +6,9 @@ from src.cards.loader import load_trade_deck_cards
 from src.engine.game import Game
 from src.ai.ppo_agent import PPOAgent
 from src.ai.random_agent import RandomAgent
-from src.nn.action_encoder import get_action_space_size
+from src.encoding.action_encoder import get_action_space_size
 from src.ppo.ppo_actor_critic import PPOActorCritic
-from src.nn.state_encoder import get_state_size
+from src.encoding.state_encoder import get_state_size
 from src.ppo.batch_runner import BatchRunner
 from src.utils.logger import set_disabled
 

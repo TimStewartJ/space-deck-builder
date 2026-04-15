@@ -108,8 +108,8 @@ Training uses `BatchRunner`, which runs N games concurrently with batched GPU in
 - `src/ppo/batch_runner.py` — BatchRunner (concurrent games + batched inference)
 - `src/ppo/ppo_actor_critic.py` — Actor-Critic neural network
 - `src/ai/ppo_agent.py` — PPO agent (rollout buffers, GAE, PPO update)
-- `src/nn/state_encoder.py` — Game state → tensor encoding
-- `src/nn/action_encoder.py` — Action ↔ index mapping
+- `src/encoding/state_encoder.py` — Game state → tensor encoding
+- `src/encoding/action_encoder.py` — Action ↔ index mapping
 
 ## Benchmarking
 

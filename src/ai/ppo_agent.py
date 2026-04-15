@@ -4,11 +4,11 @@ import torch.optim as optim
 from typing import TYPE_CHECKING, List, Optional
 import time
 from src.ppo.ppo_actor_critic import PPOActorCritic
-from src.nn.state_utils import unpack_state
+from src.encoding.state_utils import unpack_state
 from src.ai.agent import Agent
 from src.engine.actions import ActionType, get_available_actions
-from src.nn.state_encoder import encode_state, get_state_size
-from src.nn.action_encoder import encode_action, decode_action, get_action_space_size
+from src.encoding.state_encoder import encode_state, get_state_size
+from src.encoding.action_encoder import encode_action, decode_action, get_action_space_size
 from src.utils.logger import log
 
 if TYPE_CHECKING:

@@ -3,8 +3,8 @@ import torch
 from typing import List
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.engine.actions import ActionType, Action
-from src.nn.state_encoder import encode_state, get_state_size
-from src.nn.action_encoder import encode_action, get_action_space_size
+from src.encoding.state_encoder import encode_state, get_state_size
+from src.encoding.action_encoder import encode_action, get_action_space_size
 
 
 class PolicyEvaluator:

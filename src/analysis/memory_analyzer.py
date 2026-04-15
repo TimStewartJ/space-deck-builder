@@ -3,7 +3,7 @@ import pickle
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import List, Tuple
-from src.nn.action_encoder import decode_action
+from src.encoding.action_encoder import decode_action
 from src.nn.experience import Experience
 from src.utils.logger import log
 from collections import Counter

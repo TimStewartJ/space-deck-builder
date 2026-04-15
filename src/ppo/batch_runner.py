@@ -8,8 +8,8 @@ from src.engine.actions import ActionType, get_available_actions
 from src.ai.agent import Agent
 from src.ai.random_agent import RandomAgent
 from src.cards.card import Card
-from src.nn.state_encoder import encode_state, get_state_size
-from src.nn.action_encoder import encode_action, get_action_space_size
+from src.encoding.state_encoder import encode_state, get_state_size
+from src.encoding.action_encoder import encode_action, get_action_space_size
 from src.ppo.rollout_buffer import RolloutBuffer
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.utils.logger import log, set_disabled
@@ -47,7 +47,7 @@ class BatchRunner:
         self.num_concurrent = num_concurrent
         self.training_agent_name = "PPO"
         # Pre-compute O(1) card name → index lookup
-        from src.nn.state_encoder import build_card_index_map
+        from src.encoding.state_encoder import build_card_index_map
         self.card_index_map = build_card_index_map(card_names)
 
     def run_episodes(self, num_episodes: int) -> tuple:
