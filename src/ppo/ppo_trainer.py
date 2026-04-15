@@ -14,6 +14,43 @@ from src.ppo.opponent_pool import OpponentPool
 from src.utils.logger import log, set_disabled, set_verbose
 
 
+def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cfg,
+                 make_opponent, registry):
+    """Create the appropriate batch runner based on num_workers config."""
+    sim_device = agent.simulation_device
+    num_concurrent = min(run_cfg.episodes, run_cfg.num_concurrent)
+
+    if run_cfg.num_workers > 1:
+        from src.ppo.mp_batch_runner import MultiProcessBatchRunner
+        from src.ppo.opponent_pool import _parse_opponent_spec
+        # Extract opponent spec string for serialization to workers
+        return MultiProcessBatchRunner(
+            model=agent.model,
+            card_names=card_names,
+            cards=cards,
+            action_dim=action_dim,
+            device=sim_device,
+            data_config=data_cfg,
+            opponent_spec=run_cfg.opponents,
+            num_concurrent=num_concurrent,
+            num_workers=run_cfg.num_workers,
+            ppo_config=ppo_cfg,
+            registry=registry,
+        )
+    else:
+        return BatchRunner(
+            model=agent.model,
+            card_names=card_names,
+            cards=cards,
+            action_dim=action_dim,
+            device=sim_device,
+            opponent_factory=make_opponent,
+            num_concurrent=num_concurrent,
+            ppo_config=ppo_cfg,
+            registry=registry,
+        )
+
+
 def train(
     data_cfg: DataConfig,
     ppo_cfg: PPOConfig,
@@ -87,21 +124,15 @@ def train(
         # Collect trajectories
         start_time = time.time()
         action_dim = get_action_space_size(card_names)
-        runner = BatchRunner(
-            model=agent.model,
-            card_names=card_names,
-            cards=cards,
-            action_dim=action_dim,
-            device=agent.simulation_device,
-            opponent_factory=make_opponent,
-            num_concurrent=min(run_cfg.episodes, run_cfg.num_concurrent),
-            ppo_config=ppo_cfg,
-            registry=registry,
+        runner = _make_runner(
+            agent, cards, card_names, action_dim,
+            ppo_cfg, run_cfg, data_cfg, make_opponent, registry,
         )
         states, actions, old_lp, returns, advs, masks = runner.run_episodes(run_cfg.episodes)
         duration_episodes = time.time() - start_time
         total_time_spent_on_episodes += duration_episodes
-        print(f"Finished {run_cfg.episodes} episodes in {duration_episodes:.2f}s.")
+        workers_msg = f" ({run_cfg.num_workers} workers)" if run_cfg.num_workers > 1 else ""
+        print(f"Finished {run_cfg.episodes} episodes in {duration_episodes:.2f}s.{workers_msg}")
 
         # Update PFSP win rate estimates from batch results
         if run_cfg.self_play and run_cfg.pfsp_mode != "uniform":

@@ -47,6 +47,10 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                    help="Opponent mix: 'random,heuristic' or 'random:0.6,heuristic:0.4'")
     p.add_argument("--self-play-ratio", type=float, default=_run.self_play_ratio,
                    help="Fraction of games using PPO snapshots when self-play is active")
+    p.add_argument("--num-workers", type=int, default=1,
+                   help="Number of simulation worker processes (1=single-process, >1=multi-process)")
+    p.add_argument("--num-concurrent", type=int, default=_run.num_concurrent,
+                   help=f"Total concurrent games across all workers (default: {_run.num_concurrent})")
     p.add_argument("--pfsp", type=str, default=_run.pfsp_mode,
                    choices=["uniform", "hard", "variance"],
                    help="PFSP snapshot weighting: uniform (default), hard, or variance")
@@ -162,6 +166,8 @@ def _run_train(args):
         opponents=args.opponents,
         self_play_ratio=args.self_play_ratio,
         pfsp_mode=args.pfsp,
+        num_workers=args.num_workers,
+        num_concurrent=args.num_concurrent,
     )
     dev_cfg = DeviceConfig(
         main_device=args.main_device,
