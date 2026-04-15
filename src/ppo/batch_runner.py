@@ -209,3 +209,129 @@ class BatchRunner:
                 break
             action = player.make_decision(game)
             game.apply_decision(action)
+
+    def run_eval(self, num_games: int) -> tuple[int, int, int]:
+        """Run num_games evaluation games. Returns (wins, losses, total_steps).
+        
+        Same batched inference loop as run_episodes but without rollout storage.
+        """
+        self.model.to(self.device)
+        self.model.eval()
+
+        games: list[Optional[Game]] = [None] * self.num_concurrent
+        step_counts: list[int] = [0] * self.num_concurrent
+
+        wins = 0
+        losses = 0
+        total_steps = 0
+        games_started = 0
+        games_completed = 0
+
+        active_count = min(self.num_concurrent, num_games)
+        for i in range(active_count):
+            games[i] = self._start_eval_game()
+            step_counts[i] = 0
+            games_started += 1
+
+        while games_completed < num_games:
+            # Advance past non-PPO decisions
+            for i in range(self.num_concurrent):
+                if games[i] is None or games[i].is_game_over:
+                    continue
+                self._advance_non_ppo(games[i])
+
+            # Handle completed games
+            for i in range(self.num_concurrent):
+                if games[i] is None or not games[i].is_game_over:
+                    continue
+                winner = games[i].get_winner()
+                if winner == self.training_agent_name:
+                    wins += 1
+                else:
+                    losses += 1
+                total_steps += step_counts[i]
+                games_completed += 1
+                if games_started < num_games:
+                    games[i] = self._start_eval_game()
+                    step_counts[i] = 0
+                    games_started += 1
+                    self._advance_non_ppo(games[i])
+                    if games[i].is_game_over:
+                        w = games[i].get_winner()
+                        if w == self.training_agent_name:
+                            wins += 1
+                        else:
+                            losses += 1
+                        total_steps += step_counts[i]
+                        games_completed += 1
+                        games[i] = None
+                else:
+                    games[i] = None
+
+            # Collect pending PPO decisions
+            pending_indices: list[int] = []
+            pending_states: list[torch.Tensor] = []
+            pending_masks: list[torch.Tensor] = []
+            pending_available: list[list] = []
+            pending_encoded: list[list[int]] = []
+
+            for i in range(self.num_concurrent):
+                if games[i] is None or games[i].is_game_over:
+                    continue
+                player = games[i].current_player
+                if player.name != self.training_agent_name:
+                    continue
+
+                available = get_available_actions(games[i], player)
+                encoded_actions = [encode_action(a, cards=self.card_names) for a in available]
+                has_meaningful = any(
+                    a.type in (ActionType.ATTACK_PLAYER, ActionType.PLAY_CARD)
+                    for a in available
+                )
+                state = encode_state(
+                    games[i], is_current_player_training=True,
+                    cards=self.card_names, available_actions=available
+                ).to(self.device)
+
+                mask = torch.zeros(self.action_dim, device=self.device)
+                mask[encoded_actions] = 1
+                if has_meaningful and 1 in encoded_actions:
+                    mask[1] = 0
+
+                pending_indices.append(i)
+                pending_states.append(state)
+                pending_masks.append(mask)
+                pending_available.append(available)
+                pending_encoded.append(encoded_actions)
+
+            if not pending_states:
+                continue
+
+            # Batched forward pass
+            states_batch = torch.stack(pending_states)
+            masks_batch = torch.stack(pending_masks)
+
+            with torch.no_grad():
+                logits_batch, values_batch = self.model(states_batch)
+
+            logits_batch = logits_batch.masked_fill(masks_batch == 0, float('-inf'))
+            probs_batch = torch.softmax(logits_batch, dim=-1)
+            dist = torch.distributions.Categorical(probs_batch)
+            act_indices = dist.sample()
+
+            for j, i in enumerate(pending_indices):
+                act_idx = act_indices[j].item()
+                action = pending_available[j][pending_encoded[j].index(int(act_idx))]
+                games[i].apply_decision(action)
+                step_counts[i] += 1
+
+        return wins, losses, total_steps
+
+    def _start_eval_game(self):
+        """Initialize a new game for evaluation (no rollout buffer needed)."""
+        opponent = self.opponent_factory()
+        game = Game(self.cards)
+        game.add_player(self.training_agent_name, _DummyAgent(self.training_agent_name))
+        game.add_player(opponent.name, opponent)
+        game.start_game()
+        return game

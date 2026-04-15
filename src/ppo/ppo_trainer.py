@@ -5,43 +5,16 @@ import torch
 import time
 import copy
 import random
-from concurrent.futures import ProcessPoolExecutor
 
 from src.cards.card import Card
 from src.ai.agent import Agent
 from src.cards.loader import load_trade_deck_cards
-from src.engine.game import Game
 from src.ai.ppo_agent import PPOAgent
 from src.ai.random_agent import RandomAgent
 from src.nn.action_encoder import get_action_space_size
 from src.ppo.batch_runner import BatchRunner
 from src.utils.logger import log, set_disabled, set_verbose
 
-def run_eval_game_worker(agent_state_dict, agent_kwargs, opponent_type, opponent_state_dict, opponent_kwargs, cards, seed):
-    random.seed(seed)
-    set_disabled(True)
-
-    # Reconstruct agent
-    agent = PPOAgent("PPO", **agent_kwargs)
-    agent.model.load_state_dict(agent_state_dict)
-    # Reconstruct opponent
-    if opponent_type == "ppo":
-        opponent = PPOAgent("Opp", **opponent_kwargs)
-        opponent.model.load_state_dict(opponent_state_dict)
-    else:
-        opponent = RandomAgent("Rand")
-
-    # Play one game
-    game = Game(cards)
-    game.add_player(agent.name, agent)
-    game.add_player(opponent.name, opponent)
-    game.start_game()
-    done = False
-    while not done:
-        done = game.step()
-    win = 1 if game.get_winner() == agent.name else 0
-    steps = len(agent.states)
-    return win, steps
 
 def main():
     parser = argparse.ArgumentParser("PPO Trainer")
@@ -61,6 +34,8 @@ def main():
     parser.add_argument("--main-device", type=str, default="cuda", help="Device for training/updates (cuda or cpu)")
     parser.add_argument("--simulation-device", type=str, default="cpu", help="Device for episode simulation (cpu or cuda)")
     parser.add_argument("--self-play", action="store_true", help="If set, the agent will play against itself instead of a random agent.")
+    parser.add_argument("--eval-every", type=int, default=5, help="Run evaluation every N updates (always evals on last update)")
+    parser.add_argument("--eval-games", type=int, default=100, help="Number of evaluation games per eval round")
     parser.add_argument("--workers", type=int, default=8, help="Number of parallel processes for episodes")
     args = parser.parse_args()
 
@@ -174,62 +149,35 @@ def main():
         # Save a deep copy of the agent after update
         past_agent = copy.deepcopy(agent)
         past_agent.clear_buffers()
-        # Update the name of the agent to include the update number
         past_agent.name = f"PPO_{upd}"
         past_agents.append(past_agent)
 
-        # Select eval opponent (same logic as training: past agent or random)
+        # Evaluate performance (every N updates, and always on the last)
+        is_last_update = upd == args.updates
+        if upd % args.eval_every == 0 or is_last_update:
+            log(f"Evaluating performance of {agent.name} vs {opponent.name}...")
+            start_time = time.time()
 
-        # Evaluate performance
-        log(f"Evaluating performance of {agent.name} vs {opponent.name}...")
-        start_time = time.time()
-        eval_games = 100
-        # Prepare concurrent evaluation
-        eval_state_dict = agent.model.cpu().state_dict()
-        eval_agent_kwargs = {
-            "card_names": card_names,
-            "lr": args.lr,
-            "gamma": args.gamma,
-            "lam": args.lam,
-            "clip_eps": args.clip_eps,
-            "device": args.simulation_device,
-            "main_device": args.main_device,
-            "simulation_device": args.simulation_device,
-            "log_debug": False,
-        }
-        if isinstance(opponent, PPOAgent):
-            opponent_type = "ppo"
-            opponent_state_dict = opponent.model.cpu().state_dict()
-            opponent_kwargs = eval_agent_kwargs.copy()
+            eval_runner = BatchRunner(
+                model=agent.model,
+                card_names=card_names,
+                cards=cards,
+                action_dim=get_action_space_size(card_names),
+                device=agent.simulation_device,
+                opponent_factory=make_opponent,
+                num_concurrent=min(args.eval_games, 64),
+            )
+            wins, losses, eval_steps = eval_runner.run_eval(args.eval_games)
+            agent.clear_buffers()
+            win_rate = wins / args.eval_games
+            duration_eval = time.time() - start_time
+            total_time_spent_on_eval += duration_eval
+            avg_steps = eval_steps / args.eval_games if args.eval_games > 0 else 0
+            log(f"Evaluation after update {upd}: {wins}/{args.eval_games} wins, {losses} losses (win rate {win_rate:.2%}) in {duration_eval:.2f}s.")
+            log(f"Average steps per game: {avg_steps:.2f}, avg time per step {duration_eval/max(eval_steps,1):.6f} seconds.")
         else:
-            opponent_type = "random"
-            opponent_state_dict = None
-            opponent_kwargs = {}
-        seeds = [random.randint(0, 1_000_000_000) for _ in range(eval_games)]
-        with ProcessPoolExecutor(max_workers=args.workers) as executor:
-            futures = [
-                executor.submit(
-                    run_eval_game_worker,
-                    eval_state_dict,
-                    eval_agent_kwargs,
-                    opponent_type,
-                    opponent_state_dict,
-                    opponent_kwargs,
-                    cards,
-                    s
-                )
-                for s in seeds
-            ]
-            results = [f.result() for f in futures]
-        wins = sum(w for w, _ in results)
-        steps = [s for _, s in results]
-        agent.clear_buffers()
-        losses = eval_games - wins
-        win_rate = wins / eval_games
-        duration_eval = time.time() - start_time
-        total_time_spent_on_eval += duration_eval
-        log(f"Evaluation after update {upd}: {wins}/{eval_games} wins, {losses} losses (win rate {win_rate:.2%}) in {duration_eval:.2f}s.")
-        log(f"Average steps per game: {sum(steps) / len(steps):.2f}, avg time per step {duration_eval/sum(steps):.6f} seconds.")
+            wins = -1  # no eval this round
+            log(f"Skipping eval (next eval at update {upd + args.eval_every - upd % args.eval_every}).")
 
         # save checkpoint per update
         ts = datetime.now().strftime("%m%d_%H%M")
