@@ -1210,7 +1210,7 @@ Core Set,3,Blob Wheel,"{Gain 1 Combat}
 <hr>
 {Scrap}: {Gain 3 Trade}",Base,Blob,3,5,Trade Deck,
 Core Set,1,Blob World,"{Gain 5 Combat}
-OR Draw a card for each Blob card that you've played this turn.",Base,Blob,8,,Trade Deck,
+OR Draw a card for each Blob card that you've played this turn.",Base,Blob,8,7,Trade Deck,
 Core Set,1,Mothership,"{Gain 6 Combat}
 Draw a card.
 <hr>
