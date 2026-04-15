@@ -910,3 +910,31 @@ class TestD4BrainWorld:
         assert h1 not in p1.hand
         assert d1 not in p1.discard_pile
         assert len([c for c in p1.hand if c.name in ("D1", "D2")]) == 2
+
+    def test_stale_action_does_not_inflate_draw_count(self):
+        """Replaying a consumed action must not increment resolved_count."""
+        game, p1, _ = _make_game_with_players()
+        c1 = Card("C1", 0, 0, [], "ship")
+        c2 = Card("C2", 1, 0, [], "ship")
+        p1.hand.extend([c1, c2])
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        effect = self._make_brain_world_effect()
+        effect.apply(game, p1, None)
+
+        pending = p1.get_current_pending_set()
+        scrap1 = [a for a in pending.actions if a.card is c1][0]
+        game.execute_action(scrap1)
+
+        # Replay the same stale action — should not match again
+        game.execute_action(scrap1)
+
+        # Skip remaining
+        skip = Action(type=ActionType.SKIP_DECISION)
+        game.execute_action(skip)
+
+        # Only 1 scrap counted → 1 card drawn. Hand = c2 + 1 drawn = 2
+        assert p1.get_current_pending_set() is None
+        assert c1 not in p1.hand
+        assert c2 in p1.hand
+        assert len(p1.hand) == 2  # c2 + 1 drawn (not 3 from inflated count)
