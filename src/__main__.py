@@ -119,8 +119,8 @@ def _build_elo_parser(sub: argparse._SubParsersAction):
     p.add_argument("--agents", type=str, default=None,
                    help="Comma-separated built-in agent types to include "
                         "(e.g. 'random,heuristic,simple')")
-    p.add_argument("--games-per-pair", type=int, default=50,
-                   help="Games to play per pairing (default: 50)")
+    p.add_argument("--games-per-pair", type=int, default=1000,
+                   help="Games to play per pairing (default: 1000)")
     p.add_argument("--simulation-device", type=str, default=_dev.simulation_device,
                    help="Device for inference (cuda or cpu)")
     p.add_argument("--num-concurrent", type=int, default=None,
