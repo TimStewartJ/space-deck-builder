@@ -125,8 +125,8 @@ def _build_elo_parser(sub: argparse._SubParsersAction):
                    help="Device for inference (cuda or cpu)")
     p.add_argument("--num-concurrent", type=int, default=None,
                    help="Concurrent games per worker (default: games-per-pair)")
-    p.add_argument("--num-workers", type=int, default=1,
-                   help="Worker processes for PPO-vs-builtin pairings (default: 1)")
+    p.add_argument("--num-workers", type=int, default=_run.num_workers,
+                   help=f"Worker processes for PPO pairings (default: {_run.num_workers})")
     return p
 
 
