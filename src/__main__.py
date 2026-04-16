@@ -143,6 +143,8 @@ def _build_analyze_parser(sub: argparse._SubParsersAction):
                    help="Device for inference (cuda or cpu)")
     p.add_argument("--num-concurrent", type=int, default=_run.num_concurrent,
                    help=f"Concurrent games (default: {_run.num_concurrent})")
+    p.add_argument("--dashboard", action="store_true", default=False,
+                   help="Generate interactive HTML dashboard (in addition to PNGs)")
     return p
 
 
@@ -259,6 +261,10 @@ def _run_analyze(args):
     if args.replay:
         print(f"Analyzing existing replay file: {args.replay}")
         analyze_replays(args.replay)
+        if args.dashboard:
+            from src.analysis.dashboard import generate_dashboard
+            dash_path = generate_dashboard(args.replay)
+            print(f"Dashboard saved to: {dash_path}")
         return
 
     # Otherwise, collect replays by playing games
@@ -391,6 +397,15 @@ def _run_analyze(args):
 
     # Analyze
     analyze_replays(output_path, output_dir=os.path.dirname(output_path) or "analysis")
+
+    # Generate interactive dashboard if requested
+    if args.dashboard:
+        from src.analysis.dashboard import generate_dashboard
+        dash_path = generate_dashboard(
+            output_path,
+            model_info=f"Model: {model_path}",
+        )
+        print(f"Dashboard saved to: {dash_path}")
 
 
 if __name__ == "__main__":

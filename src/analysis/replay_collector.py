@@ -41,6 +41,12 @@ class DecisionRecord:
     value_estimate: float
     # Buy availability: which card indices had legal BUY actions this step
     buyable_card_ids: list[int]
+    # Cards already played this turn (for combat/synergy analysis)
+    played_card_ids: list[int] = field(default_factory=list)
+    # Opponent bases currently in play
+    opp_bases_ids: list[int] = field(default_factory=list)
+    # Whether this player went first
+    is_first_player: bool = False
 
 
 @dataclass
@@ -139,6 +145,9 @@ class ReplayCollector:
             policy_entropy=entropy,
             value_estimate=value,
             buyable_card_ids=buyable_ids,
+            played_card_ids=[c.index for c in player.played_cards if c.index is not None],
+            opp_bases_ids=[b.index for b in opponent.bases if b.index is not None] if opponent else [],
+            is_first_player=(game.first_player_name == player.name),
         )
         self._active[slot].append(record)
 
