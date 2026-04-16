@@ -513,6 +513,8 @@ const plotPaper = '#1e293b';
 const plotFont = { color: '#e2e8f0', family: '-apple-system, sans-serif' };
 const plotGrid = { color: '#334155' };
 const plotLayout = { paper_bgcolor: plotPaper, plot_bgcolor: plotBg, font: plotFont, margin: {l:50,r:20,t:40,b:40}, xaxis: {gridcolor: plotGrid}, yaxis: {gridcolor: plotGrid} };
+const cardLayout = { paper_bgcolor: plotPaper, plot_bgcolor: plotBg, font: plotFont, margin: {l:160,r:20,t:40,b:40}, xaxis: {gridcolor: plotGrid}, yaxis: {gridcolor: plotGrid} };
+const pairLayout = { paper_bgcolor: plotPaper, plot_bgcolor: plotBg, font: plotFont, margin: {l:280,r:20,t:40,b:40}, xaxis: {gridcolor: plotGrid}, yaxis: {gridcolor: plotGrid} };
 const plotConfig = { responsive: true, displayModeBar: false };
 
 function switchTab(name, el) {
@@ -609,14 +611,14 @@ function renderCards(el) {
   var sorted = Object.entries(bt).sort(function(a,b){return b[1].overall-a[1].overall}).slice(0,20);
   var cardLabels = sorted.map(function(e){return e[0]});
   var z = sorted.map(function(e){return ['early','mid','late'].map(function(p){return e[1][p]})});
-  Plotly.newPlot('cd-heatmap', [{z:z, x:['Early','Mid','Late'], y:cardLabels, type:'heatmap', colorscale:[[0,'#1e293b'],[0.5,'#eab308'],[1,'#ef4444']], zmin:0, zmax:100, text:z.map(function(r){return r.map(function(v){return v+'%'})}), texttemplate:'%{text}', textfont:{size:11}, colorbar:{title:'Buy Rate %', ticksuffix:'%'}}], Object.assign({}, plotLayout, {yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(400, sorted.length*28)}), plotConfig);
+  Plotly.newPlot('cd-heatmap', [{z:z, x:['Early','Mid','Late'], y:cardLabels, type:'heatmap', colorscale:[[0,'#1e293b'],[0.5,'#eab308'],[1,'#ef4444']], zmin:0, zmax:100, text:z.map(function(r){return r.map(function(v){return v+'%'})}), texttemplate:'%{text}', textfont:{size:11}, colorbar:{title:'Buy Rate %', ticksuffix:'%'}}], Object.assign({}, cardLayout, {yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(400, sorted.length*28)}), plotConfig);
   var timing = Object.entries(S.cards.buy_timing).sort(function(a,b){return a[1].mean_turn-b[1].mean_turn}).slice(0,20);
-  Plotly.newPlot('cd-timing', [{y:timing.map(function(e){return e[0]}), x:timing.map(function(e){return e[1].mean_turn}), type:'bar', orientation:'h', marker:{color:timing.map(function(e){return e[1].mean_turn}), colorscale:[[0,'#4ade80'],[0.5,'#eab308'],[1,'#f87171']]}, text:timing.map(function(e){return 'Turn '+e[1].mean_turn+' ('+e[1].count+'x)'}), textposition:'auto'}], Object.assign({}, plotLayout, {xaxis:{gridcolor:plotGrid, title:'Avg Turn Bought'}, yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(400, timing.length*28)}), plotConfig);
+  Plotly.newPlot('cd-timing', [{y:timing.map(function(e){return e[0]}), x:timing.map(function(e){return e[1].mean_turn}), type:'bar', orientation:'h', marker:{color:timing.map(function(e){return e[1].mean_turn}), colorscale:[[0,'#4ade80'],[0.5,'#eab308'],[1,'#f87171']]}, text:timing.map(function(e){return 'Turn '+e[1].mean_turn+' ('+e[1].count+'x)'}), textposition:'auto'}], Object.assign({}, cardLayout, {xaxis:{gridcolor:plotGrid, title:'Avg Turn Bought'}, yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(400, timing.length*28)}), plotConfig);
   var dc = S.cards.deck_composition;
   var dcSorted = Object.entries(dc).filter(function(e){return e[1].avg_wins>0.05||e[1].avg_losses>0.05}).sort(function(a,b){return (b[1].avg_wins-b[1].avg_losses)-(a[1].avg_wins-a[1].avg_losses)}).slice(0,20);
-  Plotly.newPlot('cd-deck', [{y:dcSorted.map(function(e){return e[0]}), x:dcSorted.map(function(e){return e[1].avg_wins}), name:'Wins', type:'bar', orientation:'h', marker:{color:'#4ade80'}}, {y:dcSorted.map(function(e){return e[0]}), x:dcSorted.map(function(e){return e[1].avg_losses}), name:'Losses', type:'bar', orientation:'h', marker:{color:'#f87171'}}], Object.assign({}, plotLayout, {barmode:'group', xaxis:{gridcolor:plotGrid, title:'Avg Cards Bought per Game'}, yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(400, dcSorted.length*28)}), plotConfig);
+  Plotly.newPlot('cd-deck', [{y:dcSorted.map(function(e){return e[0]}), x:dcSorted.map(function(e){return e[1].avg_wins}), name:'Wins', type:'bar', orientation:'h', marker:{color:'#4ade80'}}, {y:dcSorted.map(function(e){return e[0]}), x:dcSorted.map(function(e){return e[1].avg_losses}), name:'Losses', type:'bar', orientation:'h', marker:{color:'#f87171'}}], Object.assign({}, cardLayout, {barmode:'group', xaxis:{gridcolor:plotGrid, title:'Avg Cards Bought per Game'}, yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(400, dcSorted.length*28)}), plotConfig);
   var co = S.cards.co_occurrence;
-  if (co.length > 0) { Plotly.newPlot('cd-cooccurrence', [{y:co.map(function(c){return c.pair.join(' + ')}), x:co.map(function(c){return c.count}), type:'bar', orientation:'h', marker:{color:'#60a5fa'}, text:co.map(function(c){return c.count+' wins'}), textposition:'auto'}], Object.assign({}, plotLayout, {xaxis:{gridcolor:plotGrid, title:'Games Won Together'}, yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(400, co.length*28)}), plotConfig); }
+  if (co.length > 0) { Plotly.newPlot('cd-cooccurrence', [{y:co.map(function(c){return c.pair.join(' + ')}), x:co.map(function(c){return c.count}), type:'bar', orientation:'h', marker:{color:'#60a5fa'}, text:co.map(function(c){return c.count+' wins'}), textposition:'auto'}], Object.assign({}, pairLayout, {xaxis:{gridcolor:plotGrid, title:'Games Won Together'}, yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(400, co.length*28)}), plotConfig); }
 }
 
 function renderCombat(el) {
@@ -629,7 +631,7 @@ function renderCombat(el) {
   Plotly.newPlot('cb-timing', [{x:allT, y:allT.map(function(t){return atP[t]||0}), name:'Attack Player', type:'bar', marker:{color:'#f87171'}}, {x:allT, y:allT.map(function(t){return atB[t]||0}), name:'Attack Base', type:'bar', marker:{color:'#eab308'}}], Object.assign({}, plotLayout, {barmode:'stack', xaxis:{gridcolor:plotGrid, title:'Turn'}, yaxis:{gridcolor:plotGrid, title:'Attacks'}}), plotConfig);
   var bf = S.combat.base_frequency;
   var bfSorted = Object.entries(bf).sort(function(a,b){return b[1]-a[1]});
-  Plotly.newPlot('cb-bases', [{y:bfSorted.map(function(e){return e[0]}), x:bfSorted.map(function(e){return e[1]}), type:'bar', orientation:'h', marker:{color:'#60a5fa'}, text:bfSorted.map(function(e){return e[1]}), textposition:'auto'}], Object.assign({}, plotLayout, {yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(300, bfSorted.length*28)}), plotConfig);
+  Plotly.newPlot('cb-bases', [{y:bfSorted.map(function(e){return e[0]}), x:bfSorted.map(function(e){return e[1]}), type:'bar', orientation:'h', marker:{color:'#60a5fa'}, text:bfSorted.map(function(e){return e[1]}), textposition:'auto'}], Object.assign({}, cardLayout, {yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(300, bfSorted.length*28)}), plotConfig);
 }
 
 function renderFailures(el) {
@@ -643,7 +645,7 @@ function renderFailures(el) {
   if (tpTurns.length > 0) { Plotly.newPlot('fl-turning', [{x:tpTurns, y:tpTurns.map(function(t){return tp[t]}), type:'bar', marker:{color:'#f87171'}}], Object.assign({}, plotLayout, {xaxis:{gridcolor:plotGrid, title:'Turn'}, yaxis:{gridcolor:plotGrid, title:'Games Turning Negative'}}), plotConfig); }
   var bd = S.failures.buy_rate_delta;
   var bdSorted = Object.entries(bd).sort(function(a,b){return b[1].delta-a[1].delta}).slice(0,15);
-  if (bdSorted.length > 0) { Plotly.newPlot('fl-buydelta', [{y:bdSorted.map(function(e){return e[0]}), x:bdSorted.map(function(e){return e[1].win_rate}), name:'Win Buy Rate', type:'bar', orientation:'h', marker:{color:'#4ade80'}}, {y:bdSorted.map(function(e){return e[0]}), x:bdSorted.map(function(e){return e[1].loss_rate}), name:'Loss Buy Rate', type:'bar', orientation:'h', marker:{color:'#f87171'}}], Object.assign({}, plotLayout, {barmode:'group', xaxis:{gridcolor:plotGrid, title:'Buy Rate %'}, yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(300, bdSorted.length*35)}), plotConfig); }
+  if (bdSorted.length > 0) { Plotly.newPlot('fl-buydelta', [{y:bdSorted.map(function(e){return e[0]}), x:bdSorted.map(function(e){return e[1].win_rate}), name:'Win Buy Rate', type:'bar', orientation:'h', marker:{color:'#4ade80'}}, {y:bdSorted.map(function(e){return e[0]}), x:bdSorted.map(function(e){return e[1].loss_rate}), name:'Loss Buy Rate', type:'bar', orientation:'h', marker:{color:'#f87171'}}], Object.assign({}, cardLayout, {barmode:'group', xaxis:{gridcolor:plotGrid, title:'Buy Rate %'}, yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(300, bdSorted.length*35)}), plotConfig); }
 }
 
 // Render the overview tab on load
