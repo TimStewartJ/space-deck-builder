@@ -91,27 +91,20 @@ def elo_update(
 ) -> tuple[float, float]:
     """Compute new Elo ratings from aggregate match results.
 
-    Simulates per-game updates: recalculates expected scores after each
-    game result so that lopsided pairings don't produce inflated swings.
+    Uses the standard batch Elo formula: compute expected score from
+    current ratings, compare to actual win rate, and apply a single
+    update scaled by K and number of games.
 
     Returns (new_rating_a, new_rating_b).
     """
-    r_a, r_b = rating_a, rating_b
-    losses_a = total_games - wins_a
+    if total_games == 0:
+        return rating_a, rating_b
 
-    # Apply wins first, then losses (order within same-result games
-    # doesn't matter since ratings are symmetric)
-    for _ in range(wins_a):
-        e_a = expected_score(r_a, r_b)
-        r_a += K_FACTOR * (1.0 - e_a)
-        r_b += K_FACTOR * (0.0 - (1.0 - e_a))
+    e_a = expected_score(rating_a, rating_b)
+    actual_a = wins_a / total_games
+    delta = K_FACTOR * (actual_a - e_a)
 
-    for _ in range(losses_a):
-        e_a = expected_score(r_a, r_b)
-        r_a += K_FACTOR * (0.0 - e_a)
-        r_b += K_FACTOR * (1.0 - (1.0 - e_a))
-
-    return r_a, r_b
+    return rating_a + delta, rating_b - delta
 
 
 def _extract_label(path: str) -> str:
@@ -468,6 +461,7 @@ def run_tournament(
             pairing_num += 1
             p_a = participants[i]
             p_b = participants[j]
+            pair_start = time.time()
 
             # Dispatch to the appropriate pairing handler
             if isinstance(p_a, CheckpointParticipant) and isinstance(p_b, CheckpointParticipant):
@@ -498,6 +492,8 @@ def run_tournament(
                 )
                 set_disabled(False)
 
+            pair_elapsed = time.time() - pair_start
+
             # Use actual completed games (handles partial MP eval results)
             actual_games = wins_a + wins_b
 
@@ -517,7 +513,7 @@ def run_tournament(
             wr_a = wins_a / actual_games * 100 if actual_games > 0 else 0
             log(f"  [{pairing_num}/{total_pairings}] {labels[i]} vs {labels[j]}: "
                 f"{wins_a}/{actual_games} ({wr_a:.0f}%) -> "
-                f"Elo {ratings[i]:.0f} / {ratings[j]:.0f}")
+                f"Elo {ratings[i]:.0f} / {ratings[j]:.0f}  ({pair_elapsed:.1f}s)")
 
     elapsed = time.time() - start
     log(f"\nTournament complete in {elapsed:.1f}s")

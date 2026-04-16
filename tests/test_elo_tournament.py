@@ -134,7 +134,7 @@ class TestValidateCheckpoints:
 # ---------------------------------------------------------------------------
 
 class TestEloMath:
-    """Elo calculation correctness."""
+    """Elo calculation correctness using batch formula."""
 
     def test_expected_score_equal_ratings(self):
         assert expected_score(1000, 1000) == pytest.approx(0.5)
@@ -143,17 +143,32 @@ class TestEloMath:
         score = expected_score(1200, 1000)
         assert score > 0.5
 
-    def test_elo_update_symmetric_with_even_record(self):
-        """With equal starting ratings and a 50/50 record, the per-game
-        update introduces slight ordering drift. Ratings should still be
-        roughly symmetric around the starting value."""
+    def test_elo_update_even_record_no_change(self):
+        """Equal ratings + 50/50 record = no rating change."""
         r_a, r_b = elo_update(1000, 1000, wins_a=5, total_games=10)
-        assert r_a + r_b == pytest.approx(2000, abs=0.01)  # zero-sum
+        assert r_a == pytest.approx(1000)
+        assert r_b == pytest.approx(1000)
+
+    def test_elo_update_zero_sum(self):
+        r_a, r_b = elo_update(1000, 1000, wins_a=7, total_games=10)
+        assert r_a + r_b == pytest.approx(2000)
 
     def test_elo_update_winner_gains(self):
         r_a, r_b = elo_update(1000, 1000, wins_a=10, total_games=10)
         assert r_a > 1000
         assert r_b < 1000
+
+    def test_elo_update_lopsided_result_stays_sane(self):
+        """880/1000 wins should produce reasonable ratings, not inverted ones."""
+        r_a, r_b = elo_update(1000, 1000, wins_a=880, total_games=1000)
+        assert r_a > r_b
+        assert r_a > 1000
+        assert r_b < 1000
+
+    def test_elo_update_zero_games(self):
+        r_a, r_b = elo_update(1000, 1200, wins_a=0, total_games=0)
+        assert r_a == 1000
+        assert r_b == 1200
 
 
 # ---------------------------------------------------------------------------
