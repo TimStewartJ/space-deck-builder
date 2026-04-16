@@ -3,11 +3,33 @@ import torch.nn as nn
 
 from src.config import ModelConfig
 from src.encoding.state_utils import unpack_state
-from src.utils.logger import log
 
 
-def _build_mlp(input_dim: int, hidden_sizes: list[int], output_dim: int) -> nn.Sequential:
-    """Build a multi-layer perceptron from a list of hidden layer sizes."""
+# Zone names used by unpack_state, in a fixed order for embedding indexing.
+ZONE_NAMES = [
+    'trade_row',
+    'train_hand', 'train_disc', 'train_deck', 'train_bases',
+    'opp_unseen', 'opp_disc', 'opp_bases',
+]
+NUM_ZONES = len(ZONE_NAMES)
+
+# 4 flags + 5 training resources + 6 opponent resources
+NUMERIC_DIM = 4 + 5 + 6
+
+
+def _build_trunk(input_dim: int, hidden_sizes: list[int]) -> nn.Sequential:
+    """Build a feature trunk: Linear → ReLU pairs (no bare output layer)."""
+    layers: list[nn.Module] = []
+    prev = input_dim
+    for h in hidden_sizes:
+        layers.append(nn.Linear(prev, h))
+        layers.append(nn.ReLU())
+        prev = h
+    return nn.Sequential(*layers)
+
+
+def _build_head(input_dim: int, hidden_sizes: list[int], output_dim: int) -> nn.Sequential:
+    """Build a prediction head: hidden layers with ReLU, then a bare output layer."""
     layers: list[nn.Module] = []
     prev = input_dim
     for h in hidden_sizes:
@@ -19,6 +41,23 @@ def _build_mlp(input_dim: int, hidden_sizes: list[int], output_dim: int) -> nn.S
 
 
 class PPOActorCritic(nn.Module):
+    """Actor-critic network with per-zone card embeddings, sum pooling,
+    and a shared feature trunk.
+
+    Card representation:
+        Each card has a learned embedding (card_emb). Each of the 8 zones
+        has a learned embedding (zone_emb). For a given zone, each card's
+        feature is ``card_emb[card] + zone_emb[zone]``, weighted by the
+        card's presence value and summed across all cards in the zone.
+        This produces a fixed-size ``[emb_dim]`` vector per zone.
+
+    Architecture:
+        [zone_pooled (num_zones × emb_dim) | numeric (15)]
+        → shared trunk (MLP)
+        → actor head → logits
+        → critic head → value
+    """
+
     def __init__(self,
                  state_dim: int,
                  action_dim: int,
@@ -27,72 +66,61 @@ class PPOActorCritic(nn.Module):
                  model_config: ModelConfig | None = None):
         super().__init__()
         cfg = model_config or ModelConfig()
-        # Legacy kwarg takes precedence for backward compat
         emb_dim = card_emb_dim if card_emb_dim is not None else cfg.card_emb_dim
 
         self.num_cards = num_cards
         self.action_dim = action_dim
 
-        # Card zone locations for embedding lookup
-        self.locations = [
-            'trade_row',
-            'train_hand','train_disc','train_deck','train_bases',
-            'opp_unseen', 'opp_disc', 'opp_bases'
-        ]
-        self.loc_emb = nn.Embedding(self.num_cards, emb_dim)
+        # Card identity embedding and zone-position embedding
+        self.card_emb = nn.Embedding(num_cards, emb_dim)
+        self.zone_emb = nn.Embedding(NUM_ZONES, emb_dim)
 
-        # numeric: 4 flags + 5 training resources + 6 opponent resources
-        self.numeric_dim = 4 + 5 + 6
-        combined_dim = self.numeric_dim + len(self.locations) * emb_dim * num_cards
+        combined_dim = NUM_ZONES * emb_dim + NUMERIC_DIM
 
-        self.actor = _build_mlp(combined_dim, cfg.actor_hidden_sizes, action_dim)
-        self.critic = _build_mlp(combined_dim, cfg.critic_hidden_sizes, 1)
+        # Shared feature trunk (ends with ReLU)
+        self.trunk = _build_trunk(combined_dim, cfg.trunk_hidden_sizes)
+        trunk_out_dim = cfg.trunk_hidden_sizes[-1] if cfg.trunk_hidden_sizes else combined_dim
+
+        # Separate policy and value heads
+        self.actor_head = _build_head(trunk_out_dim, cfg.actor_head_sizes, action_dim)
+        self.critic_head = _build_head(trunk_out_dim, cfg.critic_head_sizes, 1)
 
     def forward(self, x: torch.Tensor):
-        # x: [B, state_dim] or [state_dim] if single
+        # x: [B, state_dim] or [state_dim]
         pieces, single = unpack_state(x, self.num_cards, self.action_dim)
-        # pieces: dict of tensors, each [B, num_cards] or [num_cards] for card locations,
-        #         and [B, n] or [n] for numeric features
 
-        feats = []
-        for i, loc in enumerate(self.locations):
-            # pieces[loc]: [B, num_cards]
-            idx = torch.arange(self.num_cards, device=x.device) + i * self.num_cards  # [num_cards]
-            # loc_embs: torch.Tensor = self.loc_emb(idx)  # [num_cards, card_emb_dim]
-            # For each card in this location, multiply presence by embedding
-            # [B, num_cards, card_emb_dim]
-            loc_feat = pieces[loc].unsqueeze(-1) * self.loc_emb.weight.unsqueeze(0)
-            # Flatten per location: [B, num_cards * card_emb_dim]
-            loc_feat = loc_feat.reshape(x.shape[0], -1) if len(x.shape) > 1 else loc_feat.reshape(1, -1)
-            feats.append(loc_feat)
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
 
-        # Concatenate all locations: [B, num_locations * num_cards * card_emb_dim]
-        card_feat = torch.cat(feats, dim=1)
+        # -- Per-zone sum pooling with zone-aware embeddings --
+        # card_emb.weight: [num_cards, emb_dim]
+        card_w = self.card_emb.weight  # [C, E]
 
-        # log(f"card feat: {card_feat.squeeze(0).mean()}")
+        zone_feats = []
+        for zone_idx, zone_name in enumerate(ZONE_NAMES):
+            presence = pieces[zone_name]                         # [B, C]
+            # card + zone embedding for this zone
+            combined = card_w + self.zone_emb.weight[zone_idx]   # [C, E]  (broadcast)
+            # weight by presence and sum-pool: [B, C, 1] * [1, C, E] → sum → [B, E]
+            pooled = (presence.unsqueeze(-1) * combined.unsqueeze(0)).sum(dim=1)
+            zone_feats.append(pooled)
 
-        # pieces['is_train']: [B, 1]
-        # pieces['is_first']: [B, 1]
-        # pieces['has_actions']: [B, 1]
-        # pieces['train_res']: [B, 5]
-        # pieces['opp_res']: [B, 5]
-        # numeric: [B, 3 + 5 + 5] = [B, 13]
+        # Concatenate zone summaries: [B, num_zones * emb_dim]
+        card_feat = torch.cat(zone_feats, dim=1)
+
+        # Numeric features: [B, NUMERIC_DIM]
         numeric = torch.cat([
             pieces['is_train'], pieces['is_first'], pieces['can_buy'], pieces['has_actions'],
-            pieces['train_res'], pieces['opp_res']
+            pieces['train_res'], pieces['opp_res'],
         ], dim=1)
 
-        # h: [B, numeric_dim + len(self.locations)*card_emb_dim]
-        h = torch.cat([numeric, card_feat], dim=1)
-        # logits: [B, action_dim]
-        logits = self.actor(h)
-        # value: [B, 1] -> [B]
-        value  = self.critic(h).squeeze(-1)
-        
-        # log(f"forward: {x.shape} -> {logits.shape} {logits}, {value.shape} {value}")
-        # log(f"loc emb: {self.loc_emb.weight.shape} {self.loc_emb.weight}")
+        # Shared trunk
+        h = self.trunk(torch.cat([card_feat, numeric], dim=1))
+
+        # Heads
+        logits = self.actor_head(h)
+        value = self.critic_head(h).squeeze(-1)
 
         if single:
-            # logits: [action_dim], value: []
             return logits.squeeze(0), value.squeeze(0)
         return logits, value

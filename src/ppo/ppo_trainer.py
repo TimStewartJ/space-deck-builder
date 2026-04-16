@@ -94,17 +94,15 @@ def train(
                        registry=registry)
     # Log the parameter size of the model
     num_params = sum(p.numel() for p in agent.model.parameters() if p.requires_grad)
-    # Get input and output size of the actor model
-    actor = agent.model.actor
-    # Try to infer input and output size from the first and last layers
+    # Infer input and output size from the trunk and actor head
     try:
-        first_layer = actor[0]
-        last_layer = actor[-1]
-        input_size = first_layer.in_features if hasattr(first_layer, 'in_features') else "Unknown"
-        output_size = last_layer.out_features if hasattr(last_layer, 'out_features') else "Unknown"
+        trunk_first = agent.model.trunk[0]
+        actor_last = agent.model.actor_head[-1]
+        input_size = trunk_first.in_features if hasattr(trunk_first, 'in_features') else "Unknown"
+        output_size = actor_last.out_features if hasattr(actor_last, 'out_features') else "Unknown"
     except Exception:
         input_size = output_size = "Unknown"
-    print(f"Model has {num_params / 1_000_000:.2f}M parameters. Actor input size: {input_size}, output size: {output_size}.")
+    print(f"Model has {num_params / 1_000_000:.2f}M parameters. Trunk input size: {input_size}, action dim: {output_size}.")
 
     # Set up the opponent pool from config
     pool = OpponentPool(
@@ -177,7 +175,7 @@ def train(
         duration_update = time.time() - start_time
         total_time_spent_on_updates += duration_update
         print(f"Update {upd} complete in {duration_update:.2f}s. State size: {states.shape}")
-        print(f"Loc Emb: {agent.model.loc_emb.weight.grad is not None and agent.model.loc_emb.weight.grad.norm().item()}")
+        print(f"Card Emb grad: {agent.model.card_emb.weight.grad is not None and agent.model.card_emb.weight.grad.norm().item():.4f}")
 
         # Add snapshot for self-play after each update
         if run_cfg.self_play:

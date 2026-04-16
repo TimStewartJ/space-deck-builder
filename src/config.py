@@ -79,13 +79,20 @@ class DataConfig:
 
 @dataclass
 class ModelConfig:
-    """Neural network architecture parameters."""
-    card_emb_dim: int = 16
-    actor_hidden_sizes: list[int] = field(
+    """Neural network architecture parameters.
+
+    The model uses per-zone card embeddings with sum pooling and a shared
+    feature trunk feeding separate actor/critic heads.
+    """
+    card_emb_dim: int = 32
+    trunk_hidden_sizes: list[int] = field(
         default_factory=lambda: [256, 256]
     )
-    critic_hidden_sizes: list[int] = field(
-        default_factory=lambda: [256, 256]
+    actor_head_sizes: list[int] = field(
+        default_factory=lambda: [128]
+    )
+    critic_head_sizes: list[int] = field(
+        default_factory=lambda: [128]
     )
 
     def to_dict(self) -> dict[str, Any]:
@@ -186,8 +193,9 @@ class SimConfig:
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
 
-# Current checkpoint schema version
-CHECKPOINT_VERSION = 1
+# Current checkpoint schema version — bumped to 2 for per-zone embeddings
+# + sum pooling + shared trunk architecture (incompatible with v1 weights).
+CHECKPOINT_VERSION = 2
 
 
 def save_checkpoint(
@@ -238,6 +246,10 @@ def load_checkpoint(path: str, map_location=None) -> dict[str, Any]:
 
     Returns a dict with at least ``model_state_dict``. Versioned checkpoints
     also include ``config``, ``schema_version``, ``timestamp``, etc.
+
+    Raises ``ValueError`` if the checkpoint's schema version is newer than
+    the current code supports, or if it predates the current architecture
+    (v1 weights are incompatible with v2 model shapes).
     """
     import torch
 
@@ -245,6 +257,22 @@ def load_checkpoint(path: str, map_location=None) -> dict[str, Any]:
 
     # Legacy format: bare state_dict (keys are parameter names like "actor.0.weight")
     if "model_state_dict" not in data:
-        return {"model_state_dict": data, "schema_version": 0, "config": {}}
+        data = {"model_state_dict": data, "schema_version": 0, "config": {}}
+
+    saved_version = data.get("schema_version", 0)
+    if saved_version > CHECKPOINT_VERSION:
+        raise ValueError(
+            f"Checkpoint {path} has schema version {saved_version}, but this "
+            f"code only supports up to version {CHECKPOINT_VERSION}. "
+            f"Update your code to load this checkpoint."
+        )
+    if saved_version < CHECKPOINT_VERSION:
+        raise ValueError(
+            f"Checkpoint {path} has schema version {saved_version}, which is "
+            f"incompatible with the current model architecture (version "
+            f"{CHECKPOINT_VERSION}). V1 checkpoints used a flat embedding + "
+            f"separate actor/critic MLPs; V2 uses per-zone embeddings + "
+            f"shared trunk. Please retrain from scratch."
+        )
 
     return data
