@@ -113,7 +113,7 @@ class PPOConfig:
     lam: float = 0.95
     clip_eps: float = 0.2
     epochs: int = 4
-    batch_size: int = 4096
+    batch_size: int = 8192
     entropy_coef: float = 0.025
     grad_clip: float = 0.5
     critic_loss_coef: float = 0.5
@@ -130,7 +130,7 @@ class PPOConfig:
 @dataclass
 class RunConfig:
     """Training run topology and schedule."""
-    episodes: int = 4096
+    episodes: int = 16000
     updates: int = 200
     num_workers: int = 20
     games_per_worker: int = 16
