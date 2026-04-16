@@ -40,6 +40,8 @@ class AnalysisResult:
     economy_curves: dict    # turn -> {avg_trade, avg_combat, avg_health, count}
     entropy_by_phase: dict  # phase -> {mean, min, max}
     value_accuracy: dict    # {wins_mean_value, losses_mean_value}
+    game_lengths_wins: list[int] = None   # turn counts for won games
+    game_lengths_losses: list[int] = None # turn counts for lost games
 
 
 def analyze_replays(
@@ -208,6 +210,8 @@ def analyze_replays(
         economy_curves=economy_curves,
         entropy_by_phase=entropy_by_phase,
         value_accuracy=value_accuracy,
+        game_lengths_wins=win_lengths,
+        game_lengths_losses=loss_lengths,
     )
 
     _print_report(result)
@@ -399,6 +403,39 @@ def _save_charts(r: AnalysisResult, output_dir: str) -> None:
         ax.grid(True, alpha=0.3, axis="y")
         plt.tight_layout()
         chart_path = os.path.join(output_dir, "entropy_by_phase.png")
+        plt.savefig(chart_path, dpi=150)
+        plt.close()
+        print(f"Saved: {chart_path}")
+
+    # Chart 5: Game length distribution (wins vs losses)
+    win_lens = r.game_lengths_wins or []
+    loss_lens = r.game_lengths_losses or []
+    all_lens = win_lens + loss_lens
+    if all_lens:
+        fig, ax = plt.subplots(figsize=(12, 5))
+        lo, hi = min(all_lens), max(all_lens)
+        bins = range(lo, hi + 2)
+        if win_lens:
+            ax.hist(win_lens, bins=bins, alpha=0.7, label=f"Wins ({len(win_lens)})",
+                    color="#4CAF50", edgecolor="white", linewidth=0.5)
+        if loss_lens:
+            ax.hist(loss_lens, bins=bins, alpha=0.7, label=f"Losses ({len(loss_lens)})",
+                    color="#F44336", edgecolor="white", linewidth=0.5)
+        if win_lens:
+            med_w = sorted(win_lens)[len(win_lens) // 2]
+            ax.axvline(med_w, color="#2E7D32", linestyle="--", linewidth=1.5,
+                       label=f"Win median ({med_w})")
+        if loss_lens:
+            med_l = sorted(loss_lens)[len(loss_lens) // 2]
+            ax.axvline(med_l, color="#C62828", linestyle="--", linewidth=1.5,
+                       label=f"Loss median ({med_l})")
+        ax.set_xlabel("Game Length (turns)")
+        ax.set_ylabel("Number of Games")
+        ax.set_title("Game Length Distribution")
+        ax.legend()
+        ax.grid(True, alpha=0.3, axis="y")
+        plt.tight_layout()
+        chart_path = os.path.join(output_dir, "game_length_distribution.png")
         plt.savefig(chart_path, dpi=150)
         plt.close()
         print(f"Saved: {chart_path}")
