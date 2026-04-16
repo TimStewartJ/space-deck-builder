@@ -432,6 +432,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .chart-box.full { min-width: 100%; }
 .chart-box h3 { color: #f8fafc; font-size: 15px; margin-bottom: 12px; font-weight: 600; }
 .chart-box .note { color: #64748b; font-size: 12px; margin-bottom: 8px; }
+.glossary-toggle { color: #60a5fa; font-size: 13px; cursor: pointer; padding: 8px 32px; display: inline-block; }
+.glossary-toggle:hover { color: #93c5fd; }
+.glossary { display: none; padding: 12px 32px 20px; }
+.glossary.open { display: block; }
+.glossary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.glossary-item { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; }
+.glossary-item .term { color: #60a5fa; font-weight: 600; font-size: 13px; }
+.glossary-item .def { color: #94a3b8; font-size: 12px; margin-top: 4px; line-height: 1.5; }
 """
 
 
@@ -457,6 +465,23 @@ def _build_html(stats: dict, card_names: list[str], model_info: str, replay_path
   <div class="subtitle">{escaped_info} · Generated from replay data</div>
 </div>
 <div id="kpis" class="kpi-row"></div>
+<div class="glossary-toggle" onclick="this.nextElementSibling.classList.toggle('open')">📖 Glossary — click to expand</div>
+<div class="glossary">
+<div class="glossary-grid">
+  <div class="glossary-item"><div class="term">Early / Mid / Late (Game Phases)</div><div class="def">Turns 1–5 = early, 6–15 = mid, 16+ = late. Used to track how the agent's strategy evolves over the course of a game.</div></div>
+  <div class="glossary-item"><div class="term">Policy Entropy</div><div class="def">Measures how uncertain the agent is about its next action. High entropy = many viable options being considered. Low entropy = agent is very confident in one action. Entropy near 0 may indicate the policy has collapsed.</div></div>
+  <div class="glossary-item"><div class="term">Value Estimate</div><div class="def">The critic network's prediction of how likely the agent is to win from the current state. Positive = expects to win, negative = expects to lose. Range is unbounded but typically –1 to +1.</div></div>
+  <div class="glossary-item"><div class="term">Buy Rate (when affordable)</div><div class="def">How often the agent buys a card when it has enough trade to do so. 100% = always buys when it can afford it. Measures card preference independent of economy strength.</div></div>
+  <div class="glossary-item"><div class="term">Trade / Combat</div><div class="def">Trade is currency for buying cards from the trade row. Combat is damage for attacking opponents or destroying bases. Both reset to 0 at end of turn.</div></div>
+  <div class="glossary-item"><div class="term">Authority (Health)</div><div class="def">Each player starts with 50 authority. Reduced by opponent combat. A player at 0 or below loses. Some cards gain authority (healing).</div></div>
+  <div class="glossary-item"><div class="term">Health Differential</div><div class="def">Player's health minus opponent's health at each decision point. Positive = ahead, negative = behind. Shows when games diverge.</div></div>
+  <div class="glossary-item"><div class="term">Turning Point</div><div class="def">The turn in a lost game where the agent's value estimate first goes negative — the moment the critic thinks the game is lost.</div></div>
+  <div class="glossary-item"><div class="term">Buy Rate Delta</div><div class="def">Difference in buy rate between winning and losing games. A large positive delta means the agent buys that card more in wins — it may be a key card to prioritize.</div></div>
+  <div class="glossary-item"><div class="term">Card Co-occurrence</div><div class="def">How often two cards are both purchased in the same winning game. High co-occurrence suggests synergy between cards.</div></div>
+  <div class="glossary-item"><div class="term">P10 / P90 Range</div><div class="def">The 10th and 90th percentile values. The shaded band on economy curves shows where 80% of games fall, filtering out extreme outliers.</div></div>
+  <div class="glossary-item"><div class="term">Base / Outpost</div><div class="def">Bases stay in play across turns (unlike ships). Outposts are bases that must be destroyed before the opponent can attack you or your other bases directly.</div></div>
+</div>
+</div>
 <div class="tabs">
   <div class="tab active" onclick="switchTab('overview', this)">Overview</div>
   <div class="tab" onclick="switchTab('economy', this)">Economy</div>
