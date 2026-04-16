@@ -139,7 +139,7 @@ def train(
         sched_info = ""
         if run_cfg.self_play_schedule != "constant":
             sched_info = (f", schedule: {run_cfg.self_play_schedule} "
-                          f"{run_cfg.self_play_ratio_start:.2f}→{run_cfg.self_play_ratio:.2f}")
+                          f"{run_cfg.self_play_ratio_start:.2f}->{run_cfg.self_play_ratio:.2f}")
         else:
             sched_info = f", ratio: {run_cfg.self_play_ratio}"
         pool_msg += f" + self-play ({sched_info.lstrip(', ')}{pfsp_info})"
@@ -196,7 +196,7 @@ def train(
                 ]
                 print(f"  PFSP: {', '.join(parts)}")
 
-        # --- Device boundary: sim_device → main_device ---
+        # --- Device boundary: sim_device -> main_device ---
         # run_episodes() returns tensors on simulation_device.
         # Transfer to main_device for the PPO gradient update.
         agent.device = agent.main_device
