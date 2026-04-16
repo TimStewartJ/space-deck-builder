@@ -233,12 +233,19 @@ def _play_ppo_vs_ppo(
     device: str,
     num_concurrent: int,
     games_per_pair: int,
+    data_cfg: DataConfig,
+    num_workers: int,
+    registry=None,
 ) -> tuple[int, int]:
-    """Play games between two PPO checkpoints using BatchRunner.
+    """Play games between two PPO checkpoints with batched GPU inference.
 
-    Player A is the batched player; player B is the per-step opponent.
+    Uses MultiProcessBatchRunner with Player B loaded as a snapshot on the
+    InferenceServer, so both players get batched GPU inference. Player A
+    is the "training" model, Player B is the snapshot opponent.
     Returns (wins_a, wins_b).
     """
+    from src.ppo.mp_batch_runner import MultiProcessBatchRunner
+
     model_a = PPOActorCritic(
         state_dim=state_dim,
         action_dim=action_dim,
@@ -248,19 +255,21 @@ def _play_ppo_vs_ppo(
     model_a.load_state_dict(ckpt_a.state_dict)
     model_a.eval()
 
-    opp_factory = _make_opponent_factory(
-        ckpt_b.state_dict, card_names, device,
-        model_config=ckpt_b.model_config,
-    )
+    per_worker_concurrent = max(1, num_concurrent // max(1, num_workers))
 
-    runner = BatchRunner(
+    runner = MultiProcessBatchRunner(
         model=model_a,
         card_names=card_names,
         cards=cards,
         action_dim=action_dim,
-        device=torch.device(device),
-        opponent_factory=opp_factory,
-        num_concurrent=num_concurrent,
+        device=device,
+        data_config=data_cfg,
+        opponent_spec="random",  # fallback spec, unused when self_play_ratio=1.0
+        num_concurrent=per_worker_concurrent,
+        num_workers=num_workers,
+        registry=registry,
+        snapshot_state_dicts=[(ckpt_b.label, ckpt_b.state_dict)],
+        self_play_ratio=1.0,
     )
 
     set_disabled(True)
@@ -397,7 +406,7 @@ def run_tournament(
     """Run a round-robin Elo tournament between checkpoints and/or agents.
 
     Supports three pairing types:
-    - PPO vs PPO: BatchRunner with batched inference (single-process)
+    - PPO vs PPO: MultiProcessBatchRunner with snapshot (both batched on GPU)
     - PPO vs Builtin: BatchRunner or MultiProcessBatchRunner (multi-worker)
     - Builtin vs Builtin: direct game simulation (no neural net)
 
@@ -448,7 +457,7 @@ def run_tournament(
     log(f"Running {total_pairings} pairings x {games_per_pair} games = "
         f"{total_pairings * games_per_pair} total games")
     if num_workers > 1:
-        log(f"Using {num_workers} workers for PPO-vs-builtin pairings")
+        log(f"Using {num_workers} workers for PPO pairings")
     log("")
 
     pairing_num = 0
@@ -464,7 +473,8 @@ def run_tournament(
             if isinstance(p_a, CheckpointParticipant) and isinstance(p_b, CheckpointParticipant):
                 wins_a, wins_b = _play_ppo_vs_ppo(
                     p_a, p_b, cards, card_names, action_dim, state_dim,
-                    device, num_concurrent, games_per_pair,
+                    device, num_concurrent, games_per_pair, data_cfg,
+                    num_workers, registry=registry,
                 )
             elif isinstance(p_a, CheckpointParticipant) and isinstance(p_b, BuiltinParticipant):
                 wins_a, wins_b = _play_ppo_vs_builtin(

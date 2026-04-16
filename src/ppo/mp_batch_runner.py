@@ -88,6 +88,100 @@ class MultiProcessBatchRunner:
         # Use explicit spawn context for Windows compatibility
         self._mp_ctx = mp.get_context("spawn")
 
+    def _spawn_workers(
+        self,
+        target_fn,
+        num_items: int,
+        items_per_worker: list[int],
+        *,
+        use_snapshots: bool = False,
+        extra_args_fn=None,
+        extra_kwargs_fn=None,
+    ):
+        """Spawn worker processes with a centralized InferenceServer.
+
+        Shared setup for both run_episodes() and run_eval(): creates the
+        inference server (with optional opponent snapshots on GPU), generates
+        seeds, and spawns one process per worker.
+
+        Args:
+            target_fn: Worker entry point (sim_worker_main or sim_worker_eval)
+            num_items: Total episodes/games to run
+            items_per_worker: Pre-computed work distribution
+            use_snapshots: Load opponent snapshots into InferenceServer
+            extra_args_fn: Optional callable(worker_id) -> tuple of extra
+                positional args inserted after the common args
+            extra_kwargs_fn: Optional callable(snapshot_names) -> dict of
+                extra kwargs merged into the snapshot kwargs
+
+        Returns: (server, processes, result_queue)
+        """
+        actual_workers = len(items_per_worker)
+
+        # Start inference server, optionally with opponent snapshots on GPU
+        snapshots = self.snapshot_state_dicts if use_snapshots else None
+        server = InferenceServer(
+            self.model, self.device, actual_workers, ctx=self._mp_ctx,
+            opponent_snapshots=snapshots,
+        )
+        server.start()
+
+        # Extract snapshot names for workers (state_dicts stay on server)
+        snapshot_names = (
+            [name for name, _ in self.snapshot_state_dicts]
+            if use_snapshots and self.snapshot_state_dicts else None
+        )
+
+        result_queue = self._mp_ctx.Queue()
+        seeds = [random.randint(0, 1_000_000_000) for _ in range(actual_workers)]
+
+        # Snapshot kwargs forwarded to workers
+        snapshot_kwargs = {
+            "snapshot_names": snapshot_names,
+            "self_play_ratio": self.self_play_ratio,
+            "pfsp_weights": self.pfsp_weights,
+        }
+        if extra_kwargs_fn:
+            snapshot_kwargs.update(extra_kwargs_fn(snapshot_names))
+
+        processes = []
+        for i in range(actual_workers):
+            if items_per_worker[i] == 0:
+                continue
+
+            # Common positional args shared by all worker types
+            common_args = (
+                i,                              # worker_id
+                items_per_worker[i],            # num_episodes / num_games
+                self.num_concurrent,            # num_concurrent (per worker)
+                self.data_config.to_dict(),
+                self.card_names,
+                self.card_index_map,
+                self.action_dim,
+                self._state_size,
+            )
+            # Worker-specific positional args (e.g. ppo_config_dict for training)
+            extra = extra_args_fn(i) if extra_args_fn else ()
+
+            # Remaining common positional args
+            tail_args = (
+                self.opponent_spec,
+                seeds[i],
+                server.request_queue,
+                server.response_queues[i],
+                result_queue,
+            )
+
+            p = self._mp_ctx.Process(
+                target=target_fn,
+                args=common_args + extra + tail_args,
+                kwargs=snapshot_kwargs,
+            )
+            p.start()
+            processes.append(p)
+
+        return server, processes, result_queue
+
     def run_episodes(self, num_episodes: int) -> tuple:
         """Run num_episodes games across worker processes and return aggregated rollout data.
 
@@ -101,57 +195,18 @@ class MultiProcessBatchRunner:
         if actual_workers <= 0:
             raise ValueError(f"Cannot run {num_episodes} episodes with {self.num_workers} workers")
 
-        # Divide episodes across workers; each worker runs num_concurrent games
         episodes_per_worker = _divide_work(num_episodes, actual_workers)
 
-        # Start inference server with opponent snapshots loaded on GPU
-        server = InferenceServer(
-            self.model, self.device, actual_workers, ctx=self._mp_ctx,
-            opponent_snapshots=self.snapshot_state_dicts,
+        # Training workers need ppo_config_dict as an extra positional arg
+        ppo_dict = self.ppo_config.to_dict()
+
+        server, processes, result_queue = self._spawn_workers(
+            sim_worker_main,
+            num_episodes,
+            episodes_per_worker,
+            use_snapshots=bool(self.snapshot_state_dicts),
+            extra_args_fn=lambda _i: (ppo_dict,),
         )
-        server.start()
-
-        # Extract snapshot names for workers (state_dicts stay on server)
-        snapshot_names = (
-            [name for name, _ in self.snapshot_state_dicts]
-            if self.snapshot_state_dicts else None
-        )
-
-        # Spawn worker processes
-        result_queue = self._mp_ctx.Queue()
-        seeds = [random.randint(0, 1_000_000_000) for _ in range(actual_workers)]
-
-        processes = []
-        for i in range(actual_workers):
-            if episodes_per_worker[i] == 0:
-                continue
-
-            p = self._mp_ctx.Process(
-                target=sim_worker_main,
-                args=(
-                    i,                              # worker_id
-                    episodes_per_worker[i],          # num_episodes
-                    self.num_concurrent,             # num_concurrent (per worker)
-                    self.data_config.to_dict(),       # data_config_dict
-                    self.card_names,                  # card_names (canonical from parent)
-                    self.card_index_map,              # card_index_map (canonical)
-                    self.action_dim,
-                    self._state_size,
-                    self.ppo_config.to_dict(),
-                    self.opponent_spec,
-                    seeds[i],
-                    server.request_queue,
-                    server.response_queues[i],
-                    result_queue,
-                ),
-                kwargs={
-                    "snapshot_names": snapshot_names,
-                    "self_play_ratio": self.self_play_ratio,
-                    "pfsp_weights": self.pfsp_weights,
-                },
-            )
-            p.start()
-            processes.append(p)
 
         # Collect results with cleanup guaranteed on error
         try:
@@ -212,7 +267,12 @@ class MultiProcessBatchRunner:
         return states, actions, log_probs, returns, advs, masks
 
     def run_eval(self, num_games: int) -> tuple[int, int, int]:
-        """Run evaluation games across workers. Returns (wins, losses, total_steps)."""
+        """Run evaluation games across workers. Returns (wins, losses, total_steps).
+
+        Supports PPO snapshot opponents when snapshot_state_dicts is set —
+        both training agent and opponent get batched GPU inference through
+        the InferenceServer.
+        """
         self.model.to(self.device)
         self.model.eval()
 
@@ -221,40 +281,13 @@ class MultiProcessBatchRunner:
             return 0, 0, 0
 
         games_per_worker = _divide_work(num_games, actual_workers)
-        eval_concurrent = min(self.num_concurrent, num_games)
 
-        server = InferenceServer(
-            self.model, self.device, actual_workers, ctx=self._mp_ctx,
+        server, processes, result_queue = self._spawn_workers(
+            sim_worker_eval,
+            num_games,
+            games_per_worker,
+            use_snapshots=bool(self.snapshot_state_dicts),
         )
-        server.start()
-
-        result_queue = self._mp_ctx.Queue()
-        seeds = [random.randint(0, 1_000_000_000) for _ in range(actual_workers)]
-
-        processes = []
-        for i in range(actual_workers):
-            if games_per_worker[i] == 0:
-                continue
-            p = self._mp_ctx.Process(
-                target=sim_worker_eval,
-                args=(
-                    i,
-                    games_per_worker[i],
-                    eval_concurrent,
-                    self.data_config.to_dict(),
-                    self.card_names,
-                    self.card_index_map,
-                    self.action_dim,
-                    self._state_size,
-                    self.opponent_spec,
-                    seeds[i],
-                    server.request_queue,
-                    server.response_queues[i],
-                    result_queue,
-                ),
-            )
-            p.start()
-            processes.append(p)
 
         # Collect eval results with cleanup guaranteed
         total_wins = 0

@@ -546,17 +546,25 @@ def sim_worker_eval(
     request_queue: mp.Queue,
     response_queue: mp.Queue,
     result_queue: mp.Queue,
+    *,
+    snapshot_names: list[str] | None = None,
+    self_play_ratio: float = 0.5,
+    pfsp_weights: list[float] | None = None,
 ):
     """Entry point for an evaluation worker process.
 
     Same game loop as sim_worker_main but without rollout collection.
-    Returns win/loss/step counts.
+    Returns win/loss/step counts. Supports PPO snapshot opponents when
+    snapshot_names are provided (routed through InferenceServer).
     """
     try:
         _sim_worker_eval_inner(
             worker_id, num_games, num_concurrent, data_config_dict,
             card_names, card_index_map, action_dim, state_size,
             opponent_spec, seed, request_queue, response_queue, result_queue,
+            snapshot_names=snapshot_names,
+            self_play_ratio=self_play_ratio,
+            pfsp_weights=pfsp_weights,
         )
     except Exception:
         result_queue.put(WorkerError(
@@ -569,8 +577,15 @@ def _sim_worker_eval_inner(
     worker_id, num_games, num_concurrent, data_config_dict,
     card_names, card_index_map, action_dim, state_size,
     opponent_spec, seed, request_queue, response_queue, result_queue,
+    snapshot_names=None, self_play_ratio=0.5, pfsp_weights=None,
 ):
-    """Core eval worker logic."""
+    """Core eval worker logic.
+
+    Handles both builtin and PPO snapshot opponents. When snapshot_names
+    are provided, creates _ServerPPOAgent opponents that route inference
+    through the InferenceServer, and collects decisions for both training
+    agent and opponent in a single batched request grouped by model_id.
+    """
     random.seed(seed)
     torch.manual_seed(seed)
     np.random.seed(seed % (2**32))
@@ -586,7 +601,19 @@ def _sim_worker_eval_inner(
     )
 
     training_agent_name = "PPO"
-    opponent_factory = _build_opponent_factory(opponent_spec)
+    opponent_factory = _build_opponent_factory(
+        opponent_spec,
+        snapshot_names=snapshot_names,
+        self_play_ratio=self_play_ratio,
+        pfsp_weights=pfsp_weights,
+        card_names=card_names,
+        card_index_map=card_index_map,
+        action_dim=action_dim,
+        worker_id=worker_id,
+        request_queue=request_queue,
+        response_queue=response_queue,
+        registry=registry,
+    )
 
     state_buf = np.zeros(state_size, dtype=np.float32)
     mask_buf = np.zeros(action_dim, dtype=bool)
@@ -649,15 +676,21 @@ def _sim_worker_eval_inner(
             else:
                 games[i] = None
 
+        # Collect ALL pending neural-net decisions — both training agent
+        # and _ServerPPOAgent opponents. Group by model_id for batched
+        # inference through the server.
         pending_indices: list[int] = []
-        pending_states: list[torch.Tensor] = []
+        pending_states: list[np.ndarray] = []
         pending_contexts: list[ActionContext] = []
+        pending_model_ids: list[str] = []
 
         for i in range(num_concurrent):
             if games[i] is None or games[i].is_game_over:
                 continue
             player = games[i].current_player
-            if player.name != training_agent_name:
+            is_training = (player.name == training_agent_name)
+            is_server_opp = isinstance(player.agent, _ServerPPOAgent)
+            if not is_training and not is_server_opp:
                 continue
 
             ctx = build_action_context(
@@ -665,7 +698,7 @@ def _sim_worker_eval_inner(
                 action_dim, mask_buf=mask_buf,
             )
             state = encode_state(
-                games[i], is_current_player_training=True,
+                games[i], is_current_player_training=is_training,
                 cards=card_names,
                 card_index_map=card_index_map,
                 state_buf=state_buf,
@@ -674,36 +707,48 @@ def _sim_worker_eval_inner(
             )
 
             pending_indices.append(i)
-            pending_states.append(state)
+            pending_states.append(state.numpy().copy())
             pending_contexts.append(ActionContext(
                 mask=ctx.mask.copy(),
                 has_meaningful=ctx.has_meaningful,
                 can_buy=ctx.can_buy,
                 resolvers=ctx.resolvers,
             ))
+            pending_model_ids.append(
+                "training" if is_training else player.agent.model_id
+            )
 
         if not pending_states:
             continue
 
-        states_np = np.stack([s.numpy() for s in pending_states])
+        # Build batch and group by model_id for server inference
+        states_np = np.stack(pending_states)
         masks_np = np.zeros((len(pending_states), action_dim), dtype=np.uint8)
         for j, ctx in enumerate(pending_contexts):
             masks_np[j] = ctx.mask.astype(np.uint8)
             if ctx.has_meaningful:
                 masks_np[j, END_TURN_INDEX] = 0
 
-        request_queue.put(InferenceRequest(
-            worker_id=worker_id,
-            request_id=request_id,
-            states=states_np,
-            masks=masks_np,
-        ))
-        request_id += 1
+        model_groups: dict[str, list[int]] = {}
+        for j, mid in enumerate(pending_model_ids):
+            model_groups.setdefault(mid, []).append(j)
 
-        response: InferenceResponse = response_queue.get()
+        all_responses: dict[int, int] = {}
+        for mid, indices in model_groups.items():
+            request_queue.put(InferenceRequest(
+                worker_id=worker_id,
+                request_id=request_id,
+                states=states_np[indices],
+                masks=masks_np[indices],
+                model_id=mid,
+            ))
+            request_id += 1
+            response: InferenceResponse = response_queue.get()
+            for k, j in enumerate(indices):
+                all_responses[j] = int(response.action_indices[k])
 
         for j, i in enumerate(pending_indices):
-            act_idx = int(response.action_indices[j])
+            act_idx = all_responses[j]
             action = pending_contexts[j].resolvers[act_idx]
             games[i].apply_decision(action)
             step_counts[i] += 1
