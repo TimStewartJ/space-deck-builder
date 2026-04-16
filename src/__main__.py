@@ -125,6 +125,30 @@ def _build_elo_parser(sub: argparse._SubParsersAction):
     return p
 
 
+def _build_eval_parser(sub: argparse._SubParsersAction):
+    from src.config import DeviceConfig, RunConfig
+    _dev = DeviceConfig()
+    _run = RunConfig()
+
+    p = sub.add_parser("eval", help="Evaluate a trained model against fixed opponents")
+    _add_common_args(p)
+    p.add_argument("--model", type=str, default=None,
+                   help="Model checkpoint path (default: latest)")
+    p.add_argument("--load-latest", action="store_true",
+                   help="Auto-load the latest model from models/")
+    p.add_argument("--opponents", type=str, default="random,heuristic,simple",
+                   help="Comma-separated opponent types (default: random,heuristic,simple)")
+    p.add_argument("--games", type=int, default=_run.eval_games,
+                   help=f"Total evaluation games (distributed across opponent types, default: {_run.eval_games})")
+    p.add_argument("--simulation-device", type=str, default=_dev.simulation_device,
+                   help="Device for inference (cuda or cpu)")
+    p.add_argument("--num-concurrent", type=int, default=_run.num_concurrent,
+                   help=f"Concurrent games in BatchRunner (default: {_run.num_concurrent})")
+    p.add_argument("--num-workers", type=int, default=1,
+                   help="Simulation worker processes (1=single-process, default: 1)")
+    return p
+
+
 def _build_analyze_parser(sub: argparse._SubParsersAction):
     from src.config import DeviceConfig, RunConfig
     _dev = DeviceConfig()
@@ -163,6 +187,7 @@ def main(argv=None):
     _build_simulate_parser(sub)
     _build_benchmark_parser(sub)
     _build_elo_parser(sub)
+    _build_eval_parser(sub)
     _build_analyze_parser(sub)
 
     args = parser.parse_args(argv)
@@ -179,6 +204,8 @@ def main(argv=None):
         _run_benchmark(args)
     elif args.command == "elo":
         _run_elo(args)
+    elif args.command == "eval":
+        _run_eval(args)
     elif args.command == "analyze":
         _run_analyze(args)
 
@@ -258,6 +285,28 @@ def _run_elo(args):
         device=args.simulation_device,
         num_concurrent=args.num_concurrent,
     )
+
+
+def _run_eval(args):
+    """Load a model and evaluate it against fixed opponent types."""
+    from src.config import DataConfig
+    from src.ppo.ppo_eval import load_and_evaluate
+
+    data_cfg = DataConfig(cards_path=args.cards_path)
+    try:
+        load_and_evaluate(
+            model_path=args.model,
+            load_latest=args.load_latest or args.model is None,
+            data_cfg=data_cfg,
+            device=args.simulation_device,
+            opponents=args.opponents,
+            eval_games=args.games,
+            num_concurrent=args.num_concurrent,
+            num_workers=args.num_workers,
+        )
+    except FileNotFoundError as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 def _run_analyze(args):

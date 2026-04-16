@@ -275,55 +275,23 @@ def _run_per_opponent_eval(
 ) -> int:
     """Run evaluation against each opponent type separately, log per-type results.
 
-    Uses MultiProcessBatchRunner when num_workers > 1 and data_cfg is provided.
+    Delegates to :func:`src.ppo.ppo_eval.evaluate` for the actual game execution.
 
     Returns the total wins across all opponent types.
     """
-    opp_types = pool.opponent_types
-    action_dim = get_action_space_size(card_names)
-    games_per_type = max(1, run_cfg.eval_games // len(opp_types))
-    total_wins = 0
-    total_games = 0
-    use_mp = run_cfg.num_workers > 1 and data_cfg is not None
+    from src.ppo.ppo_eval import evaluate
 
-    print(f"Evaluating after update {upd} ({games_per_type} games × {len(opp_types)} opponent types)...")
-
-    for opp_type in opp_types:
-        if use_mp:
-            from src.ppo.mp_batch_runner import MultiProcessBatchRunner
-            eval_runner = MultiProcessBatchRunner(
-                model=agent.model,
-                card_names=card_names,
-                cards=cards,
-                action_dim=action_dim,
-                device=agent.simulation_device,
-                data_config=data_cfg,
-                opponent_spec=opp_type,
-                num_concurrent=min(games_per_type, run_cfg.num_concurrent),
-                num_workers=run_cfg.num_workers,
-                ppo_config=ppo_cfg,
-                registry=registry,
-            )
-        else:
-            factory = pool.make_factory_for_type(opp_type)
-            eval_runner = BatchRunner(
-                model=agent.model,
-                card_names=card_names,
-                cards=cards,
-                action_dim=action_dim,
-                device=agent.simulation_device,
-                opponent_factory=factory,
-                num_concurrent=min(games_per_type, run_cfg.num_concurrent),
-                ppo_config=ppo_cfg,
-                registry=registry,
-            )
-        wins, losses, eval_steps = eval_runner.run_eval(games_per_type)
-        win_rate = wins / games_per_type
-        avg_steps = eval_steps / games_per_type if games_per_type > 0 else 0
-        print(f"  vs {opp_type}: {wins}/{games_per_type} wins ({win_rate:.0%}), avg {avg_steps:.0f} steps/game")
-        total_wins += wins
-        total_games += games_per_type
-
-    overall_rate = total_wins / total_games if total_games > 0 else 0
-    print(f"  Overall: {total_wins}/{total_games} wins ({overall_rate:.0%})")
-    return total_wins
+    opponents_spec = ",".join(pool.opponent_types)
+    result = evaluate(
+        agent.model,
+        data_cfg=data_cfg or DataConfig(),
+        device=str(agent.simulation_device),
+        opponents=opponents_spec,
+        eval_games=run_cfg.eval_games,
+        num_concurrent=run_cfg.num_concurrent,
+        num_workers=run_cfg.num_workers if data_cfg is not None else 1,
+        ppo_config=ppo_cfg,
+        label=f"update {upd}",
+        min_games_per_opponent=1,
+    )
+    return result.total_wins
