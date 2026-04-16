@@ -163,7 +163,7 @@ def analyze_replays(
             for k, v in sorted(action_counts[phase].items())
         }
 
-    # Economy curves
+    # Economy curves — store mean and median per turn
     economy_curves = {}
     for turn in sorted(econ.keys()):
         d = econ[turn]
@@ -171,6 +171,9 @@ def analyze_replays(
             "avg_trade": sum(d["trade"]) / len(d["trade"]),
             "avg_combat": sum(d["combat"]) / len(d["combat"]),
             "avg_health": sum(d["health"]) / len(d["health"]),
+            "med_trade": float(sorted(d["trade"])[len(d["trade"]) // 2]),
+            "med_combat": float(sorted(d["combat"])[len(d["combat"]) // 2]),
+            "med_health": float(sorted(d["health"])[len(d["health"]) // 2]),
             "count": len(d["trade"]),
         }
 
@@ -285,24 +288,30 @@ def _save_charts(r: AnalysisResult, output_dir: str) -> None:
 
     os.makedirs(output_dir, exist_ok=True)
 
-    # Chart 1: Economy curves
+    # Chart 1: Economy curves (mean as solid lines, median as dashed)
     turns = sorted(r.economy_curves.keys())
     if turns:
         trades = [r.economy_curves[t]["avg_trade"] for t in turns]
         combats = [r.economy_curves[t]["avg_combat"] for t in turns]
         healths = [r.economy_curves[t]["avg_health"] for t in turns]
+        med_trades = [r.economy_curves[t]["med_trade"] for t in turns]
+        med_combats = [r.economy_curves[t]["med_combat"] for t in turns]
+        med_healths = [r.economy_curves[t]["med_health"] for t in turns]
 
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
 
-        ax1.plot(turns, trades, label="Avg Trade", color="gold", linewidth=2)
-        ax1.plot(turns, combats, label="Avg Combat", color="red", linewidth=2)
+        ax1.plot(turns, trades, label="Mean Trade", color="gold", linewidth=2)
+        ax1.plot(turns, med_trades, label="Median Trade", color="gold", linewidth=1.5, linestyle="--", alpha=0.7)
+        ax1.plot(turns, combats, label="Mean Combat", color="red", linewidth=2)
+        ax1.plot(turns, med_combats, label="Median Combat", color="red", linewidth=1.5, linestyle="--", alpha=0.7)
         ax1.set_xlabel("Turn")
         ax1.set_ylabel("Resources")
         ax1.set_title("Economy Curves — Trade & Combat per Turn")
         ax1.legend()
         ax1.grid(True, alpha=0.3)
 
-        ax2.plot(turns, healths, label="Avg Health", color="green", linewidth=2)
+        ax2.plot(turns, healths, label="Mean Health", color="green", linewidth=2)
+        ax2.plot(turns, med_healths, label="Median Health", color="green", linewidth=1.5, linestyle="--", alpha=0.7)
         ax2.set_xlabel("Turn")
         ax2.set_ylabel("Health")
         ax2.set_title("Health over Time")
