@@ -54,8 +54,8 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                    help="Self-play ratio schedule: constant (default), linear, or cosine ramp")
     p.add_argument("--num-workers", type=int, default=_run.num_workers,
                    help=f"Simulation worker processes (1=single-process, >1=multi-process, default: {_run.num_workers})")
-    p.add_argument("--num-concurrent", type=int, default=_run.num_concurrent,
-                   help=f"Total concurrent games across all workers (default: {_run.num_concurrent})")
+    p.add_argument("--num-concurrent", type=int, default=None,
+                   help="Concurrent games per worker (default: episodes/workers)")
     p.add_argument("--pfsp", type=str, default=_run.pfsp_mode,
                    choices=["uniform", "hard", "variance"],
                    help="PFSP snapshot weighting: uniform (default), hard, or variance")
@@ -120,8 +120,8 @@ def _build_elo_parser(sub: argparse._SubParsersAction):
                    help="Games to play per pairing (default: 50)")
     p.add_argument("--simulation-device", type=str, default=_dev.simulation_device,
                    help="Device for inference (cuda or cpu)")
-    p.add_argument("--num-concurrent", type=int, default=_run.num_concurrent,
-                   help=f"Concurrent games in BatchRunner (default: {_run.num_concurrent})")
+    p.add_argument("--num-concurrent", type=int, default=None,
+                   help="Concurrent games per worker (default: games-per-pair)")
     return p
 
 
@@ -142,10 +142,10 @@ def _build_eval_parser(sub: argparse._SubParsersAction):
                    help=f"Total evaluation games (distributed across opponent types, default: {_run.eval_games})")
     p.add_argument("--simulation-device", type=str, default=_dev.simulation_device,
                    help="Device for inference (cuda or cpu)")
-    p.add_argument("--num-concurrent", type=int, default=_run.num_concurrent,
-                   help=f"Concurrent games in BatchRunner (default: {_run.num_concurrent})")
-    p.add_argument("--num-workers", type=int, default=1,
-                   help="Simulation worker processes (1=single-process, default: 1)")
+    p.add_argument("--num-concurrent", type=int, default=None,
+                   help="Concurrent games per worker (default: games/workers)")
+    p.add_argument("--num-workers", type=int, default=_run.num_workers,
+                   help=f"Simulation worker processes (default: {_run.num_workers})")
     return p
 
 
@@ -170,8 +170,8 @@ def _build_analyze_parser(sub: argparse._SubParsersAction):
                    help="Path to existing replay file to analyze (skips game collection)")
     p.add_argument("--simulation-device", type=str, default=_dev.simulation_device,
                    help="Device for inference (cuda or cpu)")
-    p.add_argument("--num-concurrent", type=int, default=_run.num_concurrent,
-                   help=f"Concurrent games (default: {_run.num_concurrent})")
+    p.add_argument("--num-concurrent", type=int, default=None,
+                   help="Concurrent games per worker (default: games/workers)")
     p.add_argument("--dashboard", action="store_true", default=False,
                    help="Generate interactive HTML dashboard (in addition to PNGs)")
     return p
@@ -278,12 +278,13 @@ def _run_elo(args):
         sys.exit(1)
 
     data_cfg = DataConfig(cards_path=args.cards_path)
+    num_concurrent = args.num_concurrent or args.games_per_pair
     run_tournament(
         checkpoint_paths=paths,
         data_cfg=data_cfg,
         games_per_pair=args.games_per_pair,
         device=args.simulation_device,
-        num_concurrent=args.num_concurrent,
+        num_concurrent=num_concurrent,
     )
 
 
@@ -428,7 +429,7 @@ def _run_analyze(args):
             action_dim=action_dim,
             device=torch.device(device),
             opponent_factory=factory,
-            num_concurrent=min(args.num_concurrent, num_games),
+            num_concurrent=min(args.num_concurrent or args.games, num_games),
             registry=registry,
         )
 

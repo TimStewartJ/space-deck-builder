@@ -60,9 +60,9 @@ def evaluate(
     data_cfg: DataConfig,
     device: str,
     opponents: str = "random,heuristic,simple",
-    eval_games: int = 100,
-    num_concurrent: int = 1024,
-    num_workers: int = 1,
+    eval_games: int = 3200,
+    num_concurrent: int | None = None,
+    num_workers: int = 20,
     ppo_config: PPOConfig | None = None,
     label: str | None = None,
     min_games_per_opponent: int = 0,
@@ -75,7 +75,8 @@ def evaluate(
         device: Resolved device string (e.g. ``"cuda"`` or ``"cpu"``).
         opponents: Comma-separated opponent type names (weights ignored).
         eval_games: Total games to distribute across opponent types.
-        num_concurrent: Maximum concurrent games in BatchRunner.
+        num_concurrent: Max concurrent games per worker. When ``None``,
+            auto-computed as ``eval_games // num_workers``.
         num_workers: Worker processes (1 = single-process, >1 = multi-process).
         ppo_config: Optional PPO config forwarded to BatchRunner.
         label: Optional label printed in the header (e.g. ``"update 10"``).
@@ -97,6 +98,10 @@ def evaluate(
     games_schedule = _distribute_games(
         eval_games, len(opp_types), min_per_bucket=min_games_per_opponent,
     )
+
+    # Auto-compute concurrency: games / workers unless explicitly set
+    if num_concurrent is None:
+        num_concurrent = eval_games // max(1, num_workers)
 
     header = "Evaluating"
     if label:
@@ -181,9 +186,9 @@ def load_and_evaluate(
     data_cfg: DataConfig | None = None,
     device: str | None = None,
     opponents: str = "random,heuristic,simple",
-    eval_games: int = 100,
-    num_concurrent: int = 1024,
-    num_workers: int = 1,
+    eval_games: int = 3200,
+    num_concurrent: int | None = None,
+    num_workers: int = 20,
 ) -> EvalResult:
     """Load a checkpoint and run evaluation — convenience wrapper for CLI use.
 

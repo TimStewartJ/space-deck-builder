@@ -40,7 +40,8 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
                  make_opponent, registry, pool=None, *, current_self_play_ratio=None):
     """Create the appropriate batch runner based on num_workers config."""
     sim_device = agent.simulation_device
-    num_concurrent = min(run_cfg.episodes, run_cfg.num_concurrent)
+    num_concurrent = run_cfg.num_concurrent or run_cfg.episodes // max(1, run_cfg.num_workers)
+    num_concurrent = min(run_cfg.episodes, num_concurrent)
 
     if run_cfg.num_workers > 1:
         from src.ppo.mp_batch_runner import MultiProcessBatchRunner

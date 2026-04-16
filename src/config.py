@@ -132,11 +132,11 @@ class RunConfig:
     """Training run topology and schedule."""
     episodes: int = 4096
     updates: int = 200
-    num_workers: int = 4
+    num_workers: int = 20
     games_per_worker: int = 16
-    num_concurrent: int = 1024
+    num_concurrent: int | None = None
     eval_every: int = 5
-    eval_games: int = 100
+    eval_games: int = 3200
     self_play: bool = True
     opponents: str = "random"
     self_play_ratio: float = 0.5
