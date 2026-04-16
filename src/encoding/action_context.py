@@ -143,7 +143,7 @@ def build_action_context(
                     can_buy = True
 
     # BUY Explorer — reference the last explorer (top of pile)
-    if game.explorer_pile and player.trade >= game.explorer_pile[0].cost:
+    if game.explorer_pile and player.trade >= game.explorer_pile[-1].cost:
         ci = card_index_map.get("Explorer")
         if ci is not None:
             idx = OFF_BUY + ci

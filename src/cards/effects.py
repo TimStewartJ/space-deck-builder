@@ -147,22 +147,13 @@ class Effect:
             if pending_actions:
                 player.add_pending_actions(pending_actions, self.value, self.is_mandatory)
         elif self.effect_type == CardEffectType.TARGET_DISCARD:
-            # Current player chooses which card the opponent discards
+            # Defer forced discard to opponent's next turn start.
+            # The opponent will choose which cards to discard themselves,
+            # preventing hidden-information leakage to the current player.
             if self.card_targets and "opponent" in self.card_targets:
                 opponent = game.get_opponent(player)
-                if opponent is None:
-                    return
-                pending_actions = []
-                for target in opponent.hand:
-                    action = Action(
-                        ActionType.DISCARD_CARDS,
-                        card_id=target.index,
-                        card=target,
-                        card_source=CardSource.OPPONENT
-                    )
-                    pending_actions.append(action)
-                if pending_actions:
-                    player.add_pending_actions(pending_actions, self.value, True)
+                if opponent is not None:
+                    opponent.pending_start_of_turn_discards += self.value
         elif self.effect_type == CardEffectType.DESTROY_BASE:
             # Current player chooses which opponent base to destroy.
             # Unlike combat attacks, destroy effects can target any base
@@ -179,7 +170,7 @@ class Effect:
                     card=base,
                 ))
             if pending_actions:
-                player.add_pending_actions(pending_actions, self.value, False)
+                player.add_pending_actions(pending_actions, self.value, self.is_mandatory)
                 
         elif self.effect_type == CardEffectType.PARENT:
             # Apply child effects if this card has any

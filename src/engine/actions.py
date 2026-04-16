@@ -105,8 +105,8 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
             actions.append(Action(type=ActionType.BUY_CARD, card=card, card_id=card.index))
 
     # Allow buying explorer if possible
-    if len(game_state.explorer_pile) > 0 and player.trade >= game_state.explorer_pile[0].cost:
-        actions.append(Action(type=ActionType.BUY_CARD, card=game_state.explorer_pile[0], card_id=game_state.explorer_pile[0].index))
+    if len(game_state.explorer_pile) > 0 and player.trade >= game_state.explorer_pile[-1].cost:
+        actions.append(Action(type=ActionType.BUY_CARD, card=game_state.explorer_pile[-1], card_id=game_state.explorer_pile[-1].index))
 
     # Add attack actions if player has combat available
     if player.combat > 0:

@@ -497,10 +497,10 @@ class TestB4TradeRowScrapRefresh:
 
 
 class TestC1ForcedDiscard:
-    """C1: Forced discard must target the opponent's hand."""
+    """C1: Forced discard defers to opponent's turn start (opponent chooses)."""
 
-    def test_forced_discard_creates_pending_on_current_player(self):
-        """TARGET_DISCARD should add pending actions to the current player."""
+    def test_forced_discard_defers_to_opponent(self):
+        """TARGET_DISCARD should increment opponent's pending_start_of_turn_discards."""
         game, p1, p2 = _make_game_with_players()
         opp_card = Card("OppCard", 0, 1, [], "ship")
         p2.hand.append(opp_card)
@@ -509,31 +509,37 @@ class TestC1ForcedDiscard:
                         card_targets=["opponent"])
         effect.apply(game, p1, None)
 
-        # Pending actions should be on P1 (current player), not P2
-        assert len(p1.pending_action_sets) == 1
+        # No immediate pending actions on either player
+        assert len(p1.pending_action_sets) == 0
         assert len(p2.pending_action_sets) == 0
+        # Discard debt stored on opponent
+        assert p2.pending_start_of_turn_discards == 1
 
-    def test_forced_discard_removes_from_opponent_hand(self):
-        """Executing the discard action should remove from opponent's hand."""
+    def test_forced_discard_materializes_at_turn_start(self):
+        """Deferred discards become pending actions when it's the opponent's turn."""
         game, p1, p2 = _make_game_with_players()
         opp_card = Card("OppCard", 0, 1, [], "ship")
         p2.hand.append(opp_card)
 
+        # P1 triggers forced discard on P2
         effect = Effect(CardEffectType.TARGET_DISCARD, 1,
                         card_targets=["opponent"])
         effect.apply(game, p1, None)
 
-        # Execute the pending discard
-        pending = p1.get_current_pending_set()
-        assert pending is not None
-        discard_action = pending.actions[0]
-        game.execute_action(discard_action)
+        # Simulate turn end → switch to P2
+        game._materialize_start_of_turn_discards()  # no-op, P1 has no debt
+        game.current_player = p2
+        game._materialize_start_of_turn_discards()
 
-        assert opp_card not in p2.hand
-        assert opp_card in p2.discard_pile
+        # Now P2 has pending discard actions from their own hand
+        assert len(p2.pending_action_sets) == 1
+        pending = p2.get_current_pending_set()
+        assert pending.mandatory is True
+        assert pending.decisions_left == 1
+        assert p2.pending_start_of_turn_discards == 0
 
-    def test_forced_discard_does_not_touch_current_player_hand(self):
-        """Current player's hand must not be affected."""
+    def test_forced_discard_opponent_chooses_from_own_hand(self):
+        """Opponent picks which card to discard (no hidden-info leak)."""
         game, p1, p2 = _make_game_with_players()
         my_card = Card("MyCard", 0, 1, [], "ship")
         p1.hand.append(my_card)
@@ -544,10 +550,51 @@ class TestC1ForcedDiscard:
                         card_targets=["opponent"])
         effect.apply(game, p1, None)
 
-        pending = p1.get_current_pending_set()
-        game.execute_action(pending.actions[0])
+        # Switch to P2's turn and materialize
+        game.current_player = p2
+        game._materialize_start_of_turn_discards()
 
-        assert my_card in p1.hand  # current player's hand untouched
+        # Pending actions reference P2's hand cards, using SELF source
+        pending = p2.get_current_pending_set()
+        assert len(pending.actions) == 1
+        assert pending.actions[0].card is opp_card
+        assert pending.actions[0].card_source == CardSource.SELF
+
+        # Execute discard
+        game.execute_action(pending.actions[0])
+        assert opp_card not in p2.hand
+        assert opp_card in p2.discard_pile
+        assert my_card in p1.hand  # P1's hand untouched
+
+    def test_forced_discard_clamped_to_hand_size(self):
+        """Discard debt > hand size doesn't soft-lock."""
+        game, p1, p2 = _make_game_with_players()
+        sole_card = Card("OnlyCard", 0, 1, [], "ship")
+        p2.hand.append(sole_card)
+
+        # Two discard effects but only 1 card in hand
+        p2.pending_start_of_turn_discards = 2
+        game.current_player = p2
+        game._materialize_start_of_turn_discards()
+
+        pending = p2.get_current_pending_set()
+        assert pending.decisions_left == 1  # clamped to hand size
+        assert p2.pending_start_of_turn_discards == 0
+
+    def test_forced_discard_stacks(self):
+        """Multiple discard effects in one turn accumulate."""
+        game, p1, p2 = _make_game_with_players()
+        for i in range(3):
+            p2.hand.append(Card(f"Card{i}", i, 1, [], "ship"))
+
+        effect = Effect(CardEffectType.TARGET_DISCARD, 1,
+                        card_targets=["opponent"])
+        effect.applied = False
+        effect.apply(game, p1, None)
+        effect.applied = False
+        effect.apply(game, p1, None)
+
+        assert p2.pending_start_of_turn_discards == 2
 
 
 class TestC2DestroyBase:
@@ -931,3 +978,227 @@ class TestD4BrainWorld:
         assert c1 not in p1.hand
         assert c2 in p1.hand
         assert len(p1.hand) == 2  # c2 + 1 drawn (not 3 from inflated count)
+
+
+class TestE2DestroyBaseMandatory:
+    """E2: 'Destroy target base' is mandatory; 'You may destroy' is optional."""
+
+    def test_destroy_target_base_is_mandatory(self):
+        """'Destroy target base' should create a mandatory pending set."""
+        from src.cards.effects_parser import parse_effect_text
+        effect = parse_effect_text("Destroy target base")
+        assert effect.is_mandatory is True
+
+    def test_you_may_destroy_is_optional(self):
+        """'You may destroy target base' should create an optional pending set."""
+        from src.cards.effects_parser import parse_effect_text
+        effect = parse_effect_text("You may destroy target base")
+        assert effect.is_mandatory is False
+
+    def test_mandatory_destroy_creates_mandatory_pending(self):
+        """Mandatory destroy should not allow skipping."""
+        game, p1, p2 = _make_game_with_players()
+        base = Card("EnemyBase", 10, 0, [], CardType.BASE, defense=3)
+        p2.bases.append(base)
+
+        effect = Effect(CardEffectType.DESTROY_BASE, 1, "Destroy target base",
+                        is_mandatory=True)
+        effect.apply(game, p1, None)
+
+        pending = p1.get_current_pending_set()
+        assert pending is not None
+        assert pending.mandatory is True
+
+    def test_optional_destroy_allows_skip(self):
+        """Optional destroy should allow skipping."""
+        game, p1, p2 = _make_game_with_players()
+        base = Card("EnemyBase", 10, 0, [], CardType.BASE, defense=3)
+        p2.bases.append(base)
+
+        effect = Effect(CardEffectType.DESTROY_BASE, 1, "You may destroy",
+                        is_mandatory=False)
+        effect.apply(game, p1, None)
+
+        pending = p1.get_current_pending_set()
+        assert pending is not None
+        assert pending.mandatory is False
+
+    def test_mandatory_destroy_no_bases_no_block(self):
+        """Mandatory destroy with no targets should not create pending actions."""
+        game, p1, p2 = _make_game_with_players()
+        # Opponent has no bases
+        effect = Effect(CardEffectType.DESTROY_BASE, 1, "Destroy target base",
+                        is_mandatory=True)
+        effect.apply(game, p1, None)
+
+        # Should not block — no pending actions created
+        assert len(p1.pending_action_sets) == 0
+
+
+class TestE3ExecutionValidation:
+    """E3: Execution-time validation guards for defense in depth."""
+
+    def test_buy_card_rejects_insufficient_trade(self):
+        """BUY_CARD should fail if player can't afford it."""
+        game, p1, _ = _make_game_with_players()
+        expensive = Card("Expensive", 5, 8, [], "ship")
+        game.trade_row.append(expensive)
+        p1.trade = 3  # not enough
+
+        action = Action(type=ActionType.BUY_CARD, card=expensive, card_id=5)
+        game.execute_action(action)
+
+        # Card should NOT be purchased
+        assert expensive in game.trade_row
+        assert expensive not in p1.discard_pile
+
+    def test_attack_base_rejects_non_outpost_when_outpost_exists(self):
+        """Cannot attack a regular base while outposts are standing."""
+        game, p1, p2 = _make_game_with_players()
+        outpost = Card("Outpost", 10, 0, [], CardType.OUTPOST, defense=3)
+        base = Card("Base", 11, 0, [], CardType.BASE, defense=2)
+        p2.bases.extend([outpost, base])
+        p1.combat = 5
+
+        # Try attacking the regular base while outpost exists
+        action = Action(type=ActionType.ATTACK_BASE, card=base,
+                        card_id=11, target_id=11)
+        game.execute_action(action)
+
+        # Base should still be alive
+        assert base in p2.bases
+        assert p1.combat == 5  # combat not consumed
+
+    def test_attack_base_allows_outpost_when_outpost_exists(self):
+        """Can attack outpost even when regular bases also exist."""
+        game, p1, p2 = _make_game_with_players()
+        outpost = Card("Outpost", 10, 0, [], CardType.OUTPOST, defense=3)
+        base = Card("Base", 11, 0, [], CardType.BASE, defense=2)
+        p2.bases.extend([outpost, base])
+        p1.combat = 5
+
+        action = Action(type=ActionType.ATTACK_BASE, card=outpost,
+                        card_id=10, target_id=10)
+        game.execute_action(action)
+
+        assert outpost not in p2.bases
+        assert p1.combat == 2  # 5 - 3 defense
+
+    def test_attack_player_rejects_self_target(self):
+        """ATTACK_PLAYER must not allow targeting self."""
+        game, p1, p2 = _make_game_with_players()
+        p1.combat = 10
+        p1_idx = game.players.index(p1)
+
+        action = Action(type=ActionType.ATTACK_PLAYER, target_id=p1_idx)
+        game.execute_action(action)
+
+        # P1's health should be unchanged
+        assert p1.health == 50
+        assert p1.combat == 10  # combat not consumed
+
+    def test_attack_player_rejects_zero_combat(self):
+        """ATTACK_PLAYER with 0 combat should not deal damage."""
+        game, p1, p2 = _make_game_with_players()
+        p1.combat = 0
+        p2_idx = game.players.index(p2)
+
+        action = Action(type=ActionType.ATTACK_PLAYER, target_id=p2_idx)
+        game.execute_action(action)
+
+        assert p2.health == 50
+
+    def test_attack_player_blocked_by_outpost(self):
+        """ATTACK_PLAYER should not deal damage while outpost is active."""
+        game, p1, p2 = _make_game_with_players()
+        outpost = Card("Wall", 10, 0, [], CardType.OUTPOST, defense=3)
+        p2.bases.append(outpost)
+        p1.combat = 10
+        p2_idx = game.players.index(p2)
+
+        action = Action(type=ActionType.ATTACK_PLAYER, target_id=p2_idx)
+        game.execute_action(action)
+
+        assert p2.health == 50
+        assert p1.combat == 10
+
+
+class TestE4GameOverCentralized:
+    """E4: Game-over detection via centralized _check_player_defeated()."""
+
+    def test_game_over_on_lethal_damage(self):
+        """Game should end when a player's health reaches 0."""
+        game, p1, p2 = _make_game_with_players()
+        p2.health = 5
+        p1.combat = 10
+        p2_idx = game.players.index(p2)
+
+        action = Action(type=ActionType.ATTACK_PLAYER, target_id=p2_idx)
+        game.execute_action(action)
+
+        assert game.is_game_over is True
+        assert p2.health == -5
+
+    def test_game_over_winner_is_attacker(self):
+        """Winner should be the player who dealt lethal damage."""
+        game, p1, p2 = _make_game_with_players()
+        p2.health = 1
+        p1.combat = 5
+
+        action = Action(type=ActionType.ATTACK_PLAYER,
+                        target_id=game.players.index(p2))
+        game.execute_action(action)
+
+        assert game.is_game_over is True
+        assert game.get_winner() == p1.name
+
+    def test_no_game_over_when_health_positive(self):
+        """Game should not end when both players have positive health."""
+        game, p1, p2 = _make_game_with_players()
+        p2.health = 50
+        p1.combat = 10
+
+        action = Action(type=ActionType.ATTACK_PLAYER,
+                        target_id=game.players.index(p2))
+        game.execute_action(action)
+
+        assert game.is_game_over is False
+        assert p2.health == 40
+
+
+class TestE5ExplorerPileConsistency:
+    """E5: Explorer pile indexing consistency between action gen and execution."""
+
+    def test_explorer_buy_works_end_to_end(self):
+        """Buying an Explorer should work via action generation → execution."""
+        game, p1, _ = _make_game_with_players()
+        game.card_index_map = {"Scout": 0, "Viper": 1, "Explorer": 2}
+        game.setup_explorer_pile()
+        p1.trade = 5
+
+        assert len(game.explorer_pile) > 0
+        explorer = game.explorer_pile[-1]  # action gen references last
+
+        action = Action(type=ActionType.BUY_CARD, card=explorer,
+                        card_id=explorer.index)
+        game.execute_action(action)
+
+        assert explorer in p1.discard_pile
+        assert p1.trade == 3  # 5 - 2 cost
+
+    def test_explorer_pile_decrements(self):
+        """Each explorer purchase should reduce pile size by 1."""
+        game, p1, _ = _make_game_with_players()
+        game.card_index_map = {"Scout": 0, "Viper": 1, "Explorer": 2}
+        game.setup_explorer_pile()
+        initial_count = len(game.explorer_pile)
+        p1.trade = 10
+
+        for _ in range(3):
+            if game.explorer_pile:
+                explorer = game.explorer_pile[-1]
+                action = Action(type=ActionType.BUY_CARD, card=explorer,
+                                card_id=explorer.index)
+                game.execute_action(action)
+
+        assert len(game.explorer_pile) == initial_count - 3

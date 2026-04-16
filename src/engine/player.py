@@ -27,6 +27,11 @@ class Player:
         # Support multiple sets of pending actions
         self.pending_action_sets: List[PendingActionSet] = []
         self.cards_drawn = 0  # Track the number of cards drawn
+        # Deferred forced discards — incremented when an opponent plays a
+        # "target opponent discards" effect. Materialized into pending
+        # actions at the start of this player's next turn so that the
+        # player (not the attacker) chooses which cards to discard.
+        self.pending_start_of_turn_discards: int = 0
         # Cached faction ally counts — updated incrementally on card play,
         # reset on end_turn. Maps Faction bit → count of cards contributing.
         self._faction_counts: dict[Faction, int] = {}
