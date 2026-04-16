@@ -17,6 +17,8 @@ class GameConfig:
     starting_health: int = 50
     trade_row_size: int = 5
     turn_cap: int = 1000
+    # Matches the physical Star Realms deck (10 Explorer cards in the box).
+    # Not unlimited — this is intentional for physical-deck fidelity.
     explorer_count: int = 10
     num_scouts: int = 8
     num_vipers: int = 2

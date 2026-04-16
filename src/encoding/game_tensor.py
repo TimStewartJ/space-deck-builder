@@ -51,7 +51,7 @@ _TRADE_ROW_SIZE = MAX_TRADE_ROW + 1
 _TRADE_DECK_SIZE = MAX_TRADE_DECK + 1
 
 # Per-player layout
-_PLAYER_SCALARS = 4  # health, trade, combat, cards_drawn
+_PLAYER_SCALARS = 5  # health, trade, combat, cards_drawn, pending_start_of_turn_discards
 _HAND_SIZE = MAX_HAND + 1
 _DECK_SIZE = MAX_DECK + 1
 _DISCARD_SIZE = MAX_DISCARD + 1
@@ -141,7 +141,7 @@ ZONE_DISCARD = 2
 ZONE_BASES = 3
 ZONE_PLAYED = 4
 ZONE_TRADE_ROW = 5
-ZONE_OPPONENT_HAND = 6  # for TARGET_DISCARD actions targeting opponent
+ZONE_OPPONENT_HAND = 6  # legacy: was used for TARGET_DISCARD actions (now deferred)
 
 
 # ── Effect bit packing ──────────────────────────────────────────────
@@ -227,6 +227,7 @@ def game_to_tensor(game: 'Game') -> torch.IntTensor:
         t[po.scalars + 1] = player.trade
         t[po.scalars + 2] = player.combat
         t[po.scalars + 3] = player.cards_drawn
+        t[po.scalars + 4] = player.pending_start_of_turn_discards
 
         # Hand
         _write_zone(t, po.hand, po.hand_len, player.hand, MAX_HAND)
@@ -414,6 +415,7 @@ def tensor_to_game(
         player.trade = t[po.scalars + 1].item()
         player.combat = t[po.scalars + 2].item()
         player.cards_drawn = t[po.scalars + 3].item()
+        player.pending_start_of_turn_discards = t[po.scalars + 4].item()
 
         # Hand
         player.hand = _read_zone(t, po.hand, po.hand_len, make_card)

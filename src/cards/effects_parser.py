@@ -113,10 +113,14 @@ def parse_effect_text(text: str) -> Effect:
         return Effect(CardEffectType.DRAW, int(draw_match.group(1)), text,
                      faction_requirement, is_scrap, is_ally, faction_requirement_count)
     
-    # Parse destroy base effects
-    if text == "Destroy target base" or text == "You may destroy target base":
+    # Parse destroy base effects — "Destroy target base" is mandatory,
+    # "You may destroy target base" is optional
+    if text == "Destroy target base":
         return Effect(CardEffectType.DESTROY_BASE, 1, text, faction_requirement, is_scrap,
-                      is_ally, faction_requirement_count)
+                      is_ally, faction_requirement_count, is_mandatory=True)
+    if text == "You may destroy target base":
+        return Effect(CardEffectType.DESTROY_BASE, 1, text, faction_requirement, is_scrap,
+                      is_ally, faction_requirement_count, is_mandatory=False)
 
     # Detect "counts as an ally for all factions" (e.g. Mech World).
     # Returns a COMPLEX effect with marker text; the loader sets ally_factions on the Card.

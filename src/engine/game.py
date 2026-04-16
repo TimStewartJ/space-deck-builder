@@ -180,6 +180,12 @@ class Game:
             self.current_turn = (self.current_turn + 1) % len(self.players)
             self.current_player = self.players[self.current_turn]
 
+            # Materialize deferred forced discards at the start of the
+            # new player's turn. The player chooses which cards to discard
+            # from their own hand (no hidden-info leak).
+            if not self.is_game_over:
+                self._materialize_start_of_turn_discards()
+
         return action
         
     
@@ -254,6 +260,10 @@ class Game:
         elif action.type == ActionType.BUY_CARD:
             card = action.card
             if card is not None:
+                # Validate affordability (defense in depth — action generation
+                # already filters, but crafted actions could bypass it)
+                if self.current_player.trade < card.cost:
+                    return False
                 # Direct reference path — check if it's an explorer or trade row card
                 if self.explorer_pile and card is self.explorer_pile[-1]:
                     self.explorer_pile.pop()
@@ -284,6 +294,9 @@ class Game:
             if action.card_id is not None and action.card_id == explorer_idx:
                 if self.explorer_pile:
                     card = self.explorer_pile.pop()
+                    if self.current_player.trade < card.cost:
+                        self.explorer_pile.append(card)
+                        return False
                     self.current_player.trade -= card.cost
                     self.current_player.discard_pile.append(card)
                     self.stats.record_card_buy(self.current_player.name)
@@ -312,6 +325,10 @@ class Game:
             if target_base is not None:
                 for player in self.players:
                     if player is not self.current_player and target_base in player.bases:
+                        # Outpost priority: if outposts exist, only outposts may be attacked
+                        outposts = [b for b in player.bases if b.is_outpost()]
+                        if outposts and target_base not in outposts:
+                            break
                         if target_base.defense and self.current_player.combat >= target_base.defense:
                             self.current_player.combat -= target_base.defense
                             player.bases.remove(target_base)
@@ -323,10 +340,18 @@ class Game:
                         break
             else:
                 # Fallback: index-based scan
+                resolved = False
                 for player in self.players:
+                    if resolved:
+                        break
                     if player != self.current_player:
                         for base in player.bases:
                             if base.index == action.target_id and base.defense and self.current_player.combat >= base.defense:
+                                # Outpost priority check
+                                outposts = [b for b in player.bases if b.is_outpost()]
+                                if outposts and base not in outposts:
+                                    resolved = True
+                                    break
                                 self.current_player.combat -= base.defense
                                 player.bases.remove(base)
                                 player.discard_pile.append(base)
@@ -334,6 +359,7 @@ class Game:
                                 self.stats.record_base_destroy(self.current_player.name)
                                 if _log_enabled:
                                     log(f"{self.current_player.name} destroyed {player.name}'s {base.name}", v=True)
+                                resolved = True
                                 break
 
         elif action.type == ActionType.DESTROY_BASE:
@@ -371,19 +397,19 @@ class Game:
                     target = self.players[action.target_id]
             if target is None:
                 target = self.get_opponent(self.current_player)
-            if target is not None:
-                if not any(b.is_outpost() for b in target.bases):
-                    damage = self.current_player.combat
-                    target.health -= damage
-                    self.current_player.combat = 0
-                    self.stats.record_damage(self.current_player.name, damage)
-                    if _log_enabled:
-                        log(f"{self.current_player.name} attacked {target.name} for {damage} damage", v=True)
-                    if target.health <= 0:
-                        if _log_enabled:
-                            log(f"{target.name} has been defeated!", v=True)
-                        self.is_game_over = True
-                        self.stats.end_game(self.current_player.name)
+            # Validate: target must be an opponent with no outposts, and
+            # attacker must have combat available
+            if (target is not None
+                    and target is not self.current_player
+                    and self.current_player.combat > 0
+                    and not any(b.is_outpost() for b in target.bases)):
+                damage = self.current_player.combat
+                target.health -= damage
+                self.current_player.combat = 0
+                self.stats.record_damage(self.current_player.name, damage)
+                if _log_enabled:
+                    log(f"{self.current_player.name} attacked {target.name} for {damage} damage", v=True)
+                self._check_player_defeated()
 
         elif action.type == ActionType.SCRAP_CARD and action.card_source is not None:
             self.stats.record_card_scrap(self.current_player.name, action.card_source.value)
@@ -509,8 +535,21 @@ class Game:
     def end_game(self):
         self.is_game_over = True
         self.is_running = False
-        # Logic to determine the winner and end the game
-        pass
+
+    def _check_player_defeated(self):
+        """Check if any player has been defeated (health <= 0).
+
+        Called after any action that could reduce a player's health.
+        Sets game_over and records the current player (attacker) as winner.
+        """
+        for player in self.players:
+            if player.health <= 0:
+                if not _logger.disabled:
+                    log(f"{player.name} has been defeated!", v=True)
+                self.is_game_over = True
+                self.stats.end_game(self.current_player.name)
+                return True
+        return False
 
     def _complete_pending_set(self, pending_set):
         """Advance past a completed/skipped pending set and run completion effects.
@@ -523,6 +562,33 @@ class Game:
                 self.current_player.draw_card()
                 self.stats.record_card_draw(self.current_player.name)
         self.current_player.advance_pending_set()
+
+    def _materialize_start_of_turn_discards(self):
+        """Convert deferred discard debt into pending actions.
+
+        Called at the start of a player's turn. The player chooses which
+        cards to discard from their own hand (Star Realms rules: the
+        opponent chooses, not the attacker). Clamps to hand size to avoid
+        soft-locks when hand is smaller than discard debt.
+        """
+        player = self.current_player
+        n = player.pending_start_of_turn_discards
+        if n <= 0:
+            return
+        # Clamp to actual hand size
+        n = min(n, len(player.hand))
+        player.pending_start_of_turn_discards = 0
+        if n == 0:
+            return
+        pending_actions = []
+        for card in player.hand:
+            pending_actions.append(Action(
+                ActionType.DISCARD_CARDS,
+                card_id=card.index,
+                card=card,
+                card_source=CardSource.SELF,
+            ))
+        player.add_pending_actions(pending_actions, n, mandatory=True)
 
     def add_player(self, name: str, agent: 'Agent'):
         if len(self.players) >= 4:
@@ -541,7 +607,10 @@ class Game:
         
     def get_winner(self):
         if self.is_game_over:
-            # Determine winner based on remaining health
+            # Use recorded winner from stats (set by _check_player_defeated
+            # or end_game via turn cap). Fall back to highest health.
+            if self.stats.winner:
+                return self.stats.winner
             winner = max(self.players, key=lambda p: p.health)
             return winner.name
         return None
