@@ -46,7 +46,12 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--opponents",   type=str, default=_run.opponents,
                    help="Opponent mix: 'random,heuristic' or 'random:0.6,heuristic:0.4'")
     p.add_argument("--self-play-ratio", type=float, default=_run.self_play_ratio,
-                   help="Fraction of games using PPO snapshots when self-play is active")
+                   help="Final self-play ratio (or constant when schedule=constant)")
+    p.add_argument("--self-play-ratio-start", type=float, default=_run.self_play_ratio_start,
+                   help="Initial self-play ratio at the start of training (used with schedule)")
+    p.add_argument("--self-play-schedule", type=str, default=_run.self_play_schedule,
+                   choices=["constant", "linear", "cosine"],
+                   help="Self-play ratio schedule: constant (default), linear, or cosine ramp")
     p.add_argument("--num-workers", type=int, default=_run.num_workers,
                    help=f"Simulation worker processes (1=single-process, >1=multi-process, default: {_run.num_workers})")
     p.add_argument("--num-concurrent", type=int, default=_run.num_concurrent,
@@ -196,6 +201,8 @@ def _run_train(args):
         self_play=args.self_play,
         opponents=args.opponents,
         self_play_ratio=args.self_play_ratio,
+        self_play_ratio_start=args.self_play_ratio_start,
+        self_play_schedule=args.self_play_schedule,
         pfsp_mode=args.pfsp,
         num_workers=args.num_workers,
         num_concurrent=args.num_concurrent,

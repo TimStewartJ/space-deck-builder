@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+import math
 import torch
 import time
 import copy
@@ -14,8 +15,29 @@ from src.ppo.opponent_pool import OpponentPool
 from src.utils.logger import log, set_disabled, set_verbose
 
 
+def _compute_self_play_ratio(
+    start: float, end: float, schedule: str, progress: float
+) -> float:
+    """Compute the self-play ratio at a given training progress.
+
+    Args:
+        start: Initial self-play ratio (at progress=0).
+        end: Final self-play ratio (at progress=1).
+        schedule: "constant" (always *end*), "linear", or "cosine".
+        progress: Training progress in [0.0, 1.0].
+    """
+    if schedule == "constant":
+        return end
+    progress = max(0.0, min(1.0, progress))
+    if schedule == "linear":
+        return start + (end - start) * progress
+    if schedule == "cosine":
+        return start + (end - start) * (1 - math.cos(math.pi * progress)) / 2
+    return end
+
+
 def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cfg,
-                 make_opponent, registry, pool=None):
+                 make_opponent, registry, pool=None, *, current_self_play_ratio=None):
     """Create the appropriate batch runner based on num_workers config."""
     sim_device = agent.simulation_device
     num_concurrent = min(run_cfg.episodes, run_cfg.num_concurrent)
@@ -25,7 +47,7 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
 
         # Extract snapshot data from the pool for serialization to workers
         snapshot_state_dicts = None
-        self_play_ratio = run_cfg.self_play_ratio
+        sp_ratio = current_self_play_ratio if current_self_play_ratio is not None else run_cfg.self_play_ratio
         pfsp_weights = None
         if pool is not None and pool.has_snapshots:
             snapshot_state_dicts = list(pool._snapshots)
@@ -45,7 +67,7 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
             ppo_config=ppo_cfg,
             registry=registry,
             snapshot_state_dicts=snapshot_state_dicts,
-            self_play_ratio=self_play_ratio,
+            self_play_ratio=sp_ratio,
             pfsp_weights=pfsp_weights,
         )
     else:
@@ -114,7 +136,13 @@ def train(
     pool_msg = f"Opponent pool: {', '.join(opp_types)}"
     if run_cfg.self_play:
         pfsp_info = f", pfsp: {run_cfg.pfsp_mode}" if run_cfg.pfsp_mode != "uniform" else ""
-        pool_msg += f" + self-play (ratio: {run_cfg.self_play_ratio}{pfsp_info})"
+        sched_info = ""
+        if run_cfg.self_play_schedule != "constant":
+            sched_info = (f", schedule: {run_cfg.self_play_schedule} "
+                          f"{run_cfg.self_play_ratio_start:.2f}→{run_cfg.self_play_ratio:.2f}")
+        else:
+            sched_info = f", ratio: {run_cfg.self_play_ratio}"
+        pool_msg += f" + self-play ({sched_info.lstrip(', ')}{pfsp_info})"
     print(pool_msg)
 
     total_time_spent_on_updates = 0.0
@@ -125,10 +153,21 @@ def train(
     sim_device = str(agent.simulation_device)
 
     for upd in range(1, run_cfg.updates + 1):
+        # Compute the self-play ratio for this update based on the schedule
+        progress = (upd - 1) / max(1, run_cfg.updates - 1)
+        current_sp_ratio = _compute_self_play_ratio(
+            run_cfg.self_play_ratio_start,
+            run_cfg.self_play_ratio,
+            run_cfg.self_play_schedule,
+            progress,
+        )
+        pool.self_play_ratio = current_sp_ratio
+
         make_opponent = pool.make_factory(card_names, device=sim_device, registry=registry)
         snap_msg = " + snapshots" if pool.has_snapshots else ""
+        sp_ratio_msg = f", sp_ratio: {current_sp_ratio:.2f}" if run_cfg.self_play else ""
         print(f"Starting update {upd}/{run_cfg.updates} "
-              f"(opponents: {', '.join(opp_types)}{snap_msg})")
+              f"(opponents: {', '.join(opp_types)}{snap_msg}{sp_ratio_msg})")
 
         # Collect trajectories
         start_time = time.time()
@@ -136,6 +175,7 @@ def train(
         runner = _make_runner(
             agent, cards, card_names, action_dim,
             ppo_cfg, run_cfg, data_cfg, make_opponent, registry, pool=pool,
+            current_self_play_ratio=current_sp_ratio,
         )
         states, actions, old_lp, returns, advs, masks = runner.run_episodes(run_cfg.episodes)
         duration_episodes = time.time() - start_time

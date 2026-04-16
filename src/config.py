@@ -140,7 +140,31 @@ class RunConfig:
     self_play: bool = True
     opponents: str = "random"
     self_play_ratio: float = 0.5
+    self_play_ratio_start: float = 0.0
+    self_play_schedule: str = "constant"
     pfsp_mode: str = "uniform"
+
+    _VALID_SCHEDULES = {"constant", "linear", "cosine"}
+
+    def __post_init__(self):
+        if self.self_play_schedule not in self._VALID_SCHEDULES:
+            raise ValueError(
+                f"Unknown self_play_schedule {self.self_play_schedule!r}. "
+                f"Valid: {', '.join(sorted(self._VALID_SCHEDULES))}"
+            )
+        if not (0.0 <= self.self_play_ratio_start <= 1.0):
+            raise ValueError(
+                f"self_play_ratio_start must be in [0, 1], got {self.self_play_ratio_start}"
+            )
+        if not (0.0 <= self.self_play_ratio <= 1.0):
+            raise ValueError(
+                f"self_play_ratio must be in [0, 1], got {self.self_play_ratio}"
+            )
+        if self.self_play_ratio_start > self.self_play_ratio:
+            raise ValueError(
+                f"self_play_ratio_start ({self.self_play_ratio_start}) must be "
+                f"<= self_play_ratio ({self.self_play_ratio})"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
