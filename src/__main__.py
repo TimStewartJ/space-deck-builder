@@ -26,6 +26,11 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     _add_common_args(p)
     # PPO hyperparameters (defaults sourced from PPOConfig dataclass)
     p.add_argument("--lr",          type=float, default=_ppo.lr)
+    p.add_argument("--lr-end",     type=float, default=_ppo.lr_end,
+                   help="Terminal learning rate for cosine schedule")
+    p.add_argument("--lr-schedule", type=str, default=_ppo.lr_schedule,
+                   choices=["constant", "cosine"],
+                   help="LR schedule: cosine annealing (default) or constant")
     p.add_argument("--gamma",       type=float, default=_ppo.gamma)
     p.add_argument("--lam",         type=float, default=_ppo.lam)
     p.add_argument("--clip-eps",    type=float, default=_ppo.clip_eps)
@@ -51,7 +56,7 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                    help="Initial self-play ratio at the start of training (used with schedule)")
     p.add_argument("--self-play-schedule", type=str, default=_run.self_play_schedule,
                    choices=["constant", "linear", "cosine"],
-                   help="Self-play ratio schedule: constant (default), linear, or cosine ramp")
+                   help="Self-play ratio schedule: linear (default), constant, or cosine ramp")
     p.add_argument("--num-workers", type=int, default=_run.num_workers,
                    help=f"Simulation worker processes (1=single-process, >1=multi-process, default: {_run.num_workers})")
     p.add_argument("--num-concurrent", type=int, default=None,
@@ -225,6 +230,7 @@ def _run_train(args):
         clip_eps=args.clip_eps, epochs=args.epochs,
         batch_size=args.batch_size, entropy_coef=args.entropy,
         adv_norm=args.adv_norm,
+        lr_end=args.lr_end, lr_schedule=args.lr_schedule,
     )
     run_cfg = RunConfig(
         episodes=args.episodes, updates=args.updates,

@@ -118,6 +118,25 @@ class PPOConfig:
     grad_clip: float = 0.5
     critic_loss_coef: float = 0.5
     adv_norm: str = "global"  # "per_episode" | "global"
+    lr_end: float = 1e-5
+    lr_schedule: str = "cosine"  # "constant" | "cosine"
+
+    _VALID_LR_SCHEDULES = {"constant", "cosine"}
+
+    def __post_init__(self):
+        if self.lr_schedule not in self._VALID_LR_SCHEDULES:
+            raise ValueError(
+                f"Unknown lr_schedule {self.lr_schedule!r}. "
+                f"Valid: {', '.join(sorted(self._VALID_LR_SCHEDULES))}"
+            )
+        if self.lr_end > self.lr:
+            raise ValueError(
+                f"lr_end ({self.lr_end}) must be <= lr ({self.lr})"
+            )
+        if self.lr_end < 0:
+            raise ValueError(
+                f"lr_end must be non-negative, got {self.lr_end}"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -141,7 +160,7 @@ class RunConfig:
     opponents: str = "random"
     self_play_ratio: float = 0.5
     self_play_ratio_start: float = 0.0
-    self_play_schedule: str = "constant"
+    self_play_schedule: str = "linear"
     pfsp_mode: str = "uniform"
 
     _VALID_SCHEDULES = {"constant", "linear", "cosine"}

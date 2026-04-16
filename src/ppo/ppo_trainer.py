@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 import math
 import torch
+import torch.optim.lr_scheduler as lr_sched
 import time
 import copy
 
@@ -146,6 +147,20 @@ def train(
         pool_msg += f" + self-play ({sched_info.lstrip(', ')}{pfsp_info})"
     print(pool_msg)
 
+    # Set up LR scheduler for cosine annealing
+    scheduler = None
+    if ppo_cfg.lr_schedule == "cosine":
+        # T_max = updates - 1 so the final update trains at exactly lr_end.
+        # Step once after each update (except: the first update uses the initial lr).
+        scheduler = lr_sched.CosineAnnealingLR(
+            agent.optimizer,
+            T_max=max(1, run_cfg.updates - 1),
+            eta_min=ppo_cfg.lr_end,
+        )
+        print(f"LR schedule: cosine {ppo_cfg.lr:.1e} -> {ppo_cfg.lr_end:.1e} over {run_cfg.updates} updates")
+    else:
+        print(f"LR schedule: constant {ppo_cfg.lr:.1e}")
+
     total_time_spent_on_updates = 0.0
     total_time_spent_on_episodes = 0.0
     total_time_spent_on_eval = 0.0
@@ -212,11 +227,16 @@ def train(
 
         # Perform PPO update
         start_time = time.time()
+        current_lr = agent.optimizer.param_groups[0]['lr']
         agent.update(states, actions, old_lp, returns, advs, masks)
         duration_update = time.time() - start_time
         total_time_spent_on_updates += duration_update
-        print(f"Update {upd} complete in {duration_update:.2f}s. State size: {states.shape}")
+        print(f"Update {upd} complete in {duration_update:.2f}s. State size: {states.shape}. LR: {current_lr:.2e}")
         print(f"Card Emb grad: {agent.model.card_emb.weight.grad is not None and agent.model.card_emb.weight.grad.norm().item():.4f}")
+
+        # Step LR scheduler after each update
+        if scheduler is not None:
+            scheduler.step()
 
         # Add snapshot for self-play after each update
         if run_cfg.self_play:

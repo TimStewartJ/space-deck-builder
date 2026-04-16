@@ -127,4 +127,4 @@ class TestRunConfigValidation:
         d = RunConfig().to_dict()
         d["future_field"] = 42
         cfg = RunConfig.from_dict(d)
-        assert cfg.self_play_schedule == "constant"
+        assert cfg.self_play_schedule == "linear"
