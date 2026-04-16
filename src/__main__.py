@@ -111,17 +111,22 @@ def _build_elo_parser(sub: argparse._SubParsersAction):
     _dev = DeviceConfig()
     _run = RunConfig()
 
-    p = sub.add_parser("elo", help="Run Elo tournament between checkpoints")
+    p = sub.add_parser("elo", help="Run Elo tournament between checkpoints and/or agents")
     _add_common_args(p)
-    p.add_argument("--checkpoints", type=str, nargs="+", required=True,
+    p.add_argument("--checkpoints", type=str, nargs="*", default=[],
                    help="Checkpoint glob patterns or paths "
                         "(e.g. 'models/ppo_agent_0415_*upd*0.pth')")
+    p.add_argument("--agents", type=str, default=None,
+                   help="Comma-separated built-in agent types to include "
+                        "(e.g. 'random,heuristic,simple')")
     p.add_argument("--games-per-pair", type=int, default=50,
                    help="Games to play per pairing (default: 50)")
     p.add_argument("--simulation-device", type=str, default=_dev.simulation_device,
                    help="Device for inference (cuda or cpu)")
     p.add_argument("--num-concurrent", type=int, default=None,
                    help="Concurrent games per worker (default: games-per-pair)")
+    p.add_argument("--num-workers", type=int, default=1,
+                   help="Worker processes for PPO-vs-builtin pairings (default: 1)")
     return p
 
 
@@ -146,7 +151,6 @@ def _build_eval_parser(sub: argparse._SubParsersAction):
                    help="Concurrent games per worker (default: games/workers)")
     p.add_argument("--num-workers", type=int, default=_run.num_workers,
                    help=f"Simulation worker processes (default: {_run.num_workers})")
-    return p
 
 
 def _build_analyze_parser(sub: argparse._SubParsersAction):
@@ -273,8 +277,20 @@ def _run_elo(args):
     from src.ppo.elo_tournament import run_tournament, resolve_checkpoint_paths
 
     paths = resolve_checkpoint_paths(args.checkpoints)
-    if len(paths) < 2:
-        print(f"Error: need at least 2 checkpoints, found {len(paths)}")
+    agent_types = [a.strip() for a in args.agents.split(",") if a.strip()] if args.agents else []
+
+    # Validate agent types early for clear CLI error messages
+    from src.ppo.elo_tournament import BUILTIN_AGENT_TYPES
+    invalid = [a for a in agent_types if a not in BUILTIN_AGENT_TYPES]
+    if invalid:
+        print(f"Error: unknown agent type(s): {', '.join(invalid)}. "
+              f"Valid types: {', '.join(sorted(BUILTIN_AGENT_TYPES))}")
+        sys.exit(1)
+
+    total_participants = len(paths) + len(agent_types)
+    if total_participants < 2:
+        print(f"Error: need at least 2 participants, found {total_participants} "
+              f"({len(paths)} checkpoints, {len(agent_types)} agents)")
         sys.exit(1)
 
     data_cfg = DataConfig(cards_path=args.cards_path)
@@ -285,6 +301,8 @@ def _run_elo(args):
         games_per_pair=args.games_per_pair,
         device=args.simulation_device,
         num_concurrent=num_concurrent,
+        agent_types=agent_types or None,
+        num_workers=args.num_workers,
     )
 
 
