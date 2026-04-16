@@ -49,7 +49,10 @@ def generate_dashboard(
         print("No replays found — skipping dashboard generation.")
         return None
 
-    stats = _compute_stats(replays, card_names, num_cards)
+    # Load card metadata for faction-aware analysis
+    card_factions = _load_card_factions(card_names)
+
+    stats = _compute_stats(replays, card_names, num_cards, card_factions)
     html_content = _build_html(stats, card_names, model_info, replay_path)
 
     if output_path is None:
@@ -62,7 +65,36 @@ def generate_dashboard(
     return output_path
 
 
-def _compute_stats(replays: list[GameReplay], card_names: list[str], num_cards: int) -> dict:
+def _load_card_factions(card_names: list[str]) -> dict[str, str]:
+    """Load faction for each card name from the card registry.
+
+    Returns a dict mapping card_name → faction display string
+    (e.g. "Blob", "Machine Cult", "Unaligned").
+    """
+    try:
+        from src.config import DataConfig
+        from src.cards.factions import Faction, FACTION_NAMES
+        data_cfg = DataConfig()
+        cards = data_cfg.load_cards()
+        faction_map = {}
+        seen = set()
+        for c in cards:
+            if c.name in seen:
+                continue
+            seen.add(c.name)
+            factions = [FACTION_NAMES[f] for f in Faction if f in c.faction and f in FACTION_NAMES]
+            faction_map[c.name] = factions[0] if len(factions) == 1 else ("Multi" if factions else "Unaligned")
+        # Starter cards
+        for name in card_names:
+            if name not in faction_map:
+                faction_map[name] = "Unaligned"
+        return faction_map
+    except Exception:
+        return {name: "Unknown" for name in card_names}
+
+
+def _compute_stats(replays: list[GameReplay], card_names: list[str], num_cards: int,
+                   card_factions: dict[str, str] | None = None) -> dict:
     """Compute all dashboard metrics from replay data."""
     stats = {}
 
@@ -405,7 +437,232 @@ def _compute_stats(replays: list[GameReplay], card_names: list[str], num_cards: 
         )[:20]),
     }
 
+    # ── Strategy analysis (unbiased) ────────────────────────────────
+
+    if card_factions is None:
+        card_factions = {name: "Unknown" for name in card_names}
+
+    faction_labels = ["Blob", "Machine Cult", "Star Empire", "Trade Federation", "Unaligned"]
+
+    # --- 2. Outcome-conditioned win rate lift ---
+    # Per card: win rate in games where it was bought vs. not bought
+    card_bought_in = defaultdict(lambda: {"bought_wins": 0, "bought_total": 0,
+                                          "not_bought_wins": 0, "not_bought_total": 0})
+    per_game_buys = []
+    for r in replays:
+        is_win = r.winner == "PPO"
+        bought_ids = set()
+        for d in r.decisions:
+            if d.action_type == "BUY_CARD" and d.action_card_id is not None and 0 <= d.action_card_id < num_cards:
+                bought_ids.add(d.action_card_id)
+        per_game_buys.append((bought_ids, is_win, r))
+        # Track which cards were available at any point in the game
+        available_ids = set()
+        for d in r.decisions:
+            for cid in d.buyable_card_ids:
+                if 0 <= cid < num_cards:
+                    available_ids.add(cid)
+        for cid in available_ids:
+            if cid in bought_ids:
+                card_bought_in[cid]["bought_total"] += 1
+                if is_win:
+                    card_bought_in[cid]["bought_wins"] += 1
+            else:
+                card_bought_in[cid]["not_bought_total"] += 1
+                if is_win:
+                    card_bought_in[cid]["not_bought_wins"] += 1
+
+    win_rate_lift = {}
+    for cid, data in card_bought_in.items():
+        if cid >= num_cards:
+            continue
+        bt = data["bought_total"]
+        nbt = data["not_bought_total"]
+        if bt < 3 and nbt < 3:
+            continue
+        bought_wr = data["bought_wins"] / bt if bt > 0 else 0
+        not_bought_wr = data["not_bought_wins"] / nbt if nbt > 0 else 0
+        win_rate_lift[card_names[cid]] = {
+            "bought_wr": round(bought_wr * 100, 1),
+            "not_bought_wr": round(not_bought_wr * 100, 1),
+            "lift": round((bought_wr - not_bought_wr) * 100, 1),
+            "buy_freq": round(bt / (bt + nbt) * 100, 1),
+            "sample": bt + nbt,
+        }
+
+    # --- 3. Value estimate reactions on buy ---
+    value_deltas = defaultdict(list)
+    for r in replays:
+        prev_val = None
+        for d in r.decisions:
+            if d.action_type == "BUY_CARD" and d.action_card_id is not None and 0 <= d.action_card_id < num_cards:
+                if prev_val is not None:
+                    delta = d.value_estimate - prev_val
+                    value_deltas[card_names[d.action_card_id]].append(delta)
+            prev_val = d.value_estimate
+
+    value_reactions = {}
+    for name, deltas in value_deltas.items():
+        if len(deltas) >= 3:
+            value_reactions[name] = {
+                "mean_delta": round(sum(deltas) / len(deltas), 4),
+                "count": len(deltas),
+            }
+
+    # --- 4. Emergent archetype discovery (unsupervised k-means) ---
+    # Build faction purchase vectors per game
+    game_vectors = []
+    game_meta = []
+    for bought_ids, is_win, r in per_game_buys:
+        vec = {f: 0 for f in faction_labels}
+        total = 0
+        for cid in bought_ids:
+            if cid < num_cards:
+                faction = card_factions.get(card_names[cid], "Unaligned")
+                if faction in vec:
+                    vec[faction] += 1
+                else:
+                    vec["Unaligned"] += 1
+                total += 1
+        if total > 0:
+            fvec = [vec[f] / total for f in faction_labels]
+        else:
+            fvec = [0.0] * len(faction_labels)
+        game_vectors.append(fvec)
+        game_meta.append({"game_id": r.game_id, "win": is_win, "opponent": r.opponent_type, "total_bought": total})
+
+    # Simple k-means (pure Python, no sklearn needed)
+    archetypes = _kmeans_cluster(game_vectors, game_meta, faction_labels, k=5, max_iter=50)
+
+    # --- 5. Contrastive card analysis ---
+    # For top 15 most-bought cards: what else was bought when this card was/wasn't
+    all_buy_counts = Counter()
+    for bought_ids, _, _ in per_game_buys:
+        for cid in bought_ids:
+            if cid < num_cards:
+                all_buy_counts[card_names[cid]] += 1
+
+    top_cards = [name for name, _ in all_buy_counts.most_common(15)]
+    contrastive = {}
+    for focal_card in top_cards:
+        focal_idx = card_names.index(focal_card) if focal_card in card_names else -1
+        if focal_idx < 0:
+            continue
+        with_focal = Counter()
+        without_focal = Counter()
+        with_count = 0
+        without_count = 0
+        for bought_ids, _, _ in per_game_buys:
+            bought_names = {card_names[cid] for cid in bought_ids if cid < num_cards}
+            if focal_card in bought_names:
+                with_count += 1
+                for name in bought_names:
+                    if name != focal_card:
+                        with_focal[name] += 1
+            else:
+                without_count += 1
+                for name in bought_names:
+                    without_focal[name] += 1
+        # Normalize to rates
+        top_with = []
+        for name, cnt in with_focal.most_common(8):
+            rate_with = cnt / with_count if with_count > 0 else 0
+            rate_without = without_focal.get(name, 0) / without_count if without_count > 0 else 0
+            top_with.append({"card": name, "rate_with": round(rate_with * 100, 1),
+                             "rate_without": round(rate_without * 100, 1),
+                             "delta": round((rate_with - rate_without) * 100, 1)})
+        contrastive[focal_card] = {
+            "games_with": with_count,
+            "games_without": without_count,
+            "companions": sorted(top_with, key=lambda x: x["delta"], reverse=True)[:6],
+        }
+
+    stats["strategy"] = {
+        "win_rate_lift": win_rate_lift,
+        "value_reactions": dict(sorted(value_reactions.items(), key=lambda x: x[1]["mean_delta"], reverse=True)),
+        "archetypes": archetypes,
+        "contrastive": contrastive,
+        "faction_labels": faction_labels,
+    }
+
     return stats
+
+
+def _kmeans_cluster(vectors: list[list[float]], meta: list[dict],
+                    faction_labels: list[str], k: int = 5, max_iter: int = 50) -> dict:
+    """Simple k-means clustering for faction purchase vectors.
+
+    Returns cluster summaries with centroids, sizes, win rates, and labels.
+    """
+    import random as _rand
+    if len(vectors) < k:
+        k = max(1, len(vectors))
+
+    n = len(vectors)
+    dim = len(vectors[0]) if vectors else 0
+
+    # Initialize centroids with k-means++ style (pick spread-out initial points)
+    centroids = [list(vectors[_rand.randint(0, n - 1)])]
+    for _ in range(k - 1):
+        dists = []
+        for v in vectors:
+            min_d = min(sum((a - b) ** 2 for a, b in zip(v, c)) for c in centroids)
+            dists.append(min_d)
+        total = sum(dists)
+        if total == 0:
+            centroids.append(list(vectors[_rand.randint(0, n - 1)]))
+            continue
+        r = _rand.random() * total
+        cumulative = 0
+        for i, d in enumerate(dists):
+            cumulative += d
+            if cumulative >= r:
+                centroids.append(list(vectors[i]))
+                break
+
+    assignments = [0] * n
+    for _ in range(max_iter):
+        # Assign
+        changed = False
+        for i, v in enumerate(vectors):
+            best_c = min(range(k), key=lambda c: sum((a - b) ** 2 for a, b in zip(v, centroids[c])))
+            if assignments[i] != best_c:
+                changed = True
+                assignments[i] = best_c
+        if not changed:
+            break
+        # Update centroids
+        for c in range(k):
+            members = [vectors[i] for i in range(n) if assignments[i] == c]
+            if members:
+                centroids[c] = [sum(m[d] for m in members) / len(members) for d in range(dim)]
+
+    # Build cluster summaries
+    clusters = []
+    for c in range(k):
+        member_indices = [i for i in range(n) if assignments[i] == c]
+        if not member_indices:
+            continue
+        wins = sum(1 for i in member_indices if meta[i]["win"])
+        size = len(member_indices)
+        centroid = centroids[c]
+
+        # Label by dominant faction(s)
+        sorted_factions = sorted(zip(faction_labels, centroid), key=lambda x: x[1], reverse=True)
+        dominant = [f for f, v in sorted_factions if v > 0.15]
+        label = " + ".join(dominant[:2]) if dominant else "Mixed"
+
+        clusters.append({
+            "label": label,
+            "size": size,
+            "win_rate": round(wins / size * 100, 1),
+            "centroid": {faction_labels[d]: round(centroid[d] * 100, 1) for d in range(dim)},
+            "games": [meta[i]["game_id"] for i in member_indices[:10]],
+        })
+
+    # Sort by size descending
+    clusters.sort(key=lambda c: c["size"], reverse=True)
+    return {"clusters": clusters, "game_assignments": assignments}
 
 
 # ── HTML template ───────────────────────────────────────────────────
@@ -489,6 +746,7 @@ def _build_html(stats: dict, card_names: list[str], model_info: str, replay_path
   <div class="tab" onclick="switchTab('cards', this)">Cards</div>
   <div class="tab" onclick="switchTab('combat', this)">Combat</div>
   <div class="tab" onclick="switchTab('failures', this)">Failures</div>
+  <div class="tab" onclick="switchTab('strategy', this)">Strategy</div>
 </div>
 <div id="tab-overview" class="tab-content active"></div>
 <div id="tab-economy" class="tab-content"></div>
@@ -496,6 +754,7 @@ def _build_html(stats: dict, card_names: list[str], model_info: str, replay_path
 <div id="tab-cards" class="tab-content"></div>
 <div id="tab-combat" class="tab-content"></div>
 <div id="tab-failures" class="tab-content"></div>
+<div id="tab-strategy" class="tab-content"></div>
 <script id="dashboard-data" type="application/json">{stats_json}</script>
 <script>
 {_DASHBOARD_JS}
@@ -545,6 +804,7 @@ function renderTab(name) {
     case 'cards': renderCards(el); break;
     case 'combat': renderCombat(el); break;
     case 'failures': renderFailures(el); break;
+    case 'strategy': renderStrategy(el); break;
   }
 }
 
@@ -646,6 +906,120 @@ function renderFailures(el) {
   var bd = S.failures.buy_rate_delta;
   var bdSorted = Object.entries(bd).sort(function(a,b){return b[1].delta-a[1].delta}).slice(0,15);
   if (bdSorted.length > 0) { Plotly.newPlot('fl-buydelta', [{y:bdSorted.map(function(e){return e[0]}), x:bdSorted.map(function(e){return e[1].win_rate}), name:'Win Buy Rate', type:'bar', orientation:'h', marker:{color:'#4ade80'}}, {y:bdSorted.map(function(e){return e[0]}), x:bdSorted.map(function(e){return e[1].loss_rate}), name:'Loss Buy Rate', type:'bar', orientation:'h', marker:{color:'#f87171'}}], Object.assign({}, cardLayout, {barmode:'group', xaxis:{gridcolor:plotGrid, title:'Buy Rate %'}, yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(300, bdSorted.length*35)}), plotConfig); }
+}
+
+function renderStrategy(el) {
+  el.innerHTML = '<div class="chart-row"><div class="chart-box full"><h3>Outcome-Conditioned Win Rate Lift</h3><p class="note">X = how often the card is bought, Y = win rate when bought minus win rate when not bought. Upper-right = frequently bought and correlated with winning.</p><div id="st-lift"></div></div></div>' +
+    '<div class="chart-row"><div class="chart-box full"><h3>Value Estimate Reaction on Buy</h3><p class="note">Average change in the model\'s own value estimate immediately after buying each card. Positive = the model thinks this buy improved its position.</p><div id="st-value"></div></div></div>' +
+    '<div class="chart-row"><div class="chart-box full"><h3>Emergent Deck Archetypes</h3><p class="note">Games clustered by faction purchase mix (unsupervised). Labels are assigned after clustering based on dominant factions — not predefined.</p><div id="st-archetypes"></div></div></div>' +
+    '<div class="chart-row"><div class="chart-box full"><h3>Archetype Faction Profiles</h3><div id="st-archetype-profiles"></div></div></div>' +
+    '<div class="chart-row"><div class="chart-box full"><h3>Contrastive Card Analysis</h3><p class="note">When the agent buys a given card, what else does it tend to buy more/less often? Delta = co-purchase rate when bought minus when not bought.</p><div id="st-contrastive"></div></div></div>';
+
+  var st = S.strategy;
+
+  // Win rate lift scatter
+  var wrl = st.win_rate_lift;
+  var wrlEntries = Object.entries(wrl);
+  if (wrlEntries.length > 0) {
+    Plotly.newPlot('st-lift', [{
+      x: wrlEntries.map(function(e){return e[1].buy_freq}),
+      y: wrlEntries.map(function(e){return e[1].lift}),
+      text: wrlEntries.map(function(e){return e[0] + '<br>Bought WR: ' + e[1].bought_wr + '%<br>Not Bought WR: ' + e[1].not_bought_wr + '%<br>n=' + e[1].sample}),
+      mode: 'markers+text', type: 'scatter',
+      textposition: 'top center',
+      textfont: {size: 10, color: '#94a3b8'},
+      marker: {
+        size: wrlEntries.map(function(e){return Math.max(8, Math.min(30, e[1].sample / 5))}),
+        color: wrlEntries.map(function(e){return e[1].lift}),
+        colorscale: [[0,'#f87171'],[0.5,'#94a3b8'],[1,'#4ade80']],
+        cmid: 0, colorbar: {title: 'Win Rate Lift %'},
+      },
+      hovertemplate: '%{text}<extra></extra>',
+    }], Object.assign({}, plotLayout, {
+      xaxis: {gridcolor: plotGrid, title: 'Buy Frequency %'},
+      yaxis: {gridcolor: plotGrid, title: 'Win Rate Lift (bought - not bought) %'},
+      shapes: [{type:'line',x0:0,x1:100,y0:0,y1:0,line:{color:'#64748b',width:1,dash:'dot'}}],
+      height: 500,
+    }), plotConfig);
+  }
+
+  // Value reactions bar chart
+  var vr = st.value_reactions;
+  var vrEntries = Object.entries(vr).sort(function(a,b){return b[1].mean_delta - a[1].mean_delta});
+  if (vrEntries.length > 0) {
+    Plotly.newPlot('st-value', [{
+      y: vrEntries.map(function(e){return e[0]}),
+      x: vrEntries.map(function(e){return e[1].mean_delta}),
+      type: 'bar', orientation: 'h',
+      marker: {color: vrEntries.map(function(e){return e[1].mean_delta >= 0 ? '#4ade80' : '#f87171'})},
+      text: vrEntries.map(function(e){return (e[1].mean_delta >= 0 ? '+' : '') + e[1].mean_delta.toFixed(4) + ' (' + e[1].count + 'x)'}),
+      textposition: 'auto',
+    }], Object.assign({}, cardLayout, {
+      xaxis: {gridcolor: plotGrid, title: 'Avg Value Estimate Change'},
+      yaxis: {gridcolor: plotGrid, autorange: 'reversed'},
+      shapes: [{type:'line',x0:0,x1:0,y0:-0.5,y1:vrEntries.length-0.5,line:{color:'#64748b',width:1,dash:'dot'}}],
+      height: Math.max(400, vrEntries.length * 28),
+    }), plotConfig);
+  }
+
+  // Archetype clusters
+  var arch = st.archetypes.clusters;
+  if (arch && arch.length > 0) {
+    var labels = arch.map(function(c){return c.label + ' (' + c.size + ' games)'});
+    var winRates = arch.map(function(c){return c.win_rate});
+    var sizes = arch.map(function(c){return c.size});
+    Plotly.newPlot('st-archetypes', [{
+      x: labels, y: winRates, type: 'bar',
+      marker: {color: winRates.map(function(r){return r >= 50 ? '#4ade80' : '#f87171'})},
+      text: winRates.map(function(r){return r + '%'}), textposition: 'auto',
+    }], Object.assign({}, plotLayout, {
+      yaxis: {gridcolor: plotGrid, title: 'Win Rate %', range: [0, 100]},
+      xaxis: {gridcolor: plotGrid},
+    }), plotConfig);
+
+    // Archetype faction profiles (stacked bar)
+    var fLabels = st.faction_labels;
+    var fColors = {'Blob': '#4ade80', 'Machine Cult': '#f87171', 'Star Empire': '#eab308', 'Trade Federation': '#60a5fa', 'Unaligned': '#94a3b8'};
+    var profileTraces = fLabels.map(function(f) {
+      return {
+        x: arch.map(function(c){return c.label}),
+        y: arch.map(function(c){return c.centroid[f] || 0}),
+        name: f, type: 'bar',
+        marker: {color: fColors[f] || '#94a3b8'},
+      };
+    });
+    Plotly.newPlot('st-archetype-profiles', profileTraces, Object.assign({}, plotLayout, {
+      barmode: 'stack',
+      yaxis: {gridcolor: plotGrid, title: 'Faction Mix %'},
+      xaxis: {gridcolor: plotGrid},
+    }), plotConfig);
+  }
+
+  // Contrastive card analysis — top 6 cards as subplots
+  var cont = st.contrastive;
+  var contCards = Object.keys(cont).slice(0, 6);
+  if (contCards.length > 0) {
+    var contHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px;">';
+    contCards.forEach(function(card, idx) {
+      contHtml += '<div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:12px;"><h4 style="color:#f8fafc;font-size:13px;margin-bottom:8px;">When buying ' + card + ' (' + cont[card].games_with + ' games)</h4><div id="st-cont-' + idx + '"></div></div>';
+    });
+    contHtml += '</div>';
+    document.getElementById('st-contrastive').innerHTML = contHtml;
+
+    contCards.forEach(function(card, idx) {
+      var companions = cont[card].companions;
+      if (companions.length === 0) return;
+      Plotly.newPlot('st-cont-' + idx, [
+        {y: companions.map(function(c){return c.card}), x: companions.map(function(c){return c.rate_with}), name: 'With ' + card, type: 'bar', orientation: 'h', marker: {color: '#60a5fa'}},
+        {y: companions.map(function(c){return c.card}), x: companions.map(function(c){return c.rate_without}), name: 'Without', type: 'bar', orientation: 'h', marker: {color: '#64748b'}},
+      ], Object.assign({}, cardLayout, {
+        barmode: 'group', height: Math.max(200, companions.length * 32),
+        xaxis: {gridcolor: plotGrid, title: 'Co-purchase Rate %'},
+        yaxis: {gridcolor: plotGrid, autorange: 'reversed'},
+        margin: {l: 140, r: 10, t: 10, b: 30},
+      }), plotConfig);
+    });
+  }
 }
 
 // Render the overview tab on load
