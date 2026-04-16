@@ -26,7 +26,6 @@ class Player:
         self.authority_gained = 0
         # Support multiple sets of pending actions
         self.pending_action_sets: List[PendingActionSet] = []
-        self.cards_drawn = 0  # Track the number of cards drawn
         # Deferred forced discards — incremented when an opponent plays a
         # "target opponent discards" effect. Materialized into pending
         # actions at the start of this player's next turn so that the
@@ -51,7 +50,6 @@ class Player:
         if self.deck:
             card = self.deck.pop()
             self.hand.append(card)
-            self.cards_drawn += 1  # Increment the card draw count
             return card
         return None
     

@@ -71,8 +71,6 @@ def _assert_games_equivalent(original: Game, restored: Game):
         assert op.health == rp.health, f"P{pi} health: {op.health} vs {rp.health}"
         assert op.trade == rp.trade, f"P{pi} trade: {op.trade} vs {rp.trade}"
         assert op.combat == rp.combat, f"P{pi} combat: {op.combat} vs {rp.combat}"
-        assert op.cards_drawn == rp.cards_drawn, f"P{pi} cards_drawn mismatch"
-
         # Zones
         _assert_zone_eq(op.hand, rp.hand, f"P{pi}.hand")
         _assert_zone_eq(op.deck, rp.deck, f"P{pi}.deck")
