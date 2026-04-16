@@ -120,6 +120,30 @@ def _build_elo_parser(sub: argparse._SubParsersAction):
     return p
 
 
+def _build_analyze_parser(sub: argparse._SubParsersAction):
+    from src.config import DeviceConfig, RunConfig
+    _dev = DeviceConfig()
+    _run = RunConfig()
+
+    p = sub.add_parser("analyze", help="Collect replays and analyze agent behavior")
+    _add_common_args(p)
+    p.add_argument("--model", type=str, default=None,
+                   help="Model checkpoint path (default: latest)")
+    p.add_argument("--games", type=int, default=200,
+                   help="Number of games to collect (default: 200)")
+    p.add_argument("--opponents", type=str, default="random,heuristic,simple",
+                   help="Opponent types to play against (default: random,heuristic,simple)")
+    p.add_argument("--output", type=str, default=None,
+                   help="Output replay file path (default: analysis/replays_<timestamp>.json.gz)")
+    p.add_argument("--replay", type=str, default=None,
+                   help="Path to existing replay file to analyze (skips game collection)")
+    p.add_argument("--simulation-device", type=str, default=_dev.simulation_device,
+                   help="Device for inference (cuda or cpu)")
+    p.add_argument("--num-concurrent", type=int, default=_run.num_concurrent,
+                   help=f"Concurrent games (default: {_run.num_concurrent})")
+    return p
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog="space-deck-builder",
@@ -130,6 +154,7 @@ def main(argv=None):
     _build_simulate_parser(sub)
     _build_benchmark_parser(sub)
     _build_elo_parser(sub)
+    _build_analyze_parser(sub)
 
     args = parser.parse_args(argv)
 
@@ -145,6 +170,8 @@ def main(argv=None):
         _run_benchmark(args)
     elif args.command == "elo":
         _run_elo(args)
+    elif args.command == "analyze":
+        _run_analyze(args)
 
 
 def _run_train(args):
@@ -220,6 +247,117 @@ def _run_elo(args):
         device=args.simulation_device,
         num_concurrent=args.num_concurrent,
     )
+
+
+def _run_analyze(args):
+    """Collect replays from games and/or analyze existing replay data."""
+    from src.analysis.analyzer import analyze_replays
+
+    # If a replay file is provided, skip collection and just analyze
+    if args.replay:
+        print(f"Analyzing existing replay file: {args.replay}")
+        analyze_replays(args.replay)
+        return
+
+    # Otherwise, collect replays by playing games
+    import os
+    import time
+    import torch
+    from datetime import datetime
+    from src.config import DataConfig, DeviceConfig
+    from src.ppo.ppo_simulate import get_latest_model
+    from src.ppo.batch_runner import BatchRunner
+    from src.ppo.ppo_actor_critic import PPOActorCritic
+    from src.encoding.state_encoder import get_state_size
+    from src.encoding.action_encoder import get_action_space_size
+    from src.config import load_checkpoint
+    from src.analysis.replay_collector import ReplayCollector
+    from src.ppo.opponent_pool import OpponentPool
+    from src.utils.logger import set_verbose, set_disabled
+
+    set_verbose(False)
+    set_disabled(True)
+
+    data_cfg = DataConfig(cards_path=args.cards_path)
+    device = DeviceConfig.resolve(args.simulation_device)
+
+    cards = data_cfg.load_cards()
+    registry = data_cfg.build_registry(cards)
+    card_names = registry.card_names
+
+    model_path = args.model or get_latest_model(data_cfg.models_dir)
+    if not model_path:
+        print("Error: no model found. Provide --model or train one first.")
+        sys.exit(1)
+
+    print(f"Loading model: {model_path}")
+    ckpt = load_checkpoint(model_path, map_location=device)
+    saved_cfg = ckpt.get("config", {}).get("model")
+    from src.config import ModelConfig
+    model_config = ModelConfig.from_dict(saved_cfg) if saved_cfg else ModelConfig()
+
+    state_dim = get_state_size(card_names)
+    action_dim = get_action_space_size(card_names)
+
+    model = PPOActorCritic(
+        state_dim, action_dim, len(card_names), model_config=model_config
+    ).to(device)
+    model.load_state_dict(ckpt["model_state_dict"])
+    model.eval()
+
+    # Distribute games across opponent types, spreading the remainder
+    opponent_types = [o.strip().split(":")[0] for o in args.opponents.split(",")]
+    num_types = len(opponent_types)
+    base_games = args.games // num_types
+    remainder = args.games % num_types
+    games_schedule = [base_games + (1 if i < remainder else 0) for i in range(num_types)]
+
+    collector = ReplayCollector(card_names, action_dim)
+    total_wins = 0
+    total_games = 0
+
+    pool = OpponentPool(opponent_spec=args.opponents)
+
+    for opp_type, num_games in zip(opponent_types, games_schedule):
+        if num_games == 0:
+            continue
+        print(f"Collecting {num_games} games vs {opp_type}...")
+        factory = pool.make_factory_for_type(
+            opp_type, card_names, device=device,
+        )
+
+        runner = BatchRunner(
+            model=model,
+            card_names=card_names,
+            cards=cards,
+            action_dim=action_dim,
+            device=torch.device(device),
+            opponent_factory=factory,
+            num_concurrent=min(args.num_concurrent, num_games),
+            registry=registry,
+        )
+
+        start = time.time()
+        w, l, s = runner.run_analysis(num_games, collector, opp_type)
+        elapsed = time.time() - start
+        total_wins += w
+        total_games += num_games
+        print(f"  {w}/{num_games} wins ({w / num_games:.0%}) in {elapsed:.1f}s")
+
+    print(f"\nTotal: {total_wins}/{total_games} wins "
+          f"({total_wins / total_games:.0%}), "
+          f"{len(collector.replays)} games collected, "
+          f"{sum(len(r.decisions) for r in collector.replays):,} decisions")
+
+    # Save replays
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_path = args.output or f"analysis/replays_{ts}.json.gz"
+    os.makedirs(os.path.dirname(output_path) or "analysis", exist_ok=True)
+    collector.save(output_path)
+    print(f"Replays saved to: {output_path}")
+
+    # Analyze
+    analyze_replays(output_path, output_dir=os.path.dirname(output_path) or "analysis")
 
 
 if __name__ == "__main__":
