@@ -11,6 +11,7 @@ Usage:
 from __future__ import annotations
 
 import glob
+import math
 import os
 import time
 from dataclasses import dataclass
@@ -30,8 +31,10 @@ from src.engine.game import Game
 from src.utils.logger import log, set_disabled
 
 
-K_FACTOR = 32
 INITIAL_ELO = 1000.0
+_MLE_ITERATIONS = 100
+_MLE_BASE = 10.0
+_MLE_SPREAD = 400.0
 
 # Built-in agent types that can participate in tournaments
 BUILTIN_AGENT_TYPES = {"random", "heuristic", "simple"}
@@ -83,28 +86,73 @@ Participant = CheckpointParticipant | BuiltinParticipant
 
 def expected_score(rating_a: float, rating_b: float) -> float:
     """Expected score for player A given both ratings."""
-    return 1.0 / (1.0 + 10.0 ** ((rating_b - rating_a) / 400.0))
+    return 1.0 / (1.0 + _MLE_BASE ** ((rating_b - rating_a) / _MLE_SPREAD))
 
 
-def elo_update(
-    rating_a: float, rating_b: float, wins_a: int, total_games: int
-) -> tuple[float, float]:
-    """Compute new Elo ratings from aggregate match results.
+def compute_mle_ratings(
+    n: int,
+    match_wins: dict[tuple[int, int], int],
+    match_games: dict[tuple[int, int], int],
+    *,
+    iterations: int = _MLE_ITERATIONS,
+    anchor: int = 0,
+) -> list[float]:
+    """Compute maximum likelihood Elo ratings from round-robin results.
 
-    Uses the standard batch Elo formula: compute expected score from
-    current ratings, compare to actual win rate, and apply a single
-    update scaled by K and number of games.
+    Finds ratings that maximize the likelihood of the observed win rates
+    using iterative minorization-maximization (the same algorithm used by
+    BayesElo and Ordo). Converges in ~50-100 iterations for typical
+    tournament sizes.
 
-    Returns (new_rating_a, new_rating_b).
+    The anchor player's rating is fixed at INITIAL_ELO to set the scale.
+
+    Args:
+        n: Number of participants.
+        match_wins: {(i, j): wins_for_i} for each pairing where i < j.
+        match_games: {(i, j): total_games} for each pairing.
+        iterations: Number of optimization iterations.
+        anchor: Index of the player whose rating is fixed (prevents drift).
+
+    Returns: List of n ratings.
     """
-    if total_games == 0:
-        return rating_a, rating_b
+    ratings = [INITIAL_ELO] * n
 
-    e_a = expected_score(rating_a, rating_b)
-    actual_a = wins_a / total_games
-    delta = K_FACTOR * (actual_a - e_a)
+    for _ in range(iterations):
+        new_ratings = list(ratings)
+        for i in range(n):
+            if i == anchor:
+                continue
 
-    return rating_a + delta, rating_b - delta
+            # Accumulate observed and expected wins across all opponents
+            observed_wins = 0.0
+            expected_wins = 0.0
+
+            for j in range(n):
+                if i == j:
+                    continue
+                key = (min(i, j), max(i, j))
+                games = match_games.get(key, 0)
+                if games == 0:
+                    continue
+
+                wins_ij = match_wins.get(key, 0)
+                # If i is the second index in the key, wins for i = games - wins stored
+                if key[0] == i:
+                    w_i = wins_ij
+                else:
+                    w_i = games - wins_ij
+
+                observed_wins += w_i
+                expected_wins += games * expected_score(ratings[i], ratings[j])
+
+            if expected_wins > 0:
+                # Multiplicative update: shift rating to make expected match observed
+                ratio = observed_wins / expected_wins
+                new_ratings[i] = ratings[i] + _MLE_SPREAD * math.log10(ratio)
+
+        ratings = new_ratings
+
+    return ratings
 
 
 def _extract_label(path: str) -> str:
@@ -440,8 +488,9 @@ def run_tournament(
     labels = [p.label for p in participants]
     log(f"Participants ({n}): {', '.join(labels)}")
 
-    # Initialize Elo ratings and stats
-    ratings = [INITIAL_ELO] * n
+    # Match result accumulators for MLE rating computation
+    match_wins: dict[tuple[int, int], int] = {}
+    match_games: dict[tuple[int, int], int] = {}
     wins_total = [0] * n
     losses_total = [0] * n
     games_total = [0] * n
@@ -493,11 +542,13 @@ def run_tournament(
                 set_disabled(False)
 
             pair_elapsed = time.time() - pair_start
-
-            # Use actual completed games (handles partial MP eval results)
             actual_games = wins_a + wins_b
 
-            # Update stats
+            # Store match results for MLE computation
+            match_wins[(i, j)] = wins_a
+            match_games[(i, j)] = actual_games
+
+            # Accumulate per-participant stats
             wins_total[i] += wins_a
             losses_total[i] += wins_b
             wins_total[j] += wins_b
@@ -505,19 +556,15 @@ def run_tournament(
             games_total[i] += actual_games
             games_total[j] += actual_games
 
-            # Update Elo
-            ratings[i], ratings[j] = elo_update(
-                ratings[i], ratings[j], wins_a, actual_games
-            )
-
             wr_a = wins_a / actual_games * 100 if actual_games > 0 else 0
             log(f"  [{pairing_num}/{total_pairings}] {labels[i]} vs {labels[j]}: "
-                f"{wins_a}/{actual_games} ({wr_a:.0f}%) -> "
-                f"Elo {ratings[i]:.0f} / {ratings[j]:.0f}  ({pair_elapsed:.1f}s)")
+                f"{wins_a}/{actual_games} ({wr_a:.0f}%)  ({pair_elapsed:.1f}s)")
 
     elapsed = time.time() - start
-    log(f"\nTournament complete in {elapsed:.1f}s")
-    log("")
+    log(f"\nGames complete in {elapsed:.1f}s")
+
+    # Compute maximum likelihood Elo ratings from all match results
+    ratings = compute_mle_ratings(n, match_wins, match_games)
 
     # Build results sorted by Elo
     results = []

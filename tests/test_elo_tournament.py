@@ -10,7 +10,7 @@ from src.ppo.elo_tournament import (
     BUILTIN_AGENT_TYPES,
     build_participants,
     expected_score,
-    elo_update,
+    compute_mle_ratings,
     _extract_label,
     _validate_checkpoints,
     _play_builtin_games,
@@ -134,7 +134,7 @@ class TestValidateCheckpoints:
 # ---------------------------------------------------------------------------
 
 class TestEloMath:
-    """Elo calculation correctness using batch formula."""
+    """Maximum likelihood Elo rating computation."""
 
     def test_expected_score_equal_ratings(self):
         assert expected_score(1000, 1000) == pytest.approx(0.5)
@@ -143,32 +143,43 @@ class TestEloMath:
         score = expected_score(1200, 1000)
         assert score > 0.5
 
-    def test_elo_update_even_record_no_change(self):
-        """Equal ratings + 50/50 record = no rating change."""
-        r_a, r_b = elo_update(1000, 1000, wins_a=5, total_games=10)
-        assert r_a == pytest.approx(1000)
-        assert r_b == pytest.approx(1000)
+    def test_mle_equal_record_equal_ratings(self):
+        """Players with identical records get similar ratings."""
+        # A beats B 50%, B beats A 50%
+        wins = {(0, 1): 500}
+        games = {(0, 1): 1000}
+        ratings = compute_mle_ratings(2, wins, games)
+        assert ratings[0] == pytest.approx(ratings[1], abs=1.0)
 
-    def test_elo_update_zero_sum(self):
-        r_a, r_b = elo_update(1000, 1000, wins_a=7, total_games=10)
-        assert r_a + r_b == pytest.approx(2000)
+    def test_mle_dominant_player_ranked_higher(self):
+        """Player who wins most games gets highest rating."""
+        # A beats B 80%, A beats C 90%, B beats C 70%
+        wins = {(0, 1): 800, (0, 2): 900, (1, 2): 700}
+        games = {(0, 1): 1000, (0, 2): 1000, (1, 2): 1000}
+        ratings = compute_mle_ratings(3, wins, games)
+        assert ratings[0] > ratings[1] > ratings[2]
 
-    def test_elo_update_winner_gains(self):
-        r_a, r_b = elo_update(1000, 1000, wins_a=10, total_games=10)
-        assert r_a > 1000
-        assert r_b < 1000
+    def test_mle_lopsided_result_produces_large_gap(self):
+        """88% win rate should produce a meaningful rating difference."""
+        wins = {(0, 1): 880}
+        games = {(0, 1): 1000}
+        ratings = compute_mle_ratings(2, wins, games)
+        assert ratings[0] > ratings[1]
+        assert ratings[0] - ratings[1] > 100  # meaningful gap
 
-    def test_elo_update_lopsided_result_stays_sane(self):
-        """880/1000 wins should produce reasonable ratings, not inverted ones."""
-        r_a, r_b = elo_update(1000, 1000, wins_a=880, total_games=1000)
-        assert r_a > r_b
-        assert r_a > 1000
-        assert r_b < 1000
+    def test_mle_anchor_stays_fixed(self):
+        """The anchor player (index 0) stays at INITIAL_ELO."""
+        wins = {(0, 1): 700, (0, 2): 800, (1, 2): 600}
+        games = {(0, 1): 1000, (0, 2): 1000, (1, 2): 1000}
+        ratings = compute_mle_ratings(3, wins, games, anchor=0)
+        assert ratings[0] == pytest.approx(1000.0)
 
-    def test_elo_update_zero_games(self):
-        r_a, r_b = elo_update(1000, 1200, wins_a=0, total_games=0)
-        assert r_a == 1000
-        assert r_b == 1200
+    def test_mle_perfect_record(self):
+        """Player with 100% win rate gets highest rating (no crash)."""
+        wins = {(0, 1): 1000, (0, 2): 1000, (1, 2): 600}
+        games = {(0, 1): 1000, (0, 2): 1000, (1, 2): 1000}
+        ratings = compute_mle_ratings(3, wins, games)
+        assert ratings[0] > ratings[1] > ratings[2]
 
 
 # ---------------------------------------------------------------------------
