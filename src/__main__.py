@@ -132,7 +132,9 @@ def _build_analyze_parser(sub: argparse._SubParsersAction):
     p.add_argument("--games", type=int, default=200,
                    help="Number of games to collect (default: 200)")
     p.add_argument("--opponents", type=str, default="random,heuristic,simple",
-                   help="Opponent types to play against (default: random,heuristic,simple)")
+                   help="Opponent types: random,heuristic,simple,self (default: random,heuristic,simple)")
+    p.add_argument("--opponent-model", type=str, default=None,
+                   help="Path to a model checkpoint to use as opponent (overrides --opponents)")
     p.add_argument("--output", type=str, default=None,
                    help="Output replay file path (default: analysis/replays_<timestamp>.json.gz)")
     p.add_argument("--replay", type=str, default=None,
@@ -307,6 +309,11 @@ def _run_analyze(args):
 
     # Distribute games across opponent types, spreading the remainder
     opponent_types = [o.strip().split(":")[0] for o in args.opponents.split(",")]
+
+    # --opponent-model overrides --opponents with a single model opponent
+    if args.opponent_model:
+        opponent_types = ["ppo-opponent"]
+
     num_types = len(opponent_types)
     base_games = args.games // num_types
     remainder = args.games % num_types
@@ -316,15 +323,41 @@ def _run_analyze(args):
     total_wins = 0
     total_games = 0
 
-    pool = OpponentPool(opponent_spec=args.opponents)
+    # Build opponent factories — model-based types use a shared model to
+    # avoid per-game GPU allocations; fixed agent types go through OpponentPool.
+    from src.ppo.elo_tournament import _make_opponent_factory
+
+    # Pre-load opponent model if --opponent-model was given
+    opp_model_sd = None
+    opp_model_config = None
+    if args.opponent_model:
+        print(f"Loading opponent model: {args.opponent_model}")
+        opp_ckpt = load_checkpoint(args.opponent_model, map_location=device)
+        opp_model_sd = opp_ckpt["model_state_dict"]
+        saved_opp_cfg = opp_ckpt.get("config", {}).get("model")
+        opp_model_config = ModelConfig.from_dict(saved_opp_cfg) if saved_opp_cfg else model_config
+
+    # Fixed agent types go through OpponentPool
+    fixed_types = [t for t in opponent_types if t not in ("self", "ppo-opponent")]
+    pool = OpponentPool(opponent_spec=",".join(fixed_types)) if fixed_types else None
 
     for opp_type, num_games in zip(opponent_types, games_schedule):
         if num_games == 0:
             continue
         print(f"Collecting {num_games} games vs {opp_type}...")
-        factory = pool.make_factory_for_type(
-            opp_type, card_names, device=device,
-        )
+
+        if opp_type == "self":
+            factory = _make_opponent_factory(
+                ckpt["model_state_dict"], card_names, device,
+                model_config=model_config,
+            )
+        elif opp_type == "ppo-opponent":
+            factory = _make_opponent_factory(
+                opp_model_sd, card_names, device,
+                model_config=opp_model_config,
+            )
+        else:
+            factory = pool.make_factory_for_type(opp_type, card_names, device=device)
 
         runner = BatchRunner(
             model=model,
