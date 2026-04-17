@@ -127,7 +127,8 @@ def train(
     # Log the parameter size of the model
     num_params = sum(p.numel() for p in agent.model.parameters() if p.requires_grad)
     actor_type = getattr(agent.model, 'actor_type', 'mlp')
-    logger.info(f"Model has {num_params / 1_000_000:.2f}M parameters (actor: {actor_type}). "
+    pool_type = getattr(agent.model, 'pool_type', 'sum')
+    logger.info(f"Model has {num_params / 1_000_000:.2f}M parameters (actor: {actor_type}, pool: {pool_type}). "
                 f"Action dim: {agent.action_dim}.")
 
     # Set up the opponent pool from config

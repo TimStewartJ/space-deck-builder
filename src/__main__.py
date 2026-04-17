@@ -46,6 +46,9 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--actor-type",  type=str, default=_mdl.actor_type,
                    choices=["mlp", "attention"],
                    help="Actor head type: mlp (flat linear) or attention (query-key dot product)")
+    p.add_argument("--pool-type",   type=str, default=_mdl.pool_type,
+                   choices=["sum", "attention"],
+                   help="Zone feature pooling: sum (presence-weighted) or attention (learned per-zone query)")
     # Run topology (defaults sourced from RunConfig dataclass)
     p.add_argument("--episodes",    type=int,   default=_run.episodes)
     p.add_argument("--updates",     type=int,   default=_run.updates)
@@ -237,7 +240,7 @@ def _run_train(args):
         adv_norm=args.adv_norm,
         lr_end=args.lr_end, lr_schedule=args.lr_schedule,
     )
-    model_cfg = ModelConfig(actor_type=args.actor_type)
+    model_cfg = ModelConfig(actor_type=args.actor_type, pool_type=args.pool_type)
     run_cfg = RunConfig(
         episodes=args.episodes, updates=args.updates,
         eval_every=args.eval_every, eval_games=args.eval_games,

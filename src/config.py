@@ -99,14 +99,25 @@ class ModelConfig:
     # "mlp" uses a flat MLP actor head; "attention" uses query-key dot-product
     # scoring against dedicated action card embeddings.
     actor_type: str = "mlp"
+    # "sum" presence-weighted sum pooling over each zone (original behavior);
+    # "attention" replaces the pooling operator with a learned per-zone query
+    # that softmax-weights cards by relevance before the weighted sum. Output
+    # shape fed into the trunk is identical in both modes.
+    pool_type: str = "sum"
 
     _VALID_ACTOR_TYPES = {"mlp", "attention"}
+    _VALID_POOL_TYPES = {"sum", "attention"}
 
     def __post_init__(self):
         if self.actor_type not in self._VALID_ACTOR_TYPES:
             raise ValueError(
                 f"Unknown actor_type {self.actor_type!r}. "
                 f"Valid: {', '.join(sorted(self._VALID_ACTOR_TYPES))}"
+            )
+        if self.pool_type not in self._VALID_POOL_TYPES:
+            raise ValueError(
+                f"Unknown pool_type {self.pool_type!r}. "
+                f"Valid: {', '.join(sorted(self._VALID_POOL_TYPES))}"
             )
 
     def to_dict(self) -> dict[str, Any]:
@@ -251,7 +262,10 @@ class SimConfig:
 
 
 # Current checkpoint schema version — bumped to 2 for per-zone embeddings
-# + sum pooling + shared trunk architecture (incompatible with v1 weights).
+# + sum pooling + shared trunk architecture. V3 would be reserved for future
+# architecture changes that alter state-dict shapes; attention zone pooling
+# does not (it adds optional parameters only when pool_type="attention",
+# and those checkpoints self-identify via the saved ModelConfig).
 CHECKPOINT_VERSION = 2
 
 

@@ -117,6 +117,68 @@ class AttentionActorHead(nn.Module):
         return logits
 
 
+class AttentionZonePooling(nn.Module):
+    """Per-zone attention pooling over cards.
+
+    Replaces presence-weighted sum pooling. Each of the Z zones has a learned
+    query vector. For every (batch, zone), cards are softmax-weighted by their
+    dot product with that zone's query, masked to positions where ``presence
+    > 0``, and then combined via a presence-weighted sum of the token values.
+
+    Output shape matches ``sum`` pooling: ``[B, Z * E]``, so the downstream
+    trunk and heads are unchanged.
+
+    Empty zones (no cards present) produce zero vectors; the softmax would
+    otherwise be NaN over all-``-inf`` rows.
+    """
+
+    def __init__(self, num_zones: int, emb_dim: int):
+        super().__init__()
+        self.num_zones = num_zones
+        self.emb_dim = emb_dim
+        self.scale = 1.0 / math.sqrt(emb_dim)
+        # One learned query per zone. Initialized small so early-training
+        # behavior approximates uniform attention.
+        self.zone_query = nn.Parameter(torch.randn(num_zones, emb_dim) * 0.01)
+
+    def forward(
+        self,
+        card_w: torch.Tensor,       # [C, E]
+        zone_w: torch.Tensor,       # [Z, E]
+        presence: torch.Tensor,     # [B, Z, C]
+    ) -> torch.Tensor:
+        B, Z, C = presence.shape
+        E = card_w.shape[1]
+
+        # Per-zone tokens: [Z, C, E] = card_emb[c] + zone_emb[z]
+        tokens = card_w.unsqueeze(0) + zone_w.unsqueeze(1)
+
+        # Scores[b, z, c] = tokens[z, c] · zone_query[z] (broadcast over B)
+        # einsum keeps it in one kernel.
+        scores = torch.einsum('zce,ze->zc', tokens, self.zone_query) * self.scale
+        scores = scores.unsqueeze(0).expand(B, Z, C)  # [B, Z, C]
+
+        mask = presence > 0
+        any_present = mask.any(dim=-1, keepdim=True)  # [B, Z, 1]
+
+        # Mask absent cards to -inf; all-absent rows are patched below.
+        scores = scores.masked_fill(~mask, float('-inf'))
+        # Replace all-masked rows with zeros pre-softmax to avoid NaN; output
+        # gets zeroed by any_present gate anyway.
+        safe_scores = torch.where(any_present, scores, torch.zeros_like(scores))
+        attn = torch.softmax(safe_scores, dim=-1)
+
+        # Weight by presence so stacked copies contribute more, matching the
+        # semantics of the original sum pooling.
+        weights = attn * presence  # [B, Z, C]
+
+        # Pooled[b, z] = Σ_c weights[b, z, c] * tokens[z, c]
+        pooled = torch.einsum('bzc,zce->bze', weights, tokens)
+        pooled = pooled * any_present.to(pooled.dtype)  # zero out empty zones
+
+        return pooled.reshape(B, Z * E)
+
+
 class PPOActorCritic(nn.Module):
     """Actor-critic network with per-zone card embeddings, sum pooling,
     and a shared feature trunk.
@@ -148,10 +210,18 @@ class PPOActorCritic(nn.Module):
         self.num_cards = num_cards
         self.action_dim = action_dim
         self.actor_type = cfg.actor_type
+        self.pool_type = cfg.pool_type
 
         # Card identity embedding and zone-position embedding
         self.card_emb = nn.Embedding(num_cards, emb_dim)
         self.zone_emb = nn.Embedding(NUM_ZONES, emb_dim)
+
+        # Optional attention pooling module. When pool_type="sum" we keep the
+        # original presence-weighted sum path for backward compatibility.
+        if self.pool_type == "attention":
+            self.zone_pool = AttentionZonePooling(NUM_ZONES, emb_dim)
+        else:
+            self.zone_pool = None
 
         combined_dim = NUM_ZONES * emb_dim + NUMERIC_DIM
 
@@ -177,21 +247,26 @@ class PPOActorCritic(nn.Module):
         if x.dim() == 1:
             x = x.unsqueeze(0)
 
-        # -- Per-zone sum pooling with zone-aware embeddings --
-        # card_emb.weight: [num_cards, emb_dim]
+        # -- Zone pooling: attention-based or presence-weighted sum --
         card_w = self.card_emb.weight  # [C, E]
 
-        zone_feats = []
-        for zone_idx, zone_name in enumerate(ZONE_NAMES):
-            presence = pieces[zone_name]                         # [B, C]
-            # card + zone embedding for this zone
-            combined = card_w + self.zone_emb.weight[zone_idx]   # [C, E]  (broadcast)
-            # weight by presence and sum-pool: [B, C, 1] * [1, C, E] → sum → [B, E]
-            pooled = (presence.unsqueeze(-1) * combined.unsqueeze(0)).sum(dim=1)
-            zone_feats.append(pooled)
-
-        # Concatenate zone summaries: [B, num_zones * emb_dim]
-        card_feat = torch.cat(zone_feats, dim=1)
+        if self.zone_pool is not None:
+            # Stack per-zone presence into [B, Z, C] and pool via attention.
+            presence_stack = torch.stack(
+                [pieces[name] for name in ZONE_NAMES], dim=1,
+            )
+            card_feat = self.zone_pool(card_w, self.zone_emb.weight, presence_stack)
+        else:
+            zone_feats = []
+            for zone_idx, zone_name in enumerate(ZONE_NAMES):
+                presence = pieces[zone_name]                         # [B, C]
+                # card + zone embedding for this zone
+                combined = card_w + self.zone_emb.weight[zone_idx]   # [C, E] (broadcast)
+                # weight by presence and sum-pool: [B, C, 1] * [1, C, E] → sum → [B, E]
+                pooled = (presence.unsqueeze(-1) * combined.unsqueeze(0)).sum(dim=1)
+                zone_feats.append(pooled)
+            # Concatenate zone summaries: [B, num_zones * emb_dim]
+            card_feat = torch.cat(zone_feats, dim=1)
 
         # Numeric features: [B, NUMERIC_DIM]
         numeric = torch.cat([
