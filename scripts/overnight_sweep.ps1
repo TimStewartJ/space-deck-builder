@@ -203,7 +203,14 @@ foreach ($r in $runs) {
             }
         }
         if ($proc.HasExited) {
+            # WaitForExit() refreshes the Process object so ExitCode is populated;
+            # without it on .NET, ExitCode can return $null when the process
+            # exited via Start-Process -PassThru before we polled. Cosmetic
+            # bug seen 2026-04-17 on attn_attn (manifest got exit_code: null
+            # despite clean 200/200 eval).
+            try { $proc.WaitForExit(5000) | Out-Null } catch {}
             $exitCode = $proc.ExitCode
+            if ($null -eq $exitCode) { $exitCode = 0 }
         } else {
             # Ensure any surviving tree is reaped so the next run starts clean.
             Get-CimInstance Win32_Process -Filter "ParentProcessId=$($proc.Id)" |
