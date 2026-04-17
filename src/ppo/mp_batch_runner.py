@@ -118,11 +118,25 @@ class MultiProcessBatchRunner:
         """
         actual_workers = len(items_per_worker)
 
-        # Start inference server, optionally with opponent snapshots on GPU
-        snapshots = self.snapshot_state_dicts if use_snapshots else None
+        # Build multi-model registry: the training model under the label
+        # "training" (the id the training worker tags its requests with),
+        # plus one PPOActorCritic per snapshot (built by cloning the
+        # training model's architecture and loading the snapshot weights).
+        models: dict[str, PPOActorCritic] = {"training": self.model}
+        if use_snapshots and self.snapshot_state_dicts:
+            import copy
+            for entry in self.snapshot_state_dicts:
+                snap_name, snap_sd = entry[0], entry[1]
+                opp = copy.deepcopy(self.model)
+                opp.load_state_dict(snap_sd)
+                opp.eval()
+                models[snap_name] = opp
+
         server = InferenceServer(
-            self.model, self.device, actual_workers, ctx=self._mp_ctx,
-            opponent_snapshots=snapshots,
+            models=models,
+            device=self.device,
+            num_workers=actual_workers,
+            ctx=self._mp_ctx,
         )
         server.start()
 

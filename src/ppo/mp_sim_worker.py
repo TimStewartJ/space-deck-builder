@@ -47,6 +47,20 @@ class _DummyAgent(Agent):
         raise RuntimeError("DummyAgent.make_decision should never be called")
 
 
+class _TourneyPPOSlot(_DummyAgent):
+    """Placeholder PPO agent for a tournament pairing that carries a model_id.
+
+    The tournament worker's batched loop identifies PPO slots by isinstance
+    check against this class and routes their decisions through the
+    InferenceServer using the attached ``model_id``. ``make_decision`` is
+    never called; the batched loop bypasses it.
+    """
+
+    def __init__(self, name: str, model_id: str):
+        super().__init__(name)
+        self.model_id = model_id
+
+
 class _ServerPPOAgent(Agent):
     """PPO opponent that routes inference through the InferenceServer on GPU.
 
@@ -112,6 +126,11 @@ class _ServerPPOAgent(Agent):
         ))
 
         response = self.response_queue.get()
+        if response.error is not None:
+            raise RuntimeError(
+                f"InferenceServer rejected request for model_id={self.model_id!r}: "
+                f"{response.error}"
+            )
         act_idx = int(response.action_indices[0])
         return ctx.resolvers[act_idx]
 
@@ -486,6 +505,10 @@ def _sim_worker_inner(
 
         for _ in range(len(model_groups)):
             response: InferenceResponse = response_queue.get()
+            if response.error is not None:
+                raise RuntimeError(
+                    f"InferenceServer error (worker={worker_id}): {response.error}"
+                )
             # Match response to its model group by request_id
             for mid, (req_id, indices) in request_ids_by_mid.items():
                 if response.request_id == req_id:
@@ -761,6 +784,10 @@ def _sim_worker_eval_inner(
 
         for _ in range(len(model_groups)):
             response: InferenceResponse = response_queue.get()
+            if response.error is not None:
+                raise RuntimeError(
+                    f"InferenceServer error (worker={worker_id}): {response.error}"
+                )
             for mid, (req_id, indices) in request_ids_by_mid.items():
                 if response.request_id == req_id:
                     for k, j in enumerate(indices):
@@ -779,3 +806,283 @@ def _sim_worker_eval_inner(
         losses=losses,
         total_steps=total_steps,
     ))
+
+
+# ======================================================================
+# Parallel tournament worker
+# ======================================================================
+
+from dataclasses import dataclass as _dataclass
+
+
+@_dataclass
+class PairingTask:
+    """Coordinator -> tournament worker: one pairing to play."""
+    pairing_id: int
+    i: int                          # participant index of side A
+    j: int                          # participant index of side B
+    num_games: int
+    seed: int
+    side_a_kind: str                # "ppo" | "builtin"
+    side_b_kind: str
+    side_a_id: str                  # model_id (if ppo) or agent_type (if builtin)
+    side_b_id: str
+
+
+@_dataclass
+class TournamentResult:
+    """Tournament worker -> coordinator: result of one pairing."""
+    pairing_id: int
+    i: int
+    j: int
+    wins_a: int
+    wins_b: int
+
+
+def _build_slot(kind: str, ident: str, name: str) -> Agent:
+    """Build a game-engine agent for one side of a tournament pairing."""
+    if kind == "ppo":
+        return _TourneyPPOSlot(name, model_id=ident)
+    if kind == "builtin":
+        factory = _AGENT_FACTORIES.get(ident)
+        if factory is None:
+            raise ValueError(f"Unknown builtin agent type: {ident!r}")
+        return factory(name)
+    raise ValueError(f"Unknown side kind: {kind!r}")
+
+
+def _advance_tourney_non_ppo(game: Game) -> None:
+    """Advance a tournament game past all non-PPO decisions.
+
+    Stops when the current player is a ``_TourneyPPOSlot``, which needs
+    inference from the server. Built-in agents run inline.
+    """
+    while not game.is_game_over:
+        player = game.current_player
+        if isinstance(player.agent, _TourneyPPOSlot):
+            break
+        action = player.make_decision(game)
+        game.apply_decision(action)
+
+
+def _play_pairing(
+    task: "PairingTask",
+    worker_id: int,
+    num_concurrent: int,
+    card_names: list,
+    card_index_map: dict,
+    cards: list,
+    action_dim: int,
+    state_size: int,
+    request_queue,
+    response_queue,
+) -> tuple[int, int]:
+    """Play ``task.num_games`` games for one pairing and return
+    ``(wins_a, wins_b)``. Uses the server's batched inference path for
+    any PPO slots.
+    """
+    random.seed(task.seed)
+    np.random.seed(task.seed % (2**32))
+
+    name_a = f"A_{task.side_a_id}"
+    name_b = f"B_{task.side_b_id}"
+    # Names must differ even when both sides share a model_id (self-mirror
+    # pairing) so that Game can track players distinctly.
+    if name_a == name_b:
+        name_b = name_b + "_2"
+
+    states_rows_buf = np.zeros((num_concurrent, state_size), dtype=np.float32)
+    masks_rows_buf = np.zeros((num_concurrent, action_dim), dtype=bool)
+
+    games: list[Optional[Game]] = [None] * num_concurrent
+    wins_a = 0
+    wins_b = 0
+    games_started = 0
+    games_completed = 0
+    request_id = 0
+
+    def _new_game() -> Game:
+        g = Game(cards, card_index_map=card_index_map)
+        g.add_player(name_a, _build_slot(task.side_a_kind, task.side_a_id, name_a))
+        g.add_player(name_b, _build_slot(task.side_b_kind, task.side_b_id, name_b))
+        g.start_game()
+        return g
+
+    def _record_result(g: Game) -> None:
+        nonlocal wins_a, wins_b, games_completed
+        if g.get_winner() == name_a:
+            wins_a += 1
+        else:
+            wins_b += 1
+        games_completed += 1
+
+    active = min(num_concurrent, task.num_games)
+    for i in range(active):
+        games[i] = _new_game()
+        games_started += 1
+        _advance_tourney_non_ppo(games[i])
+        if games[i].is_game_over:
+            _record_result(games[i])
+            games[i] = None
+
+    while games_completed < task.num_games:
+        # Retire finished games and start replacements up to num_games.
+        for i in range(num_concurrent):
+            if games[i] is None or not games[i].is_game_over:
+                continue
+            _record_result(games[i])
+            if games_started < task.num_games:
+                games[i] = _new_game()
+                games_started += 1
+                _advance_tourney_non_ppo(games[i])
+                if games[i].is_game_over:
+                    _record_result(games[i])
+                    games[i] = None
+            else:
+                games[i] = None
+
+        # Collect pending PPO decisions across all active slots, group
+        # them by model_id, dispatch one batched request per model_id.
+        pending_indices: list[int] = []
+        pending_resolvers: list[dict] = []
+        pending_model_ids: list[str] = []
+
+        for i in range(num_concurrent):
+            if games[i] is None or games[i].is_game_over:
+                continue
+            player = games[i].current_player
+            if not isinstance(player.agent, _TourneyPPOSlot):
+                continue
+            ctx = build_action_context(
+                games[i], player, card_index_map,
+                action_dim, mask_buf=masks_rows_buf[i],
+            )
+            encode_state(
+                games[i], is_current_player_training=True,
+                cards=card_names,
+                card_index_map=card_index_map,
+                state_buf=states_rows_buf[i],
+                can_buy=ctx.can_buy,
+                has_actions=ctx.has_meaningful,
+                return_numpy=True,
+            )
+            if ctx.has_meaningful:
+                masks_rows_buf[i, END_TURN_INDEX] = False
+
+            pending_indices.append(i)
+            pending_resolvers.append(ctx.resolvers)
+            pending_model_ids.append(player.agent.model_id)
+
+        if not pending_indices:
+            # No PPO slots waiting — advance any remaining games whose
+            # current player is a builtin, then loop. The outer
+            # games_completed check will exit once everything's done.
+            progressed = False
+            for i in range(num_concurrent):
+                if games[i] is not None and not games[i].is_game_over:
+                    _advance_tourney_non_ppo(games[i])
+                    progressed = True
+            if not progressed:
+                break
+            continue
+
+        states_np = states_rows_buf[pending_indices]
+        masks_np = masks_rows_buf[pending_indices].view(np.uint8)
+
+        model_groups: dict[str, list[int]] = {}
+        for k, mid in enumerate(pending_model_ids):
+            model_groups.setdefault(mid, []).append(k)
+
+        request_ids_by_mid: dict[str, tuple[int, list[int]]] = {}
+        for mid, indices in model_groups.items():
+            request_queue.put(InferenceRequest(
+                worker_id=worker_id,
+                request_id=request_id,
+                states=states_np[indices],
+                masks=masks_np[indices],
+                model_id=mid,
+            ))
+            request_ids_by_mid[mid] = (request_id, indices)
+            request_id += 1
+
+        all_responses: dict[int, int] = {}
+        for _ in range(len(model_groups)):
+            response: InferenceResponse = response_queue.get()
+            if response.error is not None:
+                raise RuntimeError(
+                    f"InferenceServer error (worker={worker_id}): {response.error}"
+                )
+            for mid, (req_id, indices) in request_ids_by_mid.items():
+                if response.request_id == req_id:
+                    for k, j in enumerate(indices):
+                        all_responses[j] = int(response.action_indices[k])
+                    break
+
+        for k, i in enumerate(pending_indices):
+            action = pending_resolvers[k][all_responses[k]]
+            games[i].apply_decision(action)
+            # Advance past any subsequent builtin turns inline so the
+            # next iteration only has to consider PPO slots.
+            _advance_tourney_non_ppo(games[i])
+
+    return wins_a, wins_b
+
+
+def tournament_worker_main(
+    worker_id: int,
+    num_concurrent: int,
+    data_config_dict: dict,
+    card_names: list,
+    card_index_map: dict,
+    action_dim: int,
+    state_size: int,
+    task_queue,
+    result_queue,
+    request_queue,
+    response_queue,
+) -> None:
+    """Tournament worker process entry point.
+
+    Pulls :class:`PairingTask`s off ``task_queue`` and emits
+    :class:`TournamentResult`s on ``result_queue``. Exits when a ``None``
+    sentinel is received.
+
+    Neural-net inference is served by a long-lived :class:`InferenceServer`
+    in the main process; the worker only runs game logic + state encoding.
+    On any exception, emits a :class:`WorkerError` and exits so the
+    coordinator can fail fast instead of hanging on the result queue.
+    """
+    torch.set_num_threads(1)
+    set_disabled(True)
+
+    data_cfg = DataConfig.from_dict(data_config_dict)
+    cards = data_cfg.load_cards()
+    registry = data_cfg.build_registry(cards)
+    assert registry.card_names == card_names, (
+        f"Tournament worker {worker_id} card_names mismatch"
+    )
+
+    try:
+        while True:
+            task = task_queue.get()
+            if task is None:
+                return
+            wins_a, wins_b = _play_pairing(
+                task, worker_id, num_concurrent,
+                card_names, card_index_map, cards,
+                action_dim, state_size,
+                request_queue, response_queue,
+            )
+            result_queue.put(TournamentResult(
+                pairing_id=task.pairing_id, i=task.i, j=task.j,
+                wins_a=wins_a, wins_b=wins_b,
+            ))
+    except BaseException:
+        try:
+            result_queue.put(WorkerError(
+                worker_id=worker_id, error=traceback.format_exc(),
+            ))
+        except Exception:
+            pass
+
+

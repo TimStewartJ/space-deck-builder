@@ -42,11 +42,18 @@ class InferenceRequest:
 
 @dataclass
 class InferenceResponse:
-    """InferenceServer → Worker: sampled actions with log-probs and values."""
+    """InferenceServer → Worker: sampled actions with log-probs and values.
+
+    If ``error`` is set, the server could not serve the request (typically
+    because ``model_id`` was never registered or was unregistered before the
+    request arrived). The worker should raise on this field rather than use
+    the (zero-filled) output arrays.
+    """
     request_id: int
     action_indices: np.ndarray   # [batch] int64
     log_probs: np.ndarray        # [batch] float32
     values: np.ndarray           # [batch] float32
+    error: str | None = None
 
 
 @dataclass
@@ -85,6 +92,19 @@ _POOL_SIZE = 3
 _QUEUE_CAPACITY = 2
 # Small timeout on all blocking queue ops so threads re-check _shutdown.
 _STAGE_TIMEOUT = 1.0
+
+
+# ----------------------------------------------------------------------
+# Control plane: register/unregister requests handled by the GPU thread
+# so that only one thread ever touches the CUDA API.
+# ----------------------------------------------------------------------
+@dataclass
+class _ControlMsg:
+    op: str                        # "register" | "unregister"
+    model_id: str
+    model: PPOActorCritic | None   # required for op="register"
+    ack: threading.Event
+    error: list                    # single-element list written by GPU thread
 
 
 class _BufferSlot:
@@ -160,34 +180,65 @@ class _CompletedBatch:
 
 
 class InferenceServer:
-    """Batched GPU inference server with a 3-stage pipeline.
+    """Batched multi-model GPU inference server with a 3-stage pipeline.
 
-    Public API matches the single-threaded server it replaces: ``start()`` /
-    ``stop()`` and the ``request_queue`` + ``response_queues`` used by workers.
+    Hosts an arbitrary set of :class:`PPOActorCritic` instances keyed by a
+    string ``model_id``. Workers pick the model for each inference request
+    by tagging the request with ``model_id``. Models can be added or
+    removed at runtime via :meth:`register_model` / :meth:`unregister_model`
+    without tearing down the server.
+
+    Public API: ``start()`` / ``stop()`` and the ``request_queue`` +
+    ``response_queues`` used by workers. Control-plane mutations
+    (:meth:`register_model` / :meth:`unregister_model`) are synchronous —
+    they block the caller until the GPU thread has applied the change.
 
     Internally, three threads cooperate:
 
     * **Ingress**: drains ``request_queue`` (one blocking get, then non-blocking
       drain to coalesce concurrent workers), groups requests by ``model_id``,
       and stages their states/masks into a pooled pinned host buffer.
-    * **GPU**: the sole CUDA caller. Issues async H2D on ``copy_in_stream``,
-      runs forward + masked sampling on ``compute_stream``, and async D2H on
-      ``copy_out_stream``, chained via ``wait_stream`` + ``record_stream``.
+    * **GPU**: the sole CUDA caller. Instantiates and owns all registered
+      models, processes control-plane messages (register/unregister) between
+      batches, and issues async H2D on ``copy_in_stream``, forward + masked
+      sampling on ``compute_stream``, and async D2H on ``copy_out_stream``,
+      chained via ``wait_stream`` + ``record_stream``.
     * **Egress**: syncs the copy-out event, slices the pinned output buffer
       per request, and puts ``InferenceResponse`` onto each worker's queue.
+
+    A request with an unknown ``model_id`` is not silently routed to
+    another model — the server responds with an :class:`InferenceResponse`
+    whose ``error`` field is set, and it is up to the worker to raise.
     """
 
     def __init__(
         self,
-        model: PPOActorCritic,
+        models: dict[str, PPOActorCritic],
         device: torch.device,
         num_workers: int,
         ctx: mp.context.BaseContext | None = None,
-        opponent_snapshots: list[tuple[str, dict]] | None = None,
     ):
-        self.model = model
+        """Create a multi-model inference server.
+
+        Args:
+            models: Initial model registry, ``{model_id: PPOActorCritic}``.
+                All models must share the same encoded-state / action-space
+                dimensions (the server sizes its buffers from the first
+                observed request and assumes that size holds for every
+                model). Models may be on any device; the GPU thread moves
+                them to ``device`` and switches them to eval mode on
+                startup.
+            device: Torch device for inference (``cuda`` or ``cpu``).
+            num_workers: Number of worker processes that will consume the
+                response queues.
+            ctx: Optional ``multiprocessing`` context (defaults to the
+                module-level ``multiprocessing``). Windows needs ``spawn``.
+        """
+        if not models:
+            raise ValueError("InferenceServer requires at least one model at startup")
+
+        self._initial_models = dict(models)
         self.device = device
-        self._opponent_snapshots = opponent_snapshots or []
 
         _mp = ctx or mp
         self.request_queue: mp.Queue = _mp.Queue()
@@ -203,6 +254,18 @@ class InferenceServer:
         self._q_in: queue.Queue[_PendingBatch | None] = queue.Queue(maxsize=_QUEUE_CAPACITY)
         self._q_out: queue.Queue[_CompletedBatch | None] = queue.Queue(maxsize=_QUEUE_CAPACITY)
         self._free_slots: queue.Queue[_BufferSlot] = queue.Queue()
+
+        # Control plane for register/unregister. Writers block on the ack
+        # event until the GPU thread has applied the change; that keeps
+        # all CUDA work on a single thread and gives callers a clean
+        # synchronous contract.
+        self._control_q: queue.Queue[_ControlMsg] = queue.Queue()
+        # Names currently known to the control plane (registered minus
+        # unregistered). Used only to reject double-register / missing
+        # unregister cheaply from the calling thread — the GPU thread is
+        # still the source of truth for the live weights.
+        self._known_model_ids: set[str] = set(models.keys())
+        self._known_lock = threading.Lock()
 
         self._state_size: int | None = None
         self._action_dim: int | None = None
@@ -290,6 +353,11 @@ class InferenceServer:
         for t in self._threads:
             t.join(timeout=10.0)
         self._threads = []
+        # Release any control-plane callers still waiting on an ack. The
+        # GPU thread handles this in its finally-block, but if start()
+        # was never called or the thread crashed before reaching it we
+        # still need to unblock register/unregister callers.
+        self._abort_pending_controls()
         self._log_stats()
 
     def _log_stats(self):
@@ -317,6 +385,46 @@ class InferenceServer:
     @property
     def requests_served(self) -> int:
         return self._requests_served
+
+    # ------------------------------------------------------------------
+    # Control plane — synchronous register / unregister.
+    # ------------------------------------------------------------------
+    def register_model(self, model_id: str, model: PPOActorCritic) -> None:
+        """Add a model to the server. Blocks until the GPU thread has
+        moved it to device and made it queryable. Raises if ``model_id``
+        is already registered or if the server is not running.
+        """
+        with self._known_lock:
+            if model_id in self._known_model_ids:
+                raise ValueError(f"model_id already registered: {model_id!r}")
+            self._known_model_ids.add(model_id)
+        self._submit_control("register", model_id, model)
+
+    def unregister_model(self, model_id: str) -> None:
+        """Remove a model from the server. Blocks until the GPU thread
+        has dropped its reference. Raises if ``model_id`` is not currently
+        registered.
+        """
+        with self._known_lock:
+            if model_id not in self._known_model_ids:
+                raise ValueError(f"model_id not registered: {model_id!r}")
+            self._known_model_ids.discard(model_id)
+        self._submit_control("unregister", model_id, None)
+
+    def _submit_control(self, op: str, model_id: str, model: PPOActorCritic | None) -> None:
+        if not self._threads:
+            raise RuntimeError("InferenceServer is not running; call start() first")
+        msg = _ControlMsg(op=op, model_id=model_id, model=model,
+                          ack=threading.Event(), error=[])
+        self._control_q.put(msg)
+        # Wait with periodic wakeups so a crashed GPU thread doesn't hang us.
+        while not msg.ack.wait(timeout=1.0):
+            if self._shutdown.is_set():
+                raise RuntimeError(
+                    f"InferenceServer shut down while processing {op!r} for {model_id!r}"
+                )
+        if msg.error:
+            raise msg.error[0]
 
     # ------------------------------------------------------------------
     # Stage 1: ingress — unpickle, group, stage into pinned host buffers
@@ -417,22 +525,16 @@ class InferenceServer:
     # Stage 2: GPU — async H2D, forward+sample, async D2H on three streams
     # ------------------------------------------------------------------
     def _gpu_loop(self):
-        self.model.to(self.device)
-        self.model.eval()
-
-        # Build model lookup: training model + optional opponent snapshot clones.
-        # Snapshots come as (name, state_dict, model_config) tuples from the
-        # opponent pool; model_config is unused here since we deepcopy the
-        # training model's architecture.
-        models: dict[str, PPOActorCritic] = {"training": self.model}
-        for snap in self._opponent_snapshots:
-            snap_name, snap_sd = snap[0], snap[1]
-            import copy
-            opp_model = copy.deepcopy(self.model)
-            opp_model.load_state_dict(snap_sd)
-            opp_model.to(self.device)
-            opp_model.eval()
-            models[snap_name] = opp_model
+        # Load all initial models onto the target device. The GPU thread is
+        # the only thread that ever calls .to(device) / .eval() / drops
+        # refs, so CUDA operations stay single-threaded even as models are
+        # added or removed via the control plane.
+        models: dict[str, PPOActorCritic] = {}
+        for mid, m in self._initial_models.items():
+            m.to(self.device)
+            m.eval()
+            models[mid] = m
+        self._initial_models = {}
 
         use_cuda = self.device.type == "cuda"
         copy_in_stream = torch.cuda.Stream(device=self.device) if use_cuda else None
@@ -443,6 +545,11 @@ class InferenceServer:
         loop_start = _time.perf_counter()
         try:
             while not self._shutdown.is_set():
+                # Drain pending control messages between batches. This is
+                # the only place register/unregister take effect, which
+                # keeps model lifetimes serialized by the compute stream.
+                self._drain_control(models)
+
                 t0 = _time.perf_counter()
                 try:
                     pending = self._q_in.get(timeout=_STAGE_TIMEOUT)
@@ -455,7 +562,17 @@ class InferenceServer:
                 if pending is None:
                     break
 
-                model = models.get(pending.model_id, self.model)
+                model = models.get(pending.model_id)
+                if model is None:
+                    # Fail fast with per-request error responses. Returning the
+                    # slot to the pool keeps the pipeline healthy.
+                    self._send_error_batch(
+                        pending,
+                        f"unknown model_id: {pending.model_id!r}",
+                    )
+                    self._free_slots.put(pending.slot)
+                    continue
+
                 completed = self._run_batch(
                     pending, model, copy_in_stream, compute_stream, copy_out_stream
                 )
@@ -477,11 +594,70 @@ class InferenceServer:
                     self._free_slots.put(completed.slot)
                     return
         finally:
+            # Release any pending control messages so callers aren't
+            # stuck waiting on their ack events during a crash/shutdown.
+            self._abort_pending_controls()
             self._stats["wall_s"] = _time.perf_counter() - loop_start
             try:
                 self._q_out.put(None, timeout=_STAGE_TIMEOUT)
             except queue.Full:
                 pass
+
+    def _drain_control(self, models: dict[str, PPOActorCritic]) -> None:
+        """Apply any pending register/unregister messages. Runs on the GPU
+        thread so all CUDA ops stay single-threaded.
+        """
+        while True:
+            try:
+                msg = self._control_q.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                if msg.op == "register":
+                    if msg.model is None:
+                        raise ValueError("register requires a model instance")
+                    msg.model.to(self.device)
+                    msg.model.eval()
+                    models[msg.model_id] = msg.model
+                elif msg.op == "unregister":
+                    # Drop reference; CUDA allocator reclaims memory on GC.
+                    models.pop(msg.model_id, None)
+                else:
+                    raise ValueError(f"unknown control op: {msg.op!r}")
+            except BaseException as e:
+                msg.error.append(e)
+            finally:
+                msg.ack.set()
+
+    def _abort_pending_controls(self) -> None:
+        while True:
+            try:
+                msg = self._control_q.get_nowait()
+            except queue.Empty:
+                return
+            msg.error.append(
+                RuntimeError("InferenceServer shut down before processing control message")
+            )
+            msg.ack.set()
+
+    def _send_error_batch(self, pending: "_PendingBatch", err: str) -> None:
+        """Emit zero-filled error responses to every worker in the batch."""
+        # Group slices by worker_id so each worker gets one response per
+        # original request_id. Order inside the original request list is
+        # preserved via the slice structure.
+        n_action = self._action_dim or 1
+        for worker_id, request_id, start, end in pending.slices:
+            size = end - start
+            resp = InferenceResponse(
+                request_id=request_id,
+                action_indices=np.full((size,), END_TURN_INDEX, dtype=np.int64),
+                log_probs=np.zeros((size,), dtype=np.float32),
+                values=np.zeros((size,), dtype=np.float32),
+                error=err,
+            )
+            self.response_queues[worker_id].put(resp)
+            self._requests_served += 1
+        _ = n_action  # silence linter; action_dim only needed for shape inference
 
     def _run_batch(
         self,

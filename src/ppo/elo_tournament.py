@@ -1,8 +1,11 @@
 """Elo tournament: round-robin evaluation between PPO checkpoints and
 built-in agents (random, heuristic, simple).
 
-Supports multi-worker parallelism for PPO-vs-builtin pairings via
-MultiProcessBatchRunner, and direct game simulation for builtin-vs-builtin.
+Pairings that involve at least one PPO checkpoint run in parallel through
+a long-lived :class:`InferenceServer` hosting every checkpoint keyed by
+its label; a fleet of tournament worker processes drains a shared
+pairing queue. Built-in vs. built-in pairings run inline in the
+coordinator since they don't need the GPU.
 
 Usage:
     python -m src elo --checkpoints "models/ppo_agent_0415_*upd*0.pth" --games-per-pair 50
@@ -21,9 +24,7 @@ import torch
 
 from src.config import DataConfig, ModelConfig, load_checkpoint
 from src.encoding.action_encoder import get_action_space_size
-from src.ppo.batch_runner import BatchRunner
 from src.ppo.ppo_actor_critic import PPOActorCritic
-from src.ai.ppo_agent import PPOAgent
 from src.ai.random_agent import RandomAgent
 from src.ai.simple_agent import SimpleAgent
 from src.ai.heuristic_agent import HeuristicAgent
@@ -187,43 +188,6 @@ def _validate_checkpoints(
             )
 
 
-def _make_opponent_factory(
-    state_dict: dict, card_names: list[str], device: str,
-    model_config: ModelConfig | None = None,
-) -> Callable:
-    """Create an opponent factory from an in-memory state_dict.
-
-    Builds one shared model on the target device. Each factory call returns
-    a lightweight PPOAgent wrapper pointing to that shared model, avoiding
-    per-game GPU allocations.
-    """
-    from src.encoding.state_encoder import get_state_size
-
-    state_dim = get_state_size(card_names)
-    action_dim = get_action_space_size(card_names)
-    cfg = model_config or ModelConfig()
-
-    shared_model = PPOActorCritic(
-        state_dim=state_dim,
-        action_dim=action_dim,
-        num_cards=len(card_names),
-        model_config=cfg,
-    ).to(device)
-    shared_model.load_state_dict(state_dict)
-    shared_model.eval()
-
-    def factory() -> PPOAgent:
-        agent = PPOAgent(
-            "Opponent", card_names,
-            device=device, main_device=device, simulation_device=device,
-            model_config=cfg,
-        )
-        agent.model = shared_model
-        return agent
-
-    return factory
-
-
 def _play_builtin_games(
     agent_type_a: str,
     agent_type_b: str,
@@ -262,134 +226,6 @@ def _play_builtin_games(
             wins_b += 1
 
     return wins_a, wins_b
-
-
-def _play_ppo_vs_ppo(
-    ckpt_a: CheckpointParticipant,
-    ckpt_b: CheckpointParticipant,
-    cards: list,
-    card_names: list[str],
-    action_dim: int,
-    state_dim: int,
-    device: str,
-    num_concurrent: int,
-    games_per_pair: int,
-    data_cfg: DataConfig,
-    num_workers: int,
-    registry=None,
-) -> tuple[int, int]:
-    """Play games between two PPO checkpoints with batched GPU inference.
-
-    Uses MultiProcessBatchRunner with Player B loaded as a snapshot on the
-    InferenceServer, so both players get batched GPU inference. Player A
-    is the "training" model, Player B is the snapshot opponent.
-    Returns (wins_a, wins_b).
-    """
-    from src.ppo.mp_batch_runner import MultiProcessBatchRunner
-
-    model_a = PPOActorCritic(
-        state_dim=state_dim,
-        action_dim=action_dim,
-        num_cards=len(card_names),
-        model_config=ckpt_a.model_config,
-    ).to(device)
-    model_a.load_state_dict(ckpt_a.state_dict)
-    model_a.eval()
-
-    per_worker_concurrent = max(1, num_concurrent // max(1, num_workers))
-
-    runner = MultiProcessBatchRunner(
-        model=model_a,
-        card_names=card_names,
-        cards=cards,
-        action_dim=action_dim,
-        device=device,
-        data_config=data_cfg,
-        opponent_spec="random",  # fallback spec, unused when self_play_ratio=1.0
-        num_concurrent=per_worker_concurrent,
-        num_workers=num_workers,
-        registry=registry,
-        snapshot_state_dicts=[(ckpt_b.label, ckpt_b.state_dict)],
-        self_play_ratio=1.0,
-    )
-
-    set_disabled(True)
-    wins_a, losses_a, _ = runner.run_eval(games_per_pair)
-    set_disabled(False)
-
-    del model_a, runner
-    if device != "cpu":
-        torch.cuda.empty_cache()
-
-    return wins_a, losses_a
-
-
-def _play_ppo_vs_builtin(
-    ckpt: CheckpointParticipant,
-    builtin: BuiltinParticipant,
-    cards: list,
-    card_names: list[str],
-    action_dim: int,
-    state_dim: int,
-    device: str,
-    num_concurrent: int,
-    games_per_pair: int,
-    data_cfg: DataConfig,
-    num_workers: int,
-    registry=None,
-) -> tuple[int, int]:
-    """Play games between a PPO checkpoint and a built-in agent.
-
-    Uses MultiProcessBatchRunner when num_workers > 1 for parallelism,
-    otherwise falls back to single-process BatchRunner.
-    Returns (wins_ppo, wins_builtin).
-    """
-    model = PPOActorCritic(
-        state_dim=state_dim,
-        action_dim=action_dim,
-        num_cards=len(card_names),
-        model_config=ckpt.model_config,
-    ).to(device)
-    model.load_state_dict(ckpt.state_dict)
-    model.eval()
-
-    if num_workers > 1:
-        from src.ppo.mp_batch_runner import MultiProcessBatchRunner
-        # num_concurrent is a global target; divide across workers
-        per_worker_concurrent = max(1, num_concurrent // num_workers)
-        runner = MultiProcessBatchRunner(
-            model=model,
-            card_names=card_names,
-            cards=cards,
-            action_dim=action_dim,
-            device=device,
-            data_config=data_cfg,
-            opponent_spec=builtin.agent_type,
-            num_concurrent=per_worker_concurrent,
-            num_workers=num_workers,
-            registry=registry,
-        )
-    else:
-        factory = _AGENT_FACTORIES[builtin.agent_type]
-        runner = BatchRunner(
-            model=model,
-            card_names=card_names,
-            cards=cards,
-            action_dim=action_dim,
-            device=torch.device(device),
-            opponent_factory=lambda: factory(builtin.agent_type.capitalize()),
-            num_concurrent=num_concurrent,
-        )
-
-    set_disabled(True)
-    wins_ppo, losses_ppo, _ = runner.run_eval(games_per_pair)
-    set_disabled(False)
-
-    del model, runner
-    if device != "cpu":
-        torch.cuda.empty_cache()
-
-    return wins_ppo, losses_ppo
 
 
 def build_participants(
@@ -446,10 +282,12 @@ def run_tournament(
 ) -> list[EloResult]:
     """Run a round-robin Elo tournament between checkpoints and/or agents.
 
-    Supports three pairing types:
-    - PPO vs PPO: MultiProcessBatchRunner with snapshot (both batched on GPU)
-    - PPO vs Builtin: BatchRunner or MultiProcessBatchRunner (multi-worker)
-    - Builtin vs Builtin: direct game simulation (no neural net)
+    Pairings are dispatched in parallel: one long-lived
+    :class:`InferenceServer` hosts every PPO checkpoint keyed by its
+    label, and ``num_workers`` tournament worker processes pull
+    :class:`PairingTask`s off a shared queue. N pairings run concurrently
+    whenever ``num_workers > 1``. Built-in vs. built-in pairings skip the
+    server and run inline in the coordinator.
 
     Game.start_game() randomizes player order, so both sides get fair
     first/second player distribution.
@@ -499,66 +337,76 @@ def run_tournament(
     log(f"Running {total_pairings} pairings x {games_per_pair} games = "
         f"{total_pairings * games_per_pair} total games")
     if num_workers > 1:
-        log(f"Using {num_workers} workers for PPO pairings")
+        log(f"Using {num_workers} workers running pairings in parallel")
     log("")
 
-    pairing_num = 0
-    start = time.time()
-
+    # Partition pairings: builtin-vs-builtin stay in-process; any pairing
+    # with at least one PPO side goes through the parallel tournament
+    # workers via the InferenceServer.
+    ppo_pairings: list[tuple[int, int]] = []
+    builtin_pairings: list[tuple[int, int]] = []
     for i in range(n):
         for j in range(i + 1, n):
-            pairing_num += 1
             p_a = participants[i]
             p_b = participants[j]
-            pair_start = time.time()
-
-            # Dispatch to the appropriate pairing handler
-            if isinstance(p_a, CheckpointParticipant) and isinstance(p_b, CheckpointParticipant):
-                wins_a, wins_b = _play_ppo_vs_ppo(
-                    p_a, p_b, cards, card_names, action_dim, state_dim,
-                    device, num_concurrent, games_per_pair, data_cfg,
-                    num_workers, registry=registry,
-                )
-            elif isinstance(p_a, CheckpointParticipant) and isinstance(p_b, BuiltinParticipant):
-                wins_a, wins_b = _play_ppo_vs_builtin(
-                    p_a, p_b, cards, card_names, action_dim, state_dim,
-                    device, num_concurrent, games_per_pair, data_cfg,
-                    num_workers, registry=registry,
-                )
-            elif isinstance(p_a, BuiltinParticipant) and isinstance(p_b, CheckpointParticipant):
-                # Swap so PPO is always the batched player
-                wins_b, wins_a = _play_ppo_vs_builtin(
-                    p_b, p_a, cards, card_names, action_dim, state_dim,
-                    device, num_concurrent, games_per_pair, data_cfg,
-                    num_workers, registry=registry,
-                )
+            if isinstance(p_a, CheckpointParticipant) or isinstance(p_b, CheckpointParticipant):
+                ppo_pairings.append((i, j))
             else:
-                # Both builtin
-                set_disabled(True)
-                wins_a, wins_b = _play_builtin_games(
-                    p_a.agent_type, p_b.agent_type,
-                    cards, registry.card_index_map, games_per_pair,
-                )
-                set_disabled(False)
+                builtin_pairings.append((i, j))
 
-            pair_elapsed = time.time() - pair_start
-            actual_games = wins_a + wins_b
+    start = time.time()
+    pairings_done = 0
 
-            # Store match results for MLE computation
-            match_wins[(i, j)] = wins_a
-            match_games[(i, j)] = actual_games
+    # Play builtin-vs-builtin pairings inline — no server needed.
+    set_disabled(True)
+    for (i, j) in builtin_pairings:
+        pair_start = time.time()
+        p_a = participants[i]
+        p_b = participants[j]
+        wins_a, wins_b = _play_builtin_games(
+            p_a.agent_type, p_b.agent_type,
+            cards, registry.card_index_map, games_per_pair,
+        )
+        pair_elapsed = time.time() - pair_start
+        actual_games = wins_a + wins_b
+        match_wins[(i, j)] = wins_a
+        match_games[(i, j)] = actual_games
+        wins_total[i] += wins_a
+        losses_total[i] += wins_b
+        wins_total[j] += wins_b
+        losses_total[j] += wins_a
+        games_total[i] += actual_games
+        games_total[j] += actual_games
+        pairings_done += 1
+        wr_a = wins_a / actual_games * 100 if actual_games > 0 else 0
+        log(f"  [{pairings_done}/{total_pairings}] {labels[i]} vs {labels[j]}: "
+            f"{wins_a}/{actual_games} ({wr_a:.0f}%)  ({pair_elapsed:.1f}s)")
+    set_disabled(False)
 
-            # Accumulate per-participant stats
-            wins_total[i] += wins_a
-            losses_total[i] += wins_b
-            wins_total[j] += wins_b
-            losses_total[j] += wins_a
-            games_total[i] += actual_games
-            games_total[j] += actual_games
-
-            wr_a = wins_a / actual_games * 100 if actual_games > 0 else 0
-            log(f"  [{pairing_num}/{total_pairings}] {labels[i]} vs {labels[j]}: "
-                f"{wins_a}/{actual_games} ({wr_a:.0f}%)  ({pair_elapsed:.1f}s)")
+    # Dispatch PPO-involving pairings through a parallel worker fleet.
+    if ppo_pairings:
+        pairings_done = _run_parallel_pairings(
+            ppo_pairings=ppo_pairings,
+            participants=participants,
+            labels=labels,
+            games_per_pair=games_per_pair,
+            cards=cards,
+            card_names=card_names,
+            card_index_map=registry.card_index_map,
+            action_dim=action_dim,
+            state_dim=state_dim,
+            device=device,
+            num_workers=num_workers,
+            num_concurrent=num_concurrent,
+            data_cfg=data_cfg,
+            match_wins=match_wins,
+            match_games=match_games,
+            wins_total=wins_total,
+            losses_total=losses_total,
+            games_total=games_total,
+            pairings_done=pairings_done,
+            total_pairings=total_pairings,
+        )
 
     elapsed = time.time() - start
     log(f"\nGames complete in {elapsed:.1f}s")
@@ -591,6 +439,163 @@ def run_tournament(
     log("=" * 60)
 
     return results
+
+
+def _run_parallel_pairings(
+    *,
+    ppo_pairings: list[tuple[int, int]],
+    participants: list,
+    labels: list[str],
+    games_per_pair: int,
+    cards: list,
+    card_names: list[str],
+    card_index_map: dict,
+    action_dim: int,
+    state_dim: int,
+    device: str,
+    num_workers: int,
+    num_concurrent: int,
+    data_cfg: DataConfig,
+    match_wins: dict,
+    match_games: dict,
+    wins_total: list,
+    losses_total: list,
+    games_total: list,
+    pairings_done: int,
+    total_pairings: int,
+) -> int:
+    """Run all PPO-involving pairings in parallel through one shared
+    :class:`InferenceServer` and a fleet of tournament workers.
+
+    Returns the updated ``pairings_done`` counter. Accumulates results
+    into the caller-supplied ``match_*`` / ``wins_total`` / ``losses_total``
+    / ``games_total`` structures by participant index.
+    """
+    import multiprocessing as mp
+    import random as _random
+    from src.ppo.mp_inference_server import InferenceServer, WorkerError
+    from src.ppo.mp_sim_worker import (
+        PairingTask, TournamentResult, tournament_worker_main,
+    )
+
+    # Build the long-lived multi-model registry: one PPOActorCritic per
+    # CheckpointParticipant, keyed by its label. Built-in agents don't
+    # register with the server; they run inline inside the worker.
+    models: dict[str, PPOActorCritic] = {}
+    for p in participants:
+        if isinstance(p, CheckpointParticipant):
+            m = PPOActorCritic(
+                state_dim=state_dim, action_dim=action_dim,
+                num_cards=len(card_names), model_config=p.model_config,
+            )
+            m.load_state_dict(p.state_dict)
+            m.eval()
+            models[p.label] = m
+
+    ctx = mp.get_context("spawn")
+    actual_workers = min(num_workers, len(ppo_pairings))
+    server = InferenceServer(
+        models=models, device=torch.device(device),
+        num_workers=actual_workers, ctx=ctx,
+    )
+    server.start()
+
+    task_queue = ctx.Queue()
+    result_queue = ctx.Queue()
+
+    # per_worker_concurrent scales the concurrent-game count inside each
+    # worker. Dividing num_concurrent by worker count keeps total GPU
+    # batch size roughly comparable to the serial path.
+    per_worker_concurrent = max(1, num_concurrent // actual_workers)
+
+    processes = []
+    try:
+        for worker_id in range(actual_workers):
+            proc = ctx.Process(
+                target=tournament_worker_main,
+                args=(
+                    worker_id,
+                    per_worker_concurrent,
+                    data_cfg.to_dict(),
+                    card_names,
+                    card_index_map,
+                    action_dim,
+                    state_dim,
+                    task_queue,
+                    result_queue,
+                    server.request_queue,
+                    server.response_queues[worker_id],
+                ),
+            )
+            proc.start()
+            processes.append(proc)
+
+        # Enqueue all pairing tasks, then sentinels so workers exit when done.
+        def _kind_and_id(p):
+            if isinstance(p, CheckpointParticipant):
+                return ("ppo", p.label)
+            return ("builtin", p.agent_type)
+
+        for pairing_id, (i, j) in enumerate(ppo_pairings):
+            ka, ida = _kind_and_id(participants[i])
+            kb, idb = _kind_and_id(participants[j])
+            task_queue.put(PairingTask(
+                pairing_id=pairing_id, i=i, j=j,
+                num_games=games_per_pair,
+                seed=_random.randint(0, 1_000_000_000),
+                side_a_kind=ka, side_b_kind=kb,
+                side_a_id=ida, side_b_id=idb,
+            ))
+        for _ in range(actual_workers):
+            task_queue.put(None)
+
+        # Collect results; track start times per-pairing for logging.
+        start_times: dict[int, float] = {}
+        # Mark every pairing as "started" at dispatch time for a reasonable
+        # per-pairing wall-time estimate. Parallel pairings will show
+        # overlapping durations; that's expected.
+        t0 = time.time()
+        for pairing_id in range(len(ppo_pairings)):
+            start_times[pairing_id] = t0
+
+        remaining = len(ppo_pairings)
+        while remaining > 0:
+            item = result_queue.get()
+            if isinstance(item, WorkerError):
+                # Fail fast: stop the server and terminate workers so we
+                # surface the error instead of hanging on the queue.
+                raise RuntimeError(f"Tournament worker error:\n{item.error}")
+            assert isinstance(item, TournamentResult)
+            i, j = item.i, item.j
+            wins_a, wins_b = item.wins_a, item.wins_b
+            actual_games = wins_a + wins_b
+            match_wins[(i, j)] = wins_a
+            match_games[(i, j)] = actual_games
+            wins_total[i] += wins_a
+            losses_total[i] += wins_b
+            wins_total[j] += wins_b
+            losses_total[j] += wins_a
+            games_total[i] += actual_games
+            games_total[j] += actual_games
+            pairings_done += 1
+            wr_a = wins_a / actual_games * 100 if actual_games > 0 else 0
+            elapsed = time.time() - start_times.get(item.pairing_id, t0)
+            log(f"  [{pairings_done}/{total_pairings}] {labels[i]} vs {labels[j]}: "
+                f"{wins_a}/{actual_games} ({wr_a:.0f}%)  ({elapsed:.1f}s)")
+            remaining -= 1
+
+    finally:
+        # Drain any leftover sentinels / results, then shut everything down.
+        server.stop()
+        for proc in processes:
+            proc.join(timeout=5.0)
+        for proc in processes:
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(timeout=2.0)
+
+    return pairings_done
+
 
 
 def resolve_checkpoint_paths(patterns: list[str]) -> list[str]:
