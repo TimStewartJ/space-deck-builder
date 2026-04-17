@@ -303,7 +303,7 @@ def _play_ppo_vs_ppo(
         card_names=card_names,
         cards=cards,
         action_dim=action_dim,
-        device=device,
+        device=torch.device(device),
         data_config=data_cfg,
         opponent_spec="random",  # fallback spec, unused when self_play_ratio=1.0
         num_concurrent=per_worker_concurrent,
@@ -362,7 +362,7 @@ def _play_ppo_vs_builtin(
             card_names=card_names,
             cards=cards,
             action_dim=action_dim,
-            device=device,
+            device=torch.device(device),
             data_config=data_cfg,
             opponent_spec=builtin.agent_type,
             num_concurrent=per_worker_concurrent,
