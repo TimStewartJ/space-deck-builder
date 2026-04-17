@@ -66,6 +66,7 @@ def evaluate(
     ppo_config: PPOConfig | None = None,
     label: str | None = None,
     min_games_per_opponent: int = 0,
+    log_fn=None,
 ) -> EvalResult:
     """Run evaluation games against each opponent type and return results.
 
@@ -82,10 +83,13 @@ def evaluate(
         label: Optional label printed in the header (e.g. ``"update 10"``).
         min_games_per_opponent: Minimum games per opponent type. When > 0, the
             effective total may exceed *eval_games* to ensure coverage.
+        log_fn: Optional callable for output (e.g. ``logger.info``).  Falls
+            back to :func:`print` when ``None``.
 
     Returns:
         An :class:`EvalResult` with per-opponent and aggregate statistics.
     """
+    emit = log_fn or print
     cards = data_cfg.load_cards()
     registry = data_cfg.build_registry(cards)
     card_names = registry.card_names
@@ -107,7 +111,7 @@ def evaluate(
     if label:
         header += f" ({label})"
     header += f" — {eval_games} games × {len(opp_types)} opponent types"
-    print(header)
+    emit(header)
 
     use_mp = num_workers > 1
     per_opponent: list[OpponentResult] = []
@@ -152,8 +156,8 @@ def evaluate(
         win_rate = wins / num_games
         avg_steps = eval_steps / num_games if num_games > 0 else 0
 
-        print(f"  vs {opp_type}: {wins}/{num_games} wins "
-              f"({win_rate:.0%}), avg {avg_steps:.0f} steps/game")
+        emit(f"  vs {opp_type}: {wins}/{num_games} wins "
+             f"({win_rate:.0%}), avg {avg_steps:.0f} steps/game")
 
         per_opponent.append(OpponentResult(
             opponent=opp_type,
@@ -167,8 +171,8 @@ def evaluate(
 
     elapsed = time.perf_counter() - start
     overall_rate = total_wins / total_games if total_games > 0 else 0
-    print(f"  Overall: {total_wins}/{total_games} wins ({overall_rate:.0%}) "
-          f"in {elapsed:.1f}s")
+    emit(f"  Overall: {total_wins}/{total_games} wins ({overall_rate:.0%}) "
+         f"in {elapsed:.1f}s")
 
     return EvalResult(
         per_opponent=per_opponent,

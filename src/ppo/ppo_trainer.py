@@ -13,7 +13,8 @@ from src.ai.ppo_agent import PPOAgent
 from src.encoding.action_encoder import get_action_space_size
 from src.ppo.batch_runner import BatchRunner
 from src.ppo.opponent_pool import OpponentPool
-from src.utils.logger import log, set_disabled, set_verbose
+from src.ppo.train_logger import setup_training_logger, MetricsWriter, format_ppo_metrics
+from src.utils.logger import set_disabled, set_verbose
 
 
 def _compute_self_play_ratio(
@@ -95,15 +96,20 @@ def train(
     load_latest: bool = False,
 ):
     """Run PPO training with the given configuration."""
+    # --- Logging setup ---
+    logger = setup_training_logger("logs")
+    metrics_writer = MetricsWriter("logs")
+    logger.info(f"Metrics file: {metrics_writer.path}")
+
     if load_latest and not model_path:
         import glob, os
         model_files = glob.glob(os.path.join(data_cfg.models_dir, "ppo_agent_*.pth"))
         if model_files:
             model_files.sort(key=os.path.getmtime, reverse=True)
             model_path = model_files[0]
-            print(f"Auto-loading latest PPO model: {model_path}")
+            logger.info(f"Auto-loading latest PPO model: {model_path}")
         else:
-            print("No PPO model found in models directory to auto-load.")
+            logger.info("No PPO model found in models directory to auto-load.")
 
     set_verbose(False)
     set_disabled(True)
@@ -126,7 +132,8 @@ def train(
         output_size = actor_last.out_features if hasattr(actor_last, 'out_features') else "Unknown"
     except Exception:
         input_size = output_size = "Unknown"
-    print(f"Model has {num_params / 1_000_000:.2f}M parameters. Trunk input size: {input_size}, action dim: {output_size}.")
+    logger.info(f"Model has {num_params / 1_000_000:.2f}M parameters. "
+                f"Trunk input size: {input_size}, action dim: {output_size}.")
 
     # Set up the opponent pool from config
     pool = OpponentPool(
@@ -145,7 +152,7 @@ def train(
         else:
             sched_info = f", ratio: {run_cfg.self_play_ratio}"
         pool_msg += f" + self-play ({sched_info.lstrip(', ')}{pfsp_info})"
-    print(pool_msg)
+    logger.info(pool_msg)
 
     # Set up LR scheduler for cosine annealing
     scheduler = None
@@ -157,9 +164,10 @@ def train(
             T_max=max(1, run_cfg.updates - 1),
             eta_min=ppo_cfg.lr_end,
         )
-        print(f"LR schedule: cosine {ppo_cfg.lr:.1e} -> {ppo_cfg.lr_end:.1e} over {run_cfg.updates} updates")
+        logger.info(f"LR schedule: cosine {ppo_cfg.lr:.1e} -> {ppo_cfg.lr_end:.1e} "
+                     f"over {run_cfg.updates} updates")
     else:
-        print(f"LR schedule: constant {ppo_cfg.lr:.1e}")
+        logger.info(f"LR schedule: constant {ppo_cfg.lr:.1e}")
 
     total_time_spent_on_updates = 0.0
     total_time_spent_on_episodes = 0.0
@@ -182,8 +190,8 @@ def train(
         make_opponent = pool.make_factory(card_names, device=sim_device, registry=registry)
         snap_msg = " + snapshots" if pool.has_snapshots else ""
         sp_ratio_msg = f", sp_ratio: {current_sp_ratio:.2f}" if run_cfg.self_play else ""
-        print(f"Starting update {upd}/{run_cfg.updates} "
-              f"(opponents: {', '.join(opp_types)}{snap_msg}{sp_ratio_msg})")
+        logger.info(f"--- Update {upd}/{run_cfg.updates} "
+                     f"(opponents: {', '.join(opp_types)}{snap_msg}{sp_ratio_msg}) ---")
 
         # Collect trajectories
         start_time = time.time()
@@ -196,8 +204,20 @@ def train(
         states, actions, old_lp, returns, advs, masks = runner.run_episodes(run_cfg.episodes)
         duration_episodes = time.time() - start_time
         total_time_spent_on_episodes += duration_episodes
+
+        # Derive rollout stats from available data
+        num_samples = states.shape[0]
+        avg_decisions_per_ep = num_samples / max(1, run_cfg.episodes)
+        opp_results = runner.opponent_results
+        total_wins = sum(v[0] for v in opp_results.values())
+        total_games = sum(v[1] for v in opp_results.values())
+        rollout_win_rate = total_wins / max(1, total_games)
+        throughput = run_cfg.episodes / max(0.001, duration_episodes)
+
         workers_msg = f" ({run_cfg.num_workers} workers)" if run_cfg.num_workers > 1 else ""
-        print(f"Finished {run_cfg.episodes} episodes in {duration_episodes:.2f}s.{workers_msg}")
+        logger.info(f"Rollout: {run_cfg.episodes} episodes, {num_samples} steps in "
+                     f"{duration_episodes:.1f}s ({throughput:.1f} ep/s){workers_msg}  "
+                     f"win_rate={rollout_win_rate:.0%}  avg_decisions/ep={avg_decisions_per_ep:.0f}")
 
         # Update PFSP win rate estimates from batch results
         if run_cfg.self_play and run_cfg.pfsp_mode != "uniform":
@@ -210,7 +230,7 @@ def train(
                     f"{k}: wr={v['ema_win_rate']:.0%} w={v['weight']:.2f}"
                     for k, v in pfsp_summary.items()
                 ]
-                print(f"  PFSP: {', '.join(parts)}")
+                logger.info(f"  PFSP: {', '.join(parts)}")
 
         # --- Device boundary: sim_device -> main_device ---
         # run_episodes() returns tensors on simulation_device.
@@ -228,11 +248,24 @@ def train(
         # Perform PPO update
         start_time = time.time()
         current_lr = agent.optimizer.param_groups[0]['lr']
-        agent.update(states, actions, old_lp, returns, advs, masks)
+        ppo_metrics = agent.update(states, actions, old_lp, returns, advs, masks)
         duration_update = time.time() - start_time
         total_time_spent_on_updates += duration_update
-        print(f"Update {upd} complete in {duration_update:.2f}s. State size: {states.shape}. LR: {current_lr:.2e}")
-        print(f"Card Emb grad: {agent.model.card_emb.weight.grad is not None and agent.model.card_emb.weight.grad.norm().item():.4f}")
+
+        # Log PPO metrics summary
+        logger.info(f"PPO: {format_ppo_metrics(ppo_metrics)}  "
+                     f"lr={current_lr:.2e}  {duration_update:.1f}s  "
+                     f"samples={num_samples}")
+
+        # Card embedding gradient norm (specific architecture diagnostic)
+        card_emb_grad = (agent.model.card_emb.weight.grad is not None
+                         and agent.model.card_emb.weight.grad.norm().item())
+        logger.debug(f"Card Emb grad: {card_emb_grad:.4f}")
+
+        # NaN guard: abort training immediately if loss diverged
+        if ppo_metrics.get("nan_detected"):
+            logger.error("NaN/Inf detected in loss — aborting training.")
+            break
 
         # Step LR scheduler after each update
         if scheduler is not None:
@@ -246,17 +279,20 @@ def train(
         # Evaluate performance (every N updates, and always on the last)
         is_last_update = upd == run_cfg.updates
         wins = -1  # default: no eval this round
+        eval_result = None
         if upd % run_cfg.eval_every == 0 or is_last_update:
             start_time = time.time()
-            wins = _run_per_opponent_eval(
+            wins, eval_result = _run_per_opponent_eval(
                 agent, pool, card_names, cards, run_cfg, ppo_cfg, upd,
                 registry=registry, data_cfg=data_cfg,
+                log_fn=logger.info,
             )
             agent.clear_buffers()
             duration_eval = time.time() - start_time
             total_time_spent_on_eval += duration_eval
         else:
-            print(f"Skipping eval (next eval at update {upd + run_cfg.eval_every - upd % run_cfg.eval_every}).")
+            next_eval = upd + run_cfg.eval_every - upd % run_cfg.eval_every
+            logger.debug(f"Skipping eval (next eval at update {next_eval}).")
 
         # Save checkpoint per update
         ts = datetime.now().strftime("%m%d_%H%M")
@@ -271,16 +307,51 @@ def train(
             device_config=dev_cfg,
             update=upd,
         )
-        print("Checkpoint saved.")
+        logger.info(f"Checkpoint saved: {ckpt_path}")
 
-    print(f"Total time spent on episodes: {total_time_spent_on_episodes:.2f}s\n\tAverage per update: {total_time_spent_on_episodes / run_cfg.updates:.2f}s")
-    print(f"Total time spent on PPO updates: {total_time_spent_on_updates:.2f}s\n\tAverage per update: {total_time_spent_on_updates / run_cfg.updates:.2f}s")
-    print(f"Total time spent on evaluation: {total_time_spent_on_eval:.2f}s\n\tAverage per update: {total_time_spent_on_eval / run_cfg.updates:.2f}s")
-    print("All updates finished.")
-    # Log average decision time per decision
+        # Write JSONL metrics row for this update
+        row: dict = {
+            "update": upd,
+            "timestamp": datetime.now().isoformat(),
+            "lr": current_lr,
+            "self_play_ratio": current_sp_ratio if run_cfg.self_play else None,
+            "rollout": {
+                "episodes": run_cfg.episodes,
+                "num_samples": num_samples,
+                "duration_s": round(duration_episodes, 2),
+                "throughput_eps": round(throughput, 2),
+                "win_rate": round(rollout_win_rate, 4),
+                "avg_decisions_per_ep": round(avg_decisions_per_ep, 1),
+                "per_opponent": {k: {"wins": v[0], "games": v[1]} for k, v in opp_results.items()},
+            },
+            "ppo": {k: round(v, 6) if isinstance(v, float) else v for k, v in ppo_metrics.items()},
+            "ppo_duration_s": round(duration_update, 2),
+            "card_emb_grad": round(card_emb_grad, 6) if card_emb_grad else None,
+        }
+        if eval_result is not None:
+            row["eval"] = {
+                "overall_win_rate": round(eval_result.overall_win_rate, 4),
+                "total_wins": eval_result.total_wins,
+                "total_games": eval_result.total_games,
+                "per_opponent": {
+                    r.opponent: {"wins": r.wins, "games": r.games, "win_rate": round(r.win_rate, 4)}
+                    for r in eval_result.per_opponent
+                },
+            }
+        metrics_writer.write(row)
+
+    # --- Training complete ---
+    logger.info(f"Episodes:    {total_time_spent_on_episodes:.1f}s total, "
+                f"{total_time_spent_on_episodes / max(1, run_cfg.updates):.1f}s avg/update")
+    logger.info(f"PPO updates: {total_time_spent_on_updates:.1f}s total, "
+                f"{total_time_spent_on_updates / max(1, run_cfg.updates):.1f}s avg/update")
+    logger.info(f"Evaluation:  {total_time_spent_on_eval:.1f}s total, "
+                f"{total_time_spent_on_eval / max(1, run_cfg.updates):.1f}s avg/update")
     avg_decision_time = agent.get_average_decision_time()
-    print(f"Average PPOAgent decision time: {avg_decision_time:.6f} seconds per decision.")
-    print(f"Overall time spent: {time.perf_counter() - overall_start_time:.2f}s")
+    logger.info(f"Avg PPO decision time: {avg_decision_time:.6f}s/decision")
+    logger.info(f"Total wall time: {time.perf_counter() - overall_start_time:.1f}s")
+    logger.info("Training complete.")
+    metrics_writer.close()
 
 
 def _run_per_opponent_eval(
@@ -293,12 +364,13 @@ def _run_per_opponent_eval(
     upd: int,
     registry=None,
     data_cfg: DataConfig | None = None,
-) -> int:
+    log_fn=None,
+) -> tuple[int, 'EvalResult']:
     """Run evaluation against each opponent type separately, log per-type results.
 
     Delegates to :func:`src.ppo.ppo_eval.evaluate` for the actual game execution.
 
-    Returns the total wins across all opponent types.
+    Returns a tuple of (total_wins, EvalResult).
     """
     from src.ppo.ppo_eval import evaluate
 
@@ -314,5 +386,6 @@ def _run_per_opponent_eval(
         ppo_config=ppo_cfg,
         label=f"update {upd}",
         min_games_per_opponent=1,
+        log_fn=log_fn,
     )
-    return result.total_wins
+    return result.total_wins, result

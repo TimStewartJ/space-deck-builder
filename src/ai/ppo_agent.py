@@ -10,7 +10,7 @@ from src.ai.agent import Agent
 from src.engine.actions import ActionType, get_available_actions
 from src.encoding.state_encoder import encode_state, get_state_size, build_card_index_map
 from src.encoding.action_encoder import encode_action, decode_action, get_action_space_size, END_TURN_INDEX
-from src.utils.logger import log
+from src.utils.logger import log  # used by __init__ for model-load message
 
 if TYPE_CHECKING:
     from src.engine.game import Game
@@ -239,14 +239,37 @@ class PPOAgent(Agent):
 
         return states, actions, old_lp, returnsTensor, advsTensor, masksTensor
 
-    def update(self, states, actions, old_lp, returns, advs, masks=None):
+    def update(self, states, actions, old_lp, returns, advs, masks=None) -> dict:
+        """Run PPO gradient updates and return training metrics.
+
+        Returns a dict with keys: actor_loss, critic_loss, mean_ratio,
+        entropy, approx_kl, clip_fraction, total_grad_norm,
+        explained_variance, nan_detected.
+        """
         # Device contract: caller (ppo_trainer) is responsible for moving
         # model and tensors to main_device before calling update().
+
+        # Compute explained variance from pre-update critic predictions.
+        # Process in chunks to avoid OOM on large rollouts.
+        with torch.no_grad():
+            chunk_size = 4096
+            all_vals = []
+            for i in range(0, len(states), chunk_size):
+                _, v = self.model(states[i:i + chunk_size])
+                all_vals.append(v.squeeze(-1))
+            pred_values = torch.cat(all_vals)
+            var_returns = returns.var()
+            explained_var = (
+                1.0 - (returns - pred_values).var() / (var_returns + 1e-8)
+            ).item() if var_returns.item() > 1e-8 else 0.0
 
         actor_loss_sum  = 0.0
         critic_loss_sum = 0.0
         ratio_sum       = 0.0
         entropy_sum     = 0.0
+        kl_sum          = 0.0
+        clip_frac_sum   = 0.0
+        grad_norm_sum   = 0.0
         batch_count     = 0
 
         for _ in range(self.epochs):
@@ -260,6 +283,20 @@ class PPOAgent(Agent):
                 A = advs[b]          # Batch of advantages
 
                 logits, vals = self.model(s)  # Forward pass: get action logits and value estimates
+
+                # Early NaN guard: catch numerical instability before distribution creation
+                if torch.isnan(logits).any() or torch.isinf(logits).any():
+                    return {
+                        "actor_loss": float("nan"),
+                        "critic_loss": float("nan"),
+                        "mean_ratio": float("nan"),
+                        "entropy": float("nan"),
+                        "approx_kl": float("nan"),
+                        "clip_fraction": float("nan"),
+                        "total_grad_norm": float("nan"),
+                        "explained_variance": explained_var,
+                        "nan_detected": True,
+                    }
 
                 # Apply action masks to ensure consistency with the behavior policy
                 if masks is not None:
@@ -277,35 +314,66 @@ class PPOAgent(Agent):
                 entropy = dist.entropy().mean()         # entropy bonus term
                 loss = actor_loss + self.ppo_config.critic_loss_coef * critic_loss - self.entropy_coef * entropy
 
+                # Abort on numerical instability
+                if torch.isnan(loss) or torch.isinf(loss):
+                    return {
+                        "actor_loss": float("nan"),
+                        "critic_loss": float("nan"),
+                        "mean_ratio": float("nan"),
+                        "entropy": float("nan"),
+                        "approx_kl": float("nan"),
+                        "clip_fraction": float("nan"),
+                        "total_grad_norm": float("nan"),
+                        "explained_variance": explained_var,
+                        "nan_detected": True,
+                    }
+
                 self.optimizer.zero_grad()
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.ppo_config.grad_clip)
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    self.model.parameters(), max_norm=self.ppo_config.grad_clip
+                )
                 self.optimizer.step()
 
-                # accumulate for averages
+                # PPO diagnostics
+                with torch.no_grad():
+                    approx_kl = (olp - nl).mean().item()
+                    clip_frac = ((ratio - 1.0).abs() > self.clip_eps).float().mean().item()
+
+                # Accumulate for averages
                 actor_loss_sum  += actor_loss.item()
                 critic_loss_sum += critic_loss.item()
                 ratio_sum       += ratio.mean().item()
                 entropy_sum     += entropy.item()
+                kl_sum          += approx_kl
+                clip_frac_sum   += clip_frac
+                grad_norm_sum   += grad_norm.item()
                 batch_count     += 1
 
-        # compute true averages
+        # Compute true averages
         if batch_count > 0:
-            avg_actor   = actor_loss_sum  / batch_count
-            avg_critic  = critic_loss_sum / batch_count
-            avg_ratio   = ratio_sum       / batch_count
-            avg_entropy = entropy_sum     / batch_count
+            avg_actor     = actor_loss_sum  / batch_count
+            avg_critic    = critic_loss_sum / batch_count
+            avg_ratio     = ratio_sum       / batch_count
+            avg_entropy   = entropy_sum     / batch_count
+            avg_kl        = kl_sum          / batch_count
+            avg_clip_frac = clip_frac_sum   / batch_count
+            avg_grad_norm = grad_norm_sum   / batch_count
         else:
             avg_actor = avg_critic = avg_ratio = avg_entropy = 0.0
+            avg_kl = avg_clip_frac = avg_grad_norm = 0.0
 
-        # final diagnostic log
-        log(
-            f"PPO update done. "
-            f"Avg actor loss: {avg_actor:.3f}, "
-            f"Avg critic loss: {avg_critic:.3f}, "
-            f"Mean ratio: {avg_ratio:.3f}, "
-            f"Mean entropy: {avg_entropy:.3f}"
-        )
+        return {
+            "actor_loss": avg_actor,
+            "critic_loss": avg_critic,
+            "mean_ratio": avg_ratio,
+            "entropy": avg_entropy,
+            "approx_kl": avg_kl,
+            "clip_fraction": avg_clip_frac,
+            "total_grad_norm": avg_grad_norm,
+            "explained_variance": explained_var,
+            "nan_detected": False,
+        }
 
     def clear_buffers(self):
         """Clear all rollout buffers."""
