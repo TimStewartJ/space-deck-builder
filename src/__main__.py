@@ -137,6 +137,10 @@ def _build_elo_parser(sub: argparse._SubParsersAction):
                    help="Concurrent games per worker (default: games-per-pair)")
     p.add_argument("--num-workers", type=int, default=_run.num_workers,
                    help=f"Worker processes for PPO pairings (default: {_run.num_workers})")
+    p.add_argument("--analyze", action="store_true", default=False,
+                   help="Collect replays and generate comparative dashboard")
+    p.add_argument("--output-dir", type=str, default=None,
+                   help="Directory for replay files (default: analysis/elo_<timestamp>/)")
     return p
 
 
@@ -316,6 +320,8 @@ def _run_elo(args):
         num_concurrent=num_concurrent,
         agent_types=agent_types or None,
         num_workers=args.num_workers,
+        collect_replays=args.analyze,
+        replay_output_dir=getattr(args, 'output_dir', None),
     )
 
 

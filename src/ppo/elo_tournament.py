@@ -279,6 +279,8 @@ def run_tournament(
     num_concurrent: int | None = None,
     agent_types: list[str] | None = None,
     num_workers: int = 1,
+    collect_replays: bool = False,
+    replay_output_dir: str | None = None,
 ) -> list[EloResult]:
     """Run a round-robin Elo tournament between checkpoints and/or agents.
 
@@ -438,7 +440,138 @@ def run_tournament(
             f"{r.win_rate * 100:>5.1f}%")
     log("=" * 60)
 
+    # Collect replays and generate comparative dashboard if requested.
+    # Runs a second pass over all PPO pairings using run_analysis to
+    # collect per-decision data. This is separate from the main
+    # tournament to avoid slowing down the rating computation.
+    if collect_replays:
+        import os as _os
+        from datetime import datetime as _dt
+        if replay_output_dir is None:
+            ts = _dt.now().strftime("%Y%m%d_%H%M%S")
+            replay_output_dir = _os.path.join("analysis", f"elo_{ts}")
+        _os.makedirs(replay_output_dir, exist_ok=True)
+
+        log(f"\nCollecting replays for {len(ppo_pairings)} PPO pairings...")
+        replay_files = _collect_tournament_replays(
+            ppo_pairings=ppo_pairings,
+            participants=participants,
+            labels=labels,
+            games_per_pair=min(games_per_pair, 50),  # cap replay collection
+            cards=cards,
+            card_names=card_names,
+            action_dim=action_dim,
+            state_dim=state_dim,
+            device=device,
+            num_concurrent=num_concurrent,
+            output_dir=replay_output_dir,
+            data_cfg=data_cfg,
+        )
+
+        if replay_files:
+            try:
+                from src.analysis.dashboard import generate_comparative_dashboard
+                dash_path = generate_comparative_dashboard(
+                    replay_paths=replay_files,
+                    elo_results=results,
+                    output_path=_os.path.join(replay_output_dir, "tournament_dashboard.html"),
+                )
+                log(f"Comparative dashboard: {dash_path}")
+            except Exception as e:
+                log(f"Warning: dashboard generation failed: {e}")
+
     return results
+
+
+def _collect_tournament_replays(
+    *,
+    ppo_pairings: list[tuple[int, int]],
+    participants: list,
+    labels: list[str],
+    games_per_pair: int,
+    cards: list,
+    card_names: list[str],
+    action_dim: int,
+    state_dim: int,
+    device: str,
+    num_concurrent: int,
+    output_dir: str,
+    data_cfg: 'DataConfig',
+) -> list[str]:
+    """Run a replay-collection pass over PPO pairings.
+
+    Uses single-process BatchRunner.run_analysis() per pairing to
+    collect per-decision data. Returns list of saved replay file paths.
+    """
+    import os
+    from src.analysis.replay_collector import ReplayCollector
+
+    replay_files: list[str] = []
+    registry = data_cfg.build_registry(cards)
+
+    for idx, (i, j) in enumerate(ppo_pairings):
+        p_a = participants[i]
+        p_b = participants[j]
+
+        # Build model A for batched inference
+        model_a = PPOActorCritic(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            num_cards=len(card_names),
+            model_config=p_a.model_config if isinstance(p_a, CheckpointParticipant) else ModelConfig(),
+        ).to(device)
+        if isinstance(p_a, CheckpointParticipant):
+            model_a.load_state_dict(p_a.state_dict)
+        model_a.eval()
+
+        # Build opponent factory for B
+        if isinstance(p_b, CheckpointParticipant):
+            opp_factory = _make_opponent_factory(
+                p_b.state_dict, card_names, device,
+                model_config=p_b.model_config,
+            )
+        else:
+            from src.ppo.opponent_pool import AGENT_REGISTRY
+            agent_type = p_b.agent_type
+            def opp_factory(at=agent_type):
+                return AGENT_REGISTRY[at](at.capitalize())
+
+        runner = BatchRunner(
+            model=model_a,
+            card_names=card_names,
+            cards=cards,
+            action_dim=action_dim,
+            device=torch.device(device),
+            opponent_factory=opp_factory,
+            num_concurrent=min(num_concurrent, games_per_pair),
+            registry=registry,
+        )
+
+        collector = ReplayCollector(card_names, action_dim)
+        pairing_label = f"{labels[i]}_vs_{labels[j]}"
+
+        set_disabled(True)
+        wins_a, losses_a, _ = runner.run_analysis(games_per_pair, collector, pairing_label)
+        set_disabled(False)
+
+        # Tag replays with model identity
+        for replay in collector.replays:
+            replay.player_model = labels[i]
+            replay.opponent_model = labels[j]
+
+        replay_path = os.path.join(output_dir, f"{labels[i]}_vs_{labels[j]}.json.gz")
+        collector.save(replay_path)
+        replay_files.append(replay_path)
+
+        wr = wins_a / games_per_pair * 100 if games_per_pair > 0 else 0
+        log(f"  Replay [{idx + 1}/{len(ppo_pairings)}] {pairing_label}: "
+            f"{wins_a}/{games_per_pair} ({wr:.0f}%)")
+
+        del model_a, runner
+        if device != "cpu":
+            torch.cuda.empty_cache()
+
+    return replay_files
 
 
 def _run_parallel_pairings(
