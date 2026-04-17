@@ -13,5 +13,9 @@ wheels/
 *.log
 *.pth
 *.pkl
+logs/*.jsonl
+logs/*.err
+logs/*.json
+logs/OVERNIGHT_ABORT.flag
 # SpecStory explanation file
 .specstory/.what-is-this.md

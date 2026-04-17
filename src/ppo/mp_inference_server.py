@@ -285,12 +285,29 @@ class InferenceServer:
                 pass
 
     def stop(self):
-        """Signal shutdown and wait for all stages to drain."""
+        """Signal shutdown, wait for internal stages to drain, and release the
+        cross-process queues so interpreter exit can't hang on their feeder
+        threads. See RCA 2026-04-17: mp.Queue feeder threads will block the
+        atexit phase if left open when workers are terminate()'d, because
+        partial writes can remain buffered on the parent side.
+        """
         self._shutdown.set()
         for t in self._threads:
             t.join(timeout=10.0)
         self._threads = []
         self._log_stats()
+        # Explicitly close the request/response queues and drop their feeder
+        # threads' join-at-exit behavior. Nobody reads from these after stop(),
+        # so any pending bytes are discardable.
+        for q in [self.request_queue, *self.response_queues]:
+            try:
+                q.close()
+            except Exception:
+                pass
+            try:
+                q.cancel_join_thread()
+            except Exception:
+                pass
 
     def _log_stats(self):
         s = self._stats

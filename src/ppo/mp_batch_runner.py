@@ -215,10 +215,7 @@ class MultiProcessBatchRunner:
             )
         finally:
             server.stop()
-            for p in processes:
-                p.join(timeout=10)
-                if p.is_alive():
-                    p.terminate()
+            self._reap_processes(processes, result_queue)
 
         # Merge results from all workers
         all_states = []
@@ -323,10 +320,7 @@ class MultiProcessBatchRunner:
                 results_collected += 1
         finally:
             server.stop()
-            for p in processes:
-                p.join(timeout=10)
-                if p.is_alive():
-                    p.terminate()
+            self._reap_processes(processes, result_queue)
 
         if errors:
             actual_games = total_wins + total_losses
@@ -334,6 +328,33 @@ class MultiProcessBatchRunner:
                   f"Errors: {'; '.join(errors)}")
 
         return total_wins, total_losses, total_steps
+
+    @staticmethod
+    def _reap_processes(processes, result_queue):
+        """Join workers (escalating to terminate/kill) and release the result
+        queue. See RCA 2026-04-17: a leaked mp.Queue with a still-active feeder
+        thread will wedge the interpreter at atexit, producing the
+        "Training complete." hang.
+        """
+        for p in processes:
+            p.join(timeout=10)
+            if p.is_alive():
+                p.terminate()
+                p.join(timeout=5)
+            if p.is_alive():
+                # Last resort on Windows: TerminateProcess via kill().
+                try:
+                    p.kill()
+                except Exception:
+                    pass
+        try:
+            result_queue.close()
+        except Exception:
+            pass
+        try:
+            result_queue.cancel_join_thread()
+        except Exception:
+            pass
 
     def _collect_results(
         self,

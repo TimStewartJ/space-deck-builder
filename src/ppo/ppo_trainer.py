@@ -350,6 +350,17 @@ def train(
     logger.info("Training complete.")
     metrics_writer.close()
 
+    # Visibility hook for the shutdown-hang watchdog — if anything shows up
+    # here, it's a process we failed to reap and the interpreter may block
+    # at atexit on its queues. See RCA 2026-04-17.
+    import multiprocessing as _mp
+    _survivors = _mp.active_children()
+    if _survivors:
+        logger.warning(
+            "Lingering child processes at shutdown: %s",
+            [(p.name, p.pid) for p in _survivors],
+        )
+
 
 def _run_per_opponent_eval(
     agent: PPOAgent,
