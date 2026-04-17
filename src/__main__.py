@@ -17,10 +17,11 @@ def _add_common_args(parser: argparse.ArgumentParser):
 
 
 def _build_train_parser(sub: argparse._SubParsersAction):
-    from src.config import PPOConfig, RunConfig, DeviceConfig
+    from src.config import PPOConfig, RunConfig, DeviceConfig, ModelConfig
     _ppo = PPOConfig()
     _run = RunConfig()
     _dev = DeviceConfig()
+    _mdl = ModelConfig()
 
     p = sub.add_parser("train", help="Run PPO training")
     _add_common_args(p)
@@ -41,6 +42,10 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--adv-norm",    type=str,   default=_ppo.adv_norm,
                    choices=["per_episode", "global"],
                    help="Advantage normalization mode")
+    # Model architecture
+    p.add_argument("--actor-type",  type=str, default=_mdl.actor_type,
+                   choices=["mlp", "attention"],
+                   help="Actor head type: mlp (flat linear) or attention (query-key dot product)")
     # Run topology (defaults sourced from RunConfig dataclass)
     p.add_argument("--episodes",    type=int,   default=_run.episodes)
     p.add_argument("--updates",     type=int,   default=_run.updates)
@@ -221,7 +226,7 @@ def main(argv=None):
 
 def _run_train(args):
     """Construct configs from CLI args and delegate to the trainer."""
-    from src.config import DataConfig, PPOConfig, RunConfig, DeviceConfig
+    from src.config import DataConfig, PPOConfig, RunConfig, DeviceConfig, ModelConfig
     from src.ppo.ppo_trainer import train
 
     data_cfg = DataConfig(cards_path=args.cards_path)
@@ -232,6 +237,7 @@ def _run_train(args):
         adv_norm=args.adv_norm,
         lr_end=args.lr_end, lr_schedule=args.lr_schedule,
     )
+    model_cfg = ModelConfig(actor_type=args.actor_type)
     run_cfg = RunConfig(
         episodes=args.episodes, updates=args.updates,
         eval_every=args.eval_every, eval_games=args.eval_games,
@@ -250,7 +256,8 @@ def _run_train(args):
     )
     train(data_cfg, ppo_cfg, run_cfg, dev_cfg,
           model_path=args.model_path,
-          load_latest=args.load_latest_model)
+          load_latest=args.load_latest_model,
+          model_config=model_cfg)
 
 
 def _run_simulate(args):

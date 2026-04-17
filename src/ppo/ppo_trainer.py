@@ -6,7 +6,7 @@ import torch.optim.lr_scheduler as lr_sched
 import time
 import copy
 
-from src.config import DataConfig, PPOConfig, RunConfig, DeviceConfig, save_checkpoint
+from src.config import DataConfig, PPOConfig, RunConfig, DeviceConfig, ModelConfig, save_checkpoint
 from src.cards.card import Card
 from src.ai.agent import Agent
 from src.ai.ppo_agent import PPOAgent
@@ -54,7 +54,7 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
         pfsp_weights = None
         if pool is not None and pool.has_snapshots:
             snapshot_state_dicts = list(pool._snapshots)
-            snap_names = [n for n, _ in snapshot_state_dicts]
+            snap_names = [n for n, _, _ in snapshot_state_dicts]
             pfsp_weights = pool._pfsp_weights(snap_names)
 
         return MultiProcessBatchRunner(
@@ -94,6 +94,7 @@ def train(
     dev_cfg: DeviceConfig,
     model_path: str | None = None,
     load_latest: bool = False,
+    model_config: ModelConfig | None = None,
 ):
     """Run PPO training with the given configuration."""
     # --- Logging setup ---
@@ -119,21 +120,15 @@ def train(
 
     agent    = PPOAgent("PPO", card_names,
                        ppo_config=ppo_cfg,
+                       model_config=model_config,
                        device_config=dev_cfg,
                        model_path=model_path,
                        registry=registry)
     # Log the parameter size of the model
     num_params = sum(p.numel() for p in agent.model.parameters() if p.requires_grad)
-    # Infer input and output size from the trunk and actor head
-    try:
-        trunk_first = agent.model.trunk[0]
-        actor_last = agent.model.actor_head[-1]
-        input_size = trunk_first.in_features if hasattr(trunk_first, 'in_features') else "Unknown"
-        output_size = actor_last.out_features if hasattr(actor_last, 'out_features') else "Unknown"
-    except Exception:
-        input_size = output_size = "Unknown"
-    logger.info(f"Model has {num_params / 1_000_000:.2f}M parameters. "
-                f"Trunk input size: {input_size}, action dim: {output_size}.")
+    actor_type = getattr(agent.model, 'actor_type', 'mlp')
+    logger.info(f"Model has {num_params / 1_000_000:.2f}M parameters (actor: {actor_type}). "
+                f"Action dim: {agent.action_dim}.")
 
     # Set up the opponent pool from config
     pool = OpponentPool(
@@ -274,7 +269,8 @@ def train(
         # Add snapshot for self-play after each update
         if run_cfg.self_play:
             snapshot_sd = copy.deepcopy(agent.model).cpu().state_dict()
-            pool.add_snapshot(snapshot_sd, f"PPO_{upd}")
+            pool.add_snapshot(snapshot_sd, f"PPO_{upd}",
+                              model_config=agent.model_config)
 
         # Evaluate performance (every N updates, and always on the last)
         is_last_update = upd == run_cfg.updates

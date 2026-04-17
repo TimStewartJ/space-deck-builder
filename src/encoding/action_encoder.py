@@ -9,6 +9,57 @@ INVALID_INDEX = 0
 END_TURN_INDEX = 1
 SKIP_INDEX = 2
 
+# Number of card-indexed action type groups in the encoding scheme.
+NUM_CARD_ACTION_TYPES = 10
+
+# Ordered names for card-indexed action types (matches encoding order).
+CARD_ACTION_TYPE_NAMES = [
+    'play_card', 'buy_card', 'attack_base', 'destroy_base',
+    'effect_nonscrap', 'effect_scrap',
+    'scrap_hand', 'scrap_discard', 'scrap_trade',
+    'discard',
+]
+
+
+def get_action_space_layout(num_cards: int) -> dict:
+    """Return the action space layout as a dict of offsets and indices.
+
+    This is the single source of truth for how action indices map to
+    semantic groups. Use this instead of hardcoding offsets.
+
+    Returns a dict with:
+        'global_indices': dict mapping global action names to their flat indices
+        'card_groups': list of (name, offset, count) for each card-indexed group
+        'num_cards': the num_cards used to compute offsets
+    """
+    off = 3  # after invalid(0), end_turn(1), skip(2)
+
+    card_groups = []
+    for name in CARD_ACTION_TYPE_NAMES[:2]:  # play_card, buy_card
+        card_groups.append((name, off, num_cards))
+        off += num_cards
+
+    # attack_player sits between buy_card and attack_base
+    attack_player_idx = off
+    off += 1
+
+    for name in CARD_ACTION_TYPE_NAMES[2:]:  # attack_base onward
+        card_groups.append((name, off, num_cards))
+        off += num_cards
+
+    global_indices = {
+        'invalid': INVALID_INDEX,
+        'end_turn': END_TURN_INDEX,
+        'skip': SKIP_INDEX,
+        'attack_player': attack_player_idx,
+    }
+
+    return {
+        'global_indices': global_indices,
+        'card_groups': card_groups,
+        'num_cards': num_cards,
+    }
+
 
 def get_action_space_size(cards: list[str]) -> int:
     """Calculate the total size of the action space based on the encoding scheme.

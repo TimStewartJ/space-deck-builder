@@ -1,8 +1,11 @@
+import math
+
 import torch
 import torch.nn as nn
 
 from src.config import ModelConfig
 from src.encoding.state_utils import unpack_state
+from src.encoding.action_encoder import get_action_space_layout
 
 
 # Zone names used by unpack_state, in a fixed order for embedding indexing.
@@ -40,6 +43,80 @@ def _build_head(input_dim: int, hidden_sizes: list[int], output_dim: int) -> nn.
     return nn.Sequential(*layers)
 
 
+class AttentionActorHead(nn.Module):
+    """Actor head using query-key dot-product scoring for card-indexed actions.
+
+    For each card-indexed action type (play, buy, attack_base, etc.), a
+    state-conditioned query is projected from the trunk output and scored
+    against dedicated action card embeddings via scaled dot product.
+    Global actions (end_turn, skip, attack_player) use a small linear layer.
+
+    All card-indexed query projections are fused into a single Linear layer
+    and scored with one batched matmul + scatter for GPU efficiency.
+    """
+
+    def __init__(self, trunk_dim: int, emb_dim: int, num_cards: int,
+                 action_dim: int):
+        super().__init__()
+        layout = get_action_space_layout(num_cards)
+
+        self.action_dim = action_dim
+        self.num_cards = num_cards
+        self.scale = 1.0 / math.sqrt(emb_dim)
+
+        # Dedicated action card embeddings — separate from state card_emb
+        # to prevent policy gradients from distorting state representations.
+        self.action_card_emb = nn.Embedding(num_cards, emb_dim)
+
+        # Global actions: linear projection for non-card-indexed actions
+        global_indices = layout['global_indices']
+        self._global_idx_list = sorted(global_indices.values())
+        self.global_head = nn.Linear(trunk_dim, len(self._global_idx_list))
+
+        # Fused query projection: one Linear produces all type queries at once.
+        # Output is reshaped to [B, num_types, emb_dim] for batched scoring.
+        card_groups = layout['card_groups']  # [(name, offset, count), ...]
+        self._num_card_types = len(card_groups)
+        self.query_proj = nn.Linear(trunk_dim, self._num_card_types * emb_dim)
+
+        # Pre-compute scatter index: maps [num_types * num_cards] → action_dim
+        scatter_idx = []
+        for name, offset, count in card_groups:
+            scatter_idx.extend(range(offset, offset + count))
+        self.register_buffer(
+            '_global_indices',
+            torch.tensor(self._global_idx_list, dtype=torch.long),
+        )
+        self.register_buffer(
+            '_scatter_idx',
+            torch.tensor(scatter_idx, dtype=torch.long),
+        )
+
+    def forward(self, h: torch.Tensor) -> torch.Tensor:
+        """Produce flat logits [B, action_dim] from trunk output h [B, trunk_dim]."""
+        B = h.shape[0]
+        logits = h.new_zeros(B, self.action_dim)
+
+        # Global action logits
+        global_logits = self.global_head(h)  # [B, num_global]
+        logits.scatter_(1, self._global_indices.unsqueeze(0).expand(B, -1),
+                        global_logits)
+
+        # Fused card-indexed action logits:
+        # 1) Single projection → all queries: [B, num_types * E] → [B, T, E]
+        # 2) Single einsum scores all types against card embeddings: [B, T, C]
+        # 3) Single scatter writes scores into the flat logits vector
+        all_queries = self.query_proj(h).view(B, self._num_card_types, -1)
+        all_scores = torch.einsum(
+            'bte,ce->btc', all_queries, self.action_card_emb.weight,
+        ) * self.scale                                      # [B, T, C]
+        all_scores = all_scores.reshape(B, -1)              # [B, T*C]
+        logits.scatter_(1, self._scatter_idx.unsqueeze(0).expand(B, -1),
+                        all_scores)
+
+        return logits
+
+
 class PPOActorCritic(nn.Module):
     """Actor-critic network with per-zone card embeddings, sum pooling,
     and a shared feature trunk.
@@ -70,6 +147,7 @@ class PPOActorCritic(nn.Module):
 
         self.num_cards = num_cards
         self.action_dim = action_dim
+        self.actor_type = cfg.actor_type
 
         # Card identity embedding and zone-position embedding
         self.card_emb = nn.Embedding(num_cards, emb_dim)
@@ -81,8 +159,15 @@ class PPOActorCritic(nn.Module):
         self.trunk = _build_trunk(combined_dim, cfg.trunk_hidden_sizes)
         trunk_out_dim = cfg.trunk_hidden_sizes[-1] if cfg.trunk_hidden_sizes else combined_dim
 
-        # Separate policy and value heads
-        self.actor_head = _build_head(trunk_out_dim, cfg.actor_head_sizes, action_dim)
+        # Policy head: MLP (flat linear) or attention (query-key dot product)
+        if self.actor_type == "attention":
+            self.actor_head = AttentionActorHead(
+                trunk_out_dim, emb_dim, num_cards, action_dim,
+            )
+        else:
+            self.actor_head = _build_head(trunk_out_dim, cfg.actor_head_sizes, action_dim)
+
+        # Value head (unchanged regardless of actor type)
         self.critic_head = _build_head(trunk_out_dim, cfg.critic_head_sizes, 1)
 
     def forward(self, x: torch.Tensor):

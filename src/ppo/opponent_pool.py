@@ -85,9 +85,17 @@ class OpponentPool:
         """Unique fixed agent type names in the pool."""
         return [name for name, _ in self.entries]
 
-    def add_snapshot(self, state_dict: dict, name: str) -> None:
-        """Add a PPO snapshot for self-play. Evicts oldest when at cap."""
-        self._snapshots.append((name, state_dict))
+    def add_snapshot(self, state_dict: dict, name: str,
+                     model_config=None) -> None:
+        """Add a PPO snapshot for self-play. Evicts oldest when at cap.
+
+        Args:
+            state_dict: model weights from the snapshot.
+            name: identifier for the snapshot (e.g. "PPO_5").
+            model_config: ModelConfig used to build the model architecture.
+                Required to reconstruct the correct actor head type.
+        """
+        self._snapshots.append((name, state_dict, model_config))
         self._snapshot_ema.setdefault(name, 0.5)
         self._snapshot_games.setdefault(name, 0)
         if len(self._snapshots) > self.snapshot_cap:
@@ -108,7 +116,7 @@ class OpponentPool:
         """
         # Games per batch that count as "full confidence" for alpha scaling
         reference_games = 10
-        snapshot_names = {name for name, _ in self._snapshots}
+        snapshot_names = {name for name, _, _ in self._snapshots}
         base_alpha = self._pfsp_ema_alpha
         for name, (wins, total) in results.items():
             if name not in snapshot_names or total == 0:
@@ -122,7 +130,7 @@ class OpponentPool:
 
     def get_pfsp_summary(self) -> dict[str, dict[str, float]]:
         """Return per-snapshot EMA win rates and normalized PFSP weights."""
-        snap_names = [n for n, _ in self._snapshots]
+        snap_names = [n for n, _, _ in self._snapshots]
         if not snap_names:
             return {}
         weights = self._pfsp_weights(snap_names)
@@ -187,16 +195,17 @@ class OpponentPool:
         weights = [w for _, w in entries]
 
         # PFSP weights frozen at factory creation time for this batch
-        snap_names = [n for n, _ in snapshots]
+        snap_names = [n for n, _, _ in snapshots]
         pfsp_w = self._pfsp_weights(snap_names)
 
         def factory() -> Agent:
             # Decide whether to use a snapshot or fixed agent
             if snapshots and random.random() < sp_ratio:
                 idx = random.choices(range(len(snapshots)), weights=pfsp_w, k=1)[0]
-                snap_name, snap_sd = snapshots[idx]
+                snap_name, snap_sd, snap_mcfg = snapshots[idx]
                 return _make_ppo_opponent(snap_name, snap_sd, card_names, device,
-                                          registry=registry)
+                                          registry=registry,
+                                          model_config=snap_mcfg)
             # Weighted sample from fixed pool
             chosen = random.choices(names, weights=weights, k=1)[0]
             return AGENT_REGISTRY[chosen](chosen.capitalize())
@@ -227,12 +236,18 @@ def _make_ppo_opponent(
     card_names: list[str],
     device: str,
     registry=None,
+    model_config=None,
 ) -> Agent:
-    """Create a fresh PPOAgent and load a snapshot state_dict."""
+    """Create a fresh PPOAgent and load a snapshot state_dict.
+
+    Args:
+        model_config: ModelConfig used to build the snapshot's architecture.
+            Must match the actor_type of the snapshot weights.
+    """
     from src.ai.ppo_agent import PPOAgent
     opp = PPOAgent(name, card_names, device=device,
                    main_device=device, simulation_device=device,
-                   registry=registry)
+                   registry=registry, model_config=model_config)
     opp.model.load_state_dict(state_dict)
     return opp
 

@@ -96,6 +96,18 @@ class ModelConfig:
     critic_head_sizes: list[int] = field(
         default_factory=lambda: [128]
     )
+    # "mlp" uses a flat MLP actor head; "attention" uses query-key dot-product
+    # scoring against dedicated action card embeddings.
+    actor_type: str = "mlp"
+
+    _VALID_ACTOR_TYPES = {"mlp", "attention"}
+
+    def __post_init__(self):
+        if self.actor_type not in self._VALID_ACTOR_TYPES:
+            raise ValueError(
+                f"Unknown actor_type {self.actor_type!r}. "
+                f"Valid: {', '.join(sorted(self._VALID_ACTOR_TYPES))}"
+            )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

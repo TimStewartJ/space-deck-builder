@@ -121,7 +121,7 @@ class InferenceServer:
 
         # Build model lookup: "training" → main model, snapshot names → clones
         models: dict[str, PPOActorCritic] = {"training": self.model}
-        for snap_name, snap_sd in self._opponent_snapshots:
+        for snap_name, snap_sd, _snap_cfg in self._opponent_snapshots:
             import copy
             opp_model = copy.deepcopy(self.model)
             opp_model.load_state_dict(snap_sd)

@@ -199,7 +199,7 @@ class TestSnapshotEviction:
         pool.add_snapshot({}, "snap_1")
         pool.add_snapshot({}, "snap_2")
         pool.add_snapshot({}, "snap_3")
-        snap_names = [n for n, _ in pool._snapshots]
+        snap_names = [n for n, _, _ in pool._snapshots]
         assert "snap_1" not in snap_names
 
 
@@ -254,7 +254,7 @@ class TestFactoryPFSPIntegration:
         # Patch _make_ppo_opponent to avoid needing real model infrastructure
         with patch("src.ppo.opponent_pool._make_ppo_opponent") as mock_make:
             from src.ai.random_agent import RandomAgent
-            mock_make.side_effect = lambda name, sd, cn, d, registry=None: RandomAgent(name)
+            mock_make.side_effect = lambda name, sd, cn, d, registry=None, model_config=None: RandomAgent(name)
             factory = pool.make_factory(card_names=["Scout"])
 
             selections = {"easy_snap": 0, "hard_snap": 0}
@@ -278,7 +278,7 @@ class TestFactoryPFSPIntegration:
 
         with patch("src.ppo.opponent_pool._make_ppo_opponent") as mock_make:
             from src.ai.random_agent import RandomAgent
-            mock_make.side_effect = lambda name, sd, cn, d, registry=None: RandomAgent(name)
+            mock_make.side_effect = lambda name, sd, cn, d, registry=None, model_config=None: RandomAgent(name)
             factory = pool.make_factory(card_names=["Scout"])
 
             selections = {"snap_A": 0, "snap_B": 0}

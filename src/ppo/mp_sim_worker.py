@@ -467,6 +467,10 @@ def _sim_worker_inner(
             model_groups.setdefault(mid, []).append(j)
 
         all_responses: dict[int, tuple] = {}
+        # Send all requests first (non-blocking), then collect responses.
+        # This allows the inference server to see requests from all workers
+        # and all model types in a single drain cycle for better GPU batching.
+        request_ids_by_mid: dict[str, tuple[int, list[int]]] = {}
         for mid, indices in model_groups.items():
             request_queue.put(InferenceRequest(
                 worker_id=worker_id,
@@ -475,14 +479,21 @@ def _sim_worker_inner(
                 masks=masks_np[indices],
                 model_id=mid,
             ))
+            request_ids_by_mid[mid] = (request_id, indices)
             request_id += 1
+
+        for _ in range(len(model_groups)):
             response: InferenceResponse = response_queue.get()
-            for k, j in enumerate(indices):
-                all_responses[j] = (
-                    int(response.action_indices[k]),
-                    response.log_probs[k],
-                    response.values[k],
-                )
+            # Match response to its model group by request_id
+            for mid, (req_id, indices) in request_ids_by_mid.items():
+                if response.request_id == req_id:
+                    for k, j in enumerate(indices):
+                        all_responses[j] = (
+                            int(response.action_indices[k]),
+                            response.log_probs[k],
+                            response.values[k],
+                        )
+                    break
 
         # Step 5: Distribute actions — record in buffer only for training
         for j, i in enumerate(pending_indices):
@@ -734,6 +745,9 @@ def _sim_worker_eval_inner(
             model_groups.setdefault(mid, []).append(j)
 
         all_responses: dict[int, int] = {}
+        # Send all requests first, then collect responses (same batching
+        # optimization as the training worker).
+        request_ids_by_mid: dict[str, tuple[int, list[int]]] = {}
         for mid, indices in model_groups.items():
             request_queue.put(InferenceRequest(
                 worker_id=worker_id,
@@ -742,10 +756,16 @@ def _sim_worker_eval_inner(
                 masks=masks_np[indices],
                 model_id=mid,
             ))
+            request_ids_by_mid[mid] = (request_id, indices)
             request_id += 1
+
+        for _ in range(len(model_groups)):
             response: InferenceResponse = response_queue.get()
-            for k, j in enumerate(indices):
-                all_responses[j] = int(response.action_indices[k])
+            for mid, (req_id, indices) in request_ids_by_mid.items():
+                if response.request_id == req_id:
+                    for k, j in enumerate(indices):
+                        all_responses[j] = int(response.action_indices[k])
+                    break
 
         for j, i in enumerate(pending_indices):
             act_idx = all_responses[j]

@@ -128,7 +128,7 @@ class MultiProcessBatchRunner:
 
         # Extract snapshot names for workers (state_dicts stay on server)
         snapshot_names = (
-            [name for name, _ in self.snapshot_state_dicts]
+            [name for name, _, _ in self.snapshot_state_dicts]
             if use_snapshots and self.snapshot_state_dicts else None
         )
 
