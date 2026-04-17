@@ -115,10 +115,15 @@ def encode_opponent_into(player: 'Player', num_cards: int, card_index_map: dict[
 
     return offset
 
-def encode_state(game_state: 'Game', is_current_player_training: bool, cards: list[str], available_actions: list['Action'] = None, card_index_map: dict[str, int] = None, state_buf: np.ndarray = None, can_buy: bool = None, has_actions: bool = None) -> torch.FloatTensor:
-    """Convert game state to fixed-length tensor.
-    
-    If state_buf is provided, it is zeroed and reused to avoid allocation.
+def encode_state(game_state: 'Game', is_current_player_training: bool, cards: list[str], available_actions: list['Action'] = None, card_index_map: dict[str, int] = None, state_buf: np.ndarray = None, can_buy: bool = None, has_actions: bool = None, return_numpy: bool = False):
+    """Convert game state to fixed-length state vector.
+
+    If state_buf is provided, it is zeroed and filled in place. When
+    return_numpy=True the filled buffer (or a freshly allocated numpy
+    array if state_buf was None) is returned without torch wrapping —
+    hot inference paths use this to skip the CPU→torch→numpy round-trip
+    when the downstream consumer is IPC/numpy. Default behavior returns
+    a fresh torch.FloatTensor so existing callers remain unchanged.
     Accepts pre-computed can_buy/has_actions flags to avoid scanning
     available_actions. Falls back to scanning if flags are not provided.
     """
@@ -166,6 +171,13 @@ def encode_state(game_state: 'Game', is_current_player_training: bool, cards: li
 
     # Opponent (asymmetric encoding — hand and deck merged into unseen zone)
     offset = encode_opponent_into(opponent, num_cards, card_index_map, state, offset)
+
+    # Return the raw numpy buffer for hot paths that feed IPC/numpy. When
+    # state_buf was supplied the caller is responsible for not mutating it
+    # before they're done with the returned array (or copying it). When
+    # state_buf is None the freshly-allocated array is returned directly.
+    if return_numpy:
+        return state
 
     # Return a copy so the buffer can be safely reused
     return torch.from_numpy(state.copy()) if state_buf is not None else torch.from_numpy(state)
