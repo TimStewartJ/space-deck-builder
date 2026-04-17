@@ -92,3 +92,31 @@ def test_sum_pool_still_works():
     logits, value = model(x)
     assert logits.shape == (2, action_dim)
     assert value.shape == (2,)
+
+
+def test_attention_state_dict_requires_matching_model_config():
+    """Regression test for the batch_runner parallel worker config threading:
+    an attention-pool state_dict can only be loaded into another attention-pool
+    model. Default-config load must fail; matching-config load must succeed."""
+    import pytest
+    cards = _card_names()
+    num_cards = len(cards)
+    state_dim = get_state_size(cards)
+    action_dim = get_action_space_size(cards)
+
+    src = PPOActorCritic(
+        state_dim, action_dim, num_cards,
+        model_config=ModelConfig(pool_type="attention"),
+    )
+    sd = src.state_dict()
+    assert any("zone_pool.zone_query" in k for k in sd.keys())
+
+    default_model = PPOActorCritic(state_dim, action_dim, num_cards)
+    with pytest.raises(RuntimeError):
+        default_model.load_state_dict(sd)
+
+    matched = PPOActorCritic(
+        state_dim, action_dim, num_cards,
+        model_config=ModelConfig(pool_type="attention"),
+    )
+    matched.load_state_dict(sd)  # should not raise

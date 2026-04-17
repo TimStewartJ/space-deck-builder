@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from typing import Callable, Optional
 from concurrent.futures import ProcessPoolExecutor
-from src.config import PPOConfig, RunConfig
+from src.config import PPOConfig, RunConfig, ModelConfig
 from src.engine.game import Game
 from src.engine.actions import ActionType, get_available_actions
 from src.ai.agent import Agent
@@ -545,11 +545,18 @@ class BatchRunner:
 
 def _worker_run_episodes(state_dict, card_names, cards, action_dim,
                          num_episodes, num_concurrent, opponent_type,
-                         opponent_state_dict, seed):
+                         opponent_state_dict, seed, model_config=None,
+                         opponent_model_config=None):
     """Top-level worker function for ProcessPoolExecutor.
-    
+
     Reconstructs model + BatchRunner in a subprocess, runs episodes on CPU,
     returns rollout tensors.
+
+    ``model_config`` (and ``opponent_model_config`` for PPO opponents) must
+    match the ModelConfig used to build the source state_dict, otherwise
+    ``load_state_dict`` will fail on shape/key mismatches (e.g. when
+    ``pool_type="attention"`` or ``actor_type="attention"`` add parameters
+    beyond the default architecture).
     """
     random.seed(seed)
     torch.manual_seed(seed)
@@ -560,16 +567,19 @@ def _worker_run_episodes(state_dict, card_names, cards, action_dim,
 
     device = torch.device("cpu")
     model = PPOActorCritic(
-        get_state_size(card_names), action_dim, len(card_names)
+        get_state_size(card_names), action_dim, len(card_names),
+        model_config=model_config,
     ).to(device)
     model.load_state_dict(state_dict)
 
     if opponent_type == "ppo":
         opp_sd = opponent_state_dict
+        opp_cfg = opponent_model_config
         def make_opponent():
             from src.ai.ppo_agent import PPOAgent
             opp = PPOAgent("Opp", card_names, device="cpu",
-                           main_device="cpu", simulation_device="cpu")
+                           main_device="cpu", simulation_device="cpu",
+                           model_config=opp_cfg)
             opp.model.load_state_dict(opp_sd)
             return opp
     else:
@@ -593,13 +603,28 @@ def run_episodes_parallel(model, card_names, cards, action_dim,
                           games_per_worker=16,
                           opponent_type="random",
                           opponent_state_dict=None,
+                          opponent_model_config=None,
                           device=torch.device("cpu")):
     """Run episodes across multiple worker processes, each with its own BatchRunner.
-    
+
     Returns merged (states, actions, old_lp, returns, advantages, masks) on the given device.
     masks is a Tensor of valid-action masks per step, or None if unavailable.
+
+    The source ``model``'s ``ModelConfig`` (read from ``model.*`` attributes
+    that mirror the config: ``actor_type``, ``pool_type``) is threaded into
+    workers so they can rebuild an architecturally-matching model before
+    loading the state_dict. Pass ``opponent_model_config`` when the PPO
+    opponent uses a different architecture.
     """
     state_dict = model.cpu().state_dict()
+
+    # Derive model_config from the source model so workers build a
+    # structurally-matching PPOActorCritic before load_state_dict.
+    model_config = ModelConfig(
+        card_emb_dim=model.card_emb.embedding_dim,
+        actor_type=getattr(model, 'actor_type', 'mlp'),
+        pool_type=getattr(model, 'pool_type', 'sum'),
+    )
 
     # Divide episodes across workers
     base = num_episodes // num_workers
@@ -614,7 +639,8 @@ def run_episodes_parallel(model, card_names, cards, action_dim,
                 _worker_run_episodes,
                 state_dict, card_names, cards, action_dim,
                 ep_count, games_per_worker, opponent_type,
-                opponent_state_dict, seed
+                opponent_state_dict, seed, model_config,
+                opponent_model_config,
             )
             for ep_count, seed in zip(episode_counts, seeds)
         ]
