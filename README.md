@@ -116,9 +116,7 @@ src/
 ├── engine/              # Game engine (Game, Player, actions)
 ├── ppo/                 # PPO training (trainer, BatchRunner, actor-critic)
 └── utils/               # Logging utilities
-scripts/
-├── benchmark.py         # Training throughput benchmarking
-└── setup_gpu.py         # GPU PyTorch installation helper
+scripts/                 # Developer tools — see scripts/README.md for the full index
 data/
 └── cards.csv            # Card definitions (Core Set)
 ```
