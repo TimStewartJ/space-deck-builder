@@ -209,6 +209,7 @@ class PPOActorCritic(nn.Module):
 
         self.num_cards = num_cards
         self.action_dim = action_dim
+        self.state_dim = state_dim
         self.actor_type = cfg.actor_type
         self.pool_type = cfg.pool_type
 

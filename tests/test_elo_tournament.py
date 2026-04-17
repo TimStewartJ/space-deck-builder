@@ -90,15 +90,18 @@ class TestBuildParticipants:
             build_participants([], agent_types=["invalid_agent"])
 
     @patch("src.ppo.elo_tournament.load_checkpoint")
-    def test_mismatched_configs_rejected(self, mock_load):
+    def test_mixed_configs_allowed(self, mock_load):
+        """Cross-architecture tournaments are the whole point of ELO."""
         cfg_a = ModelConfig(card_emb_dim=32)
         cfg_b = ModelConfig(card_emb_dim=64)
         mock_load.side_effect = [
             self._mock_checkpoint(cfg_a),
             self._mock_checkpoint(cfg_b),
         ]
-        with pytest.raises(ValueError, match="Model config mismatch"):
-            build_participants(["a.pth", "b.pth"])
+        participants = build_participants(["a.pth", "b.pth"])
+        assert len(participants) == 2
+        assert participants[0].model_config.card_emb_dim == 32
+        assert participants[1].model_config.card_emb_dim == 64
 
 
 # ---------------------------------------------------------------------------
@@ -120,13 +123,13 @@ class TestValidateCheckpoints:
         ]
         _validate_checkpoints(cps)
 
-    def test_mismatched_configs_fail(self):
+    def test_mismatched_configs_allowed(self):
+        """Different architectures are allowed — ELO measures relative strength."""
         cps = [
             CheckpointParticipant("a", "a.pth", {}, ModelConfig(card_emb_dim=32)),
             CheckpointParticipant("b", "b.pth", {}, ModelConfig(card_emb_dim=64)),
         ]
-        with pytest.raises(ValueError, match="Model config mismatch"):
-            _validate_checkpoints(cps)
+        _validate_checkpoints(cps)  # no exception
 
 
 # ---------------------------------------------------------------------------
@@ -230,7 +233,12 @@ class TestPlayBuiltinGames:
 class TestExtractLabel:
     """Label extraction from checkpoint filenames."""
 
-    def test_extracts_upd_number(self):
+    def test_extracts_upd_with_timestamp(self):
+        # Full ppo_trainer pattern: <date>_<time>_upd<N>_wins<W>.
+        assert _extract_label("models/ppo_agent_0415_0348_upd200_wins95.pth") == "0415_0348_upd200"
+
+    def test_extracts_upd_number_only_when_no_timestamp(self):
+        # Only one numeric prefix → not enough to form a timestamp; fall back to upd tag.
         assert _extract_label("models/ppo_agent_0415_upd50_wins65.pth") == "upd50"
 
     def test_fallback_to_stem(self):

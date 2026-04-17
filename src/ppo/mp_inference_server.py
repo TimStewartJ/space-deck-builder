@@ -421,14 +421,26 @@ class InferenceServer:
         self.model.eval()
 
         # Build model lookup: training model + optional opponent snapshot clones.
-        # Snapshots come as (name, state_dict, model_config) tuples from the
-        # opponent pool; model_config is unused here since we deepcopy the
-        # training model's architecture.
+        # Snapshots are (name, state_dict, model_config) tuples. When a snapshot
+        # carries its own ModelConfig (e.g. cross-architecture Elo pairings) we
+        # build a fresh PPOActorCritic with that config so load_state_dict hits a
+        # structurally-matching model. If model_config is None we fall back to a
+        # deepcopy of the training model — safe when architectures agree.
         models: dict[str, PPOActorCritic] = {"training": self.model}
         for snap in self._opponent_snapshots:
-            snap_name, snap_sd = snap[0], snap[1]
-            import copy
-            opp_model = copy.deepcopy(self.model)
+            snap_name = snap[0]
+            snap_sd = snap[1]
+            snap_cfg = snap[2] if len(snap) > 2 else None
+            if snap_cfg is not None:
+                opp_model = PPOActorCritic(
+                    state_dim=self.model.state_dim,
+                    action_dim=self.model.action_dim,
+                    num_cards=self.model.num_cards,
+                    model_config=snap_cfg,
+                )
+            else:
+                import copy
+                opp_model = copy.deepcopy(self.model)
             opp_model.load_state_dict(snap_sd)
             opp_model.to(self.device)
             opp_model.eval()

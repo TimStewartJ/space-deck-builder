@@ -56,7 +56,7 @@ class MultiProcessBatchRunner:
         num_workers: int = 4,
         ppo_config: PPOConfig | None = None,
         registry: CardRegistry | None = None,
-        snapshot_state_dicts: list[tuple[str, dict]] | None = None,
+        snapshot_state_dicts: list[tuple[str, dict, "ModelConfig | None"]] | None = None,
         self_play_ratio: float = 0.5,
         pfsp_weights: list[float] | None = None,
     ):

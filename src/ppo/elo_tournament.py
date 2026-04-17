@@ -158,33 +158,47 @@ def compute_mle_ratings(
 def _extract_label(path: str) -> str:
     """Build a short human-readable label from a checkpoint filename.
 
-    Extracts the update number if present, otherwise uses the filename stem.
-    E.g. 'models/ppo_agent_0415_0348_upd200_wins95.pth' -> 'upd200'
+    Prefers an ``upd<N>`` suffix combined with the training-run timestamp
+    (``MMDD_HHMM``) so labels are unique when comparing checkpoints from
+    different runs (e.g. a sum-pool sweep vs an attention-pool sweep). Falls
+    back to the bare ``upd<N>`` tag, and finally to the filename stem.
+
+    Examples:
+        models/ppo_agent_0416_2308_upd30_wins200.pth -> '0416_2308_upd30'
+        models/ppo_agent_upd30.pth                   -> 'upd30'
+        models/custom_name.pth                       -> 'custom_name'
     """
     stem = os.path.splitext(os.path.basename(path))[0]
-    for part in stem.split("_"):
-        if part.startswith("upd"):
-            return part
+    parts = stem.split("_")
+    upd = next((p for p in parts if p.startswith("upd")), None)
+    # Pattern from ppo_trainer: ppo_agent_<MMDD>_<HHMM>_upd<N>_wins<W>
+    # The two tokens immediately preceding 'upd' are the date/time stamp.
+    if upd is not None:
+        idx = parts.index(upd)
+        if idx >= 2 and parts[idx - 1].isdigit() and parts[idx - 2].isdigit():
+            return f"{parts[idx - 2]}_{parts[idx - 1]}_{upd}"
+        return upd
     return stem
 
 
 def _validate_checkpoints(
     participants: list[CheckpointParticipant],
 ) -> None:
-    """Verify all checkpoint participants share compatible model configs.
+    """Placeholder for cross-checkpoint compatibility validation.
 
-    Raises ValueError on mismatch so we fail fast before the tournament.
+    Participants may have different model architectures (e.g. sum vs attention
+    pooling, mlp vs attention actor, different hidden sizes or card_emb_dims).
+    Every ``ModelConfig`` field is purely internal to a single model's forward
+    pass — runtime compatibility across participants is determined by the
+    shared card set (which fixes state_dim, action_dim, and num_cards), not by
+    ModelConfig. Each participant's model is instantiated from its own
+    ``model_config`` in ``_make_opponent_factory``, so heterogeneous
+    architectures play correctly. Comparing them is the whole point of ELO.
+
+    Kept as an extension point for future checks that are genuinely required
+    for play (e.g. divergent card sets / state encodings).
     """
-    if len(participants) < 2:
-        return
-    ref = participants[0]
-    for p in participants[1:]:
-        if p.model_config != ref.model_config:
-            raise ValueError(
-                f"Model config mismatch between {ref.path} and {p.path}:\n"
-                f"  {ref.path}: {ref.model_config}\n"
-                f"  {p.path}: {p.model_config}"
-            )
+    return
 
 
 def _make_opponent_factory(
@@ -309,7 +323,7 @@ def _play_ppo_vs_ppo(
         num_concurrent=per_worker_concurrent,
         num_workers=num_workers,
         registry=registry,
-        snapshot_state_dicts=[(ckpt_b.label, ckpt_b.state_dict)],
+        snapshot_state_dicts=[(ckpt_b.label, ckpt_b.state_dict, ckpt_b.model_config)],
         self_play_ratio=1.0,
     )
 
