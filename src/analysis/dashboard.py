@@ -1025,3 +1025,299 @@ function renderStrategy(el) {
 // Render the overview tab on load
 renderTab('overview');
 """
+
+
+# ── Comparative Dashboard (Elo Tournament) ──────────────────────────
+
+def generate_comparative_dashboard(
+    replay_paths: list[str],
+    elo_results: list | None = None,
+    output_path: str | None = None,
+) -> str:
+    """Generate a comparative dashboard from multiple replay files.
+
+    Designed for Elo tournament output where each replay file represents
+    one head-to-head pairing between checkpoints.
+
+    Args:
+        replay_paths: List of gzipped JSONL replay file paths.
+        elo_results: Optional EloResult list for the leaderboard.
+        output_path: Where to write the HTML.
+
+    Returns:
+        The output path written.
+    """
+    all_replays = []
+    card_names = None
+    for path in replay_paths:
+        meta, replays = ReplayCollector.load(path)
+        if card_names is None:
+            card_names = meta["card_names"]
+        all_replays.extend(replays)
+
+    if not all_replays or card_names is None:
+        print("No replays found -- skipping comparative dashboard.")
+        return None
+
+    num_cards = len(card_names)
+    card_factions = _load_card_factions(card_names)
+    stats = _compute_comparative_stats(all_replays, card_names, num_cards, card_factions, elo_results)
+    html_content = _build_comparative_html(stats)
+
+    if output_path is None:
+        output_path = os.path.join(os.path.dirname(replay_paths[0]), "tournament_dashboard.html")
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(html_content)
+
+    return output_path
+
+
+def _compute_comparative_stats(
+    replays: list[GameReplay], card_names: list[str], num_cards: int,
+    card_factions: dict[str, str], elo_results: list | None,
+) -> dict:
+    """Compute comparative metrics across multiple model pairings."""
+    stats = {}
+
+    if elo_results:
+        stats["elo"] = [
+            {"name": r.name, "elo": round(r.elo), "wins": r.wins,
+             "losses": r.losses, "games": r.games_played,
+             "win_rate": round(r.win_rate * 100, 1)}
+            for r in elo_results
+        ]
+    else:
+        stats["elo"] = []
+
+    models = sorted(set(r.player_model for r in replays if r.player_model))
+    h2h = {}
+    for r in replays:
+        if not r.player_model or not r.opponent_model:
+            continue
+        key = r.player_model + "_vs_" + r.opponent_model
+        if key not in h2h:
+            h2h[key] = {"player": r.player_model, "opponent": r.opponent_model, "wins": 0, "total": 0}
+        h2h[key]["total"] += 1
+        if r.winner == "PPO":
+            h2h[key]["wins"] += 1
+
+    matrix = {}
+    for data in h2h.values():
+        p, o = data["player"], data["opponent"]
+        wr = data["wins"] / data["total"] * 100 if data["total"] > 0 else 50
+        matrix[p + "_vs_" + o] = round(wr, 1)
+    stats["h2h"] = {"models": models, "matrix": matrix, "pairings": list(h2h.values())}
+
+    # Per-model buy priorities and value reactions
+    model_buys = defaultdict(lambda: defaultdict(lambda: {"bought": 0, "affordable": 0}))
+    model_value_reactions = defaultdict(lambda: defaultdict(list))
+    for r in replays:
+        model = r.player_model or "unknown"
+        prev_val = None
+        for d in r.decisions:
+            for cid in d.buyable_card_ids:
+                if 0 <= cid < num_cards:
+                    model_buys[model][card_names[cid]]["affordable"] += 1
+            if d.action_type == "BUY_CARD" and d.action_card_id is not None and 0 <= d.action_card_id < num_cards:
+                name = card_names[d.action_card_id]
+                model_buys[model][name]["bought"] += 1
+                if prev_val is not None:
+                    model_value_reactions[model][name].append(d.value_estimate - prev_val)
+            prev_val = d.value_estimate
+
+    buy_rates = {}
+    for model, cards_data in model_buys.items():
+        rates = {}
+        for name, data in cards_data.items():
+            if data["affordable"] >= 5:
+                rates[name] = round(data["bought"] / data["affordable"] * 100, 1)
+        buy_rates[model] = rates
+    stats["buy_rates"] = buy_rates
+
+    value_react = {}
+    for model, card_deltas in model_value_reactions.items():
+        reactions = {}
+        for name, deltas in card_deltas.items():
+            if len(deltas) >= 3:
+                reactions[name] = round(sum(deltas) / len(deltas), 4)
+        value_react[model] = reactions
+    stats["value_reactions"] = value_react
+
+    # Per-model entropy
+    model_entropy = defaultdict(list)
+    for r in replays:
+        model = r.player_model or "unknown"
+        for d in r.decisions:
+            model_entropy[model].append(d.policy_entropy)
+    stats["entropy"] = {
+        model: round(sum(vals) / len(vals), 4) if vals else 0
+        for model, vals in model_entropy.items()
+    }
+
+    # Per-model faction mix
+    faction_labels = ["Blob", "Machine Cult", "Star Empire", "Trade Federation", "Unaligned"]
+    model_factions = defaultdict(lambda: {f: 0 for f in faction_labels})
+    model_buy_counts = defaultdict(int)
+    for r in replays:
+        model = r.player_model or "unknown"
+        for d in r.decisions:
+            if d.action_type == "BUY_CARD" and d.action_card_id is not None and 0 <= d.action_card_id < num_cards:
+                faction = card_factions.get(card_names[d.action_card_id], "Unaligned")
+                if faction in model_factions[model]:
+                    model_factions[model][faction] += 1
+                else:
+                    model_factions[model]["Unaligned"] += 1
+                model_buy_counts[model] += 1
+
+    faction_mix = {}
+    for model in models:
+        total = model_buy_counts.get(model, 1)
+        faction_mix[model] = {f: round(model_factions[model].get(f, 0) / total * 100, 1) for f in faction_labels}
+    stats["faction_mix"] = faction_mix
+    stats["faction_labels"] = faction_labels
+    stats["models"] = models
+
+    return stats
+
+
+def _build_comparative_html(stats: dict) -> str:
+    """Build the comparative dashboard HTML."""
+    stats_json = json.dumps(stats, default=str).replace("</", r"<\/")
+    num_models = len(stats.get("models", []))
+
+    return f'''<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Star Realms AI -- Elo Tournament Dashboard</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+* {{ margin: 0; padding: 0; box-sizing: border-box; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; }}
+.header {{ background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); padding: 24px 32px; border-bottom: 1px solid #334155; }}
+.header h1 {{ font-size: 24px; font-weight: 700; color: #f8fafc; }}
+.header .subtitle {{ color: #94a3b8; font-size: 14px; margin-top: 4px; }}
+.tabs {{ display: flex; gap: 0; padding: 0 32px; border-bottom: 1px solid #334155; background: #1e293b; }}
+.tab {{ padding: 12px 20px; cursor: pointer; color: #94a3b8; font-size: 14px; font-weight: 500; border-bottom: 2px solid transparent; }}
+.tab:hover {{ color: #e2e8f0; }}
+.tab.active {{ color: #60a5fa; border-bottom-color: #60a5fa; }}
+.tab-content {{ display: none; padding: 24px 32px; }}
+.tab-content.active {{ display: block; }}
+.chart-row {{ display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }}
+.chart-box {{ background: #1e293b; border-radius: 12px; padding: 16px; flex: 1; min-width: 400px; border: 1px solid #334155; }}
+.chart-box.full {{ min-width: 100%; }}
+.chart-box h3 {{ color: #f8fafc; font-size: 15px; margin-bottom: 12px; font-weight: 600; }}
+.chart-box .note {{ color: #64748b; font-size: 12px; margin-bottom: 8px; }}
+table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+th {{ text-align: left; padding: 8px 12px; color: #94a3b8; border-bottom: 1px solid #334155; font-weight: 600; }}
+td {{ padding: 8px 12px; border-bottom: 1px solid #1e293b; }}
+tr:hover td {{ background: rgba(96,165,250,0.05); }}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>&#127942; Star Realms AI -- Elo Tournament Dashboard</h1>
+  <div class="subtitle">Comparative analysis across {num_models} checkpoints</div>
+</div>
+<div class="tabs">
+  <div class="tab active" onclick="switchTab('elo', this)">Elo Overview</div>
+  <div class="tab" onclick="switchTab('evolution', this)">Strategy Evolution</div>
+  <div class="tab" onclick="switchTab('h2h', this)">Head-to-Head</div>
+  <div class="tab" onclick="switchTab('changes', this)">What Changed</div>
+</div>
+<div id="tab-elo" class="tab-content active"></div>
+<div id="tab-evolution" class="tab-content"></div>
+<div id="tab-h2h" class="tab-content"></div>
+<div id="tab-changes" class="tab-content"></div>
+<script id="comp-data" type="application/json">{stats_json}</script>
+<script>
+{_COMPARATIVE_JS}
+</script>
+</body>
+</html>'''
+
+
+_COMPARATIVE_JS = r"""
+var S = JSON.parse(document.getElementById('comp-data').textContent);
+var plotBg = '#1e293b', plotPaper = '#1e293b';
+var plotFont = { color: '#e2e8f0', family: '-apple-system, sans-serif' };
+var plotGrid = { color: '#334155' };
+var plotLayout = { paper_bgcolor: plotPaper, plot_bgcolor: plotBg, font: plotFont, margin: {l:50,r:20,t:40,b:40}, xaxis: {gridcolor: plotGrid}, yaxis: {gridcolor: plotGrid} };
+var cardLayout = { paper_bgcolor: plotPaper, plot_bgcolor: plotBg, font: plotFont, margin: {l:160,r:20,t:40,b:40}, xaxis: {gridcolor: plotGrid}, yaxis: {gridcolor: plotGrid} };
+var plotConfig = { responsive: true, displayModeBar: false };
+
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
+  document.querySelectorAll('.tab-content').forEach(function(t){t.classList.remove('active')});
+  document.getElementById('tab-' + name).classList.add('active');
+  el.classList.add('active');
+  if (!document.getElementById('tab-' + name).dataset.rendered) { renderTab(name); document.getElementById('tab-' + name).dataset.rendered = '1'; }
+}
+function renderTab(name) {
+  var el = document.getElementById('tab-' + name);
+  switch(name) { case 'elo': renderElo(el); break; case 'evolution': renderEvolution(el); break; case 'h2h': renderH2H(el); break; case 'changes': renderChanges(el); break; }
+}
+
+function renderElo(el) {
+  var h = '<div class="chart-row"><div class="chart-box"><h3>Elo Leaderboard</h3>';
+  if (S.elo.length > 0) {
+    h += '<table><tr><th>Rank</th><th>Model</th><th>Elo</th><th>W</th><th>L</th><th>Win%</th></tr>';
+    S.elo.forEach(function(r, i) { h += '<tr><td>'+(i+1)+'</td><td>'+r.name+'</td><td><b>'+r.elo+'</b></td><td>'+r.wins+'</td><td>'+r.losses+'</td><td>'+r.win_rate+'%</td></tr>'; });
+    h += '</table>';
+  }
+  h += '</div><div class="chart-box"><h3>Elo Ratings</h3><div id="elo-bar"></div></div></div>';
+  h += '<div class="chart-row"><div class="chart-box full"><h3>Head-to-Head Win Rate Matrix</h3><div id="elo-matrix"></div></div></div>';
+  el.innerHTML = h;
+  if (S.elo.length > 0) {
+    Plotly.newPlot('elo-bar', [{x:S.elo.map(function(r){return r.name}), y:S.elo.map(function(r){return r.elo}), type:'bar', marker:{color:'#60a5fa'}, text:S.elo.map(function(r){return r.elo}), textposition:'auto'}], Object.assign({}, plotLayout, {yaxis:{gridcolor:plotGrid, title:'Elo Rating'}}), plotConfig);
+  }
+  var models = S.h2h.models;
+  if (models.length >= 2) {
+    var z = models.map(function(p){return models.map(function(o){if(p===o) return 50; var key=p+'_vs_'+o; return S.h2h.matrix[key]!==undefined?S.h2h.matrix[key]:null;});});
+    var text = z.map(function(row){return row.map(function(v){return v!==null?v+'%':'-';});});
+    Plotly.newPlot('elo-matrix', [{z:z, x:models, y:models, type:'heatmap', colorscale:[[0,'#f87171'],[0.5,'#1e293b'],[1,'#4ade80']], zmin:0, zmax:100, text:text, texttemplate:'%{text}', textfont:{size:12}, colorbar:{title:'Win Rate %'}}], Object.assign({}, cardLayout, {yaxis:{gridcolor:plotGrid, autorange:'reversed'}, height:Math.max(300, models.length*50+100)}), plotConfig);
+  }
+}
+
+function renderEvolution(el) {
+  el.innerHTML = '<div class="chart-row"><div class="chart-box full"><h3>Faction Mix by Checkpoint</h3><p class="note">How the purchasing faction distribution evolves across training</p><div id="ev-factions"></div></div></div><div class="chart-row"><div class="chart-box full"><h3>Mean Policy Entropy by Checkpoint</h3><p class="note">Lower = more decisive. Too low may indicate policy collapse.</p><div id="ev-entropy"></div></div></div>';
+  var models=S.models, fm=S.faction_mix, fLabels=S.faction_labels;
+  var fColors={'Blob':'#4ade80','Machine Cult':'#f87171','Star Empire':'#eab308','Trade Federation':'#60a5fa','Unaligned':'#94a3b8'};
+  if (models.length>0 && Object.keys(fm).length>0) {
+    var traces = fLabels.map(function(f){return {x:models, y:models.map(function(m){return fm[m]?fm[m][f]||0:0;}), name:f, type:'bar', marker:{color:fColors[f]||'#94a3b8'}};});
+    Plotly.newPlot('ev-factions', traces, Object.assign({}, plotLayout, {barmode:'stack', yaxis:{gridcolor:plotGrid, title:'Faction Mix %'}}), plotConfig);
+  }
+  var ent=S.entropy;
+  if (models.length>0) { Plotly.newPlot('ev-entropy', [{x:models, y:models.map(function(m){return ent[m]||0;}), type:'bar', marker:{color:'#a78bfa'}, text:models.map(function(m){return (ent[m]||0).toFixed(3);}), textposition:'auto'}], Object.assign({}, plotLayout, {yaxis:{gridcolor:plotGrid, title:'Mean Entropy'}}), plotConfig); }
+}
+
+function renderH2H(el) {
+  el.innerHTML = '<div class="chart-row"><div class="chart-box full"><h3>Pairwise Results</h3><div id="h2h-bars"></div></div></div>';
+  var p=S.h2h.pairings;
+  if (p.length>0) {
+    var labels=p.map(function(x){return x.player+' vs '+x.opponent;}), wr=p.map(function(x){return x.total>0?(x.wins/x.total*100):50;});
+    Plotly.newPlot('h2h-bars', [{y:labels, x:wr, type:'bar', orientation:'h', marker:{color:wr.map(function(r){return r>=50?'#4ade80':'#f87171';})}, text:p.map(function(x){return x.wins+'/'+x.total;}), textposition:'auto'}], Object.assign({}, cardLayout, {xaxis:{gridcolor:plotGrid, title:'Win Rate %', range:[0,100]}, yaxis:{gridcolor:plotGrid, autorange:'reversed'}, shapes:[{type:'line',x0:50,x1:50,y0:-0.5,y1:p.length-0.5,line:{color:'#64748b',width:1,dash:'dot'}}], height:Math.max(300,p.length*35)}), plotConfig);
+  }
+}
+
+function renderChanges(el) {
+  el.innerHTML = '<div class="chart-row"><div class="chart-box full"><h3>Buy Priority Shifts</h3><p class="note">Cards with the biggest buy rate change between earliest and latest checkpoint</p><div id="ch-buyshift"></div></div></div><div class="chart-row"><div class="chart-box full"><h3>Value Reaction Shifts</h3><p class="note">How the critic changed its assessment of each card</p><div id="ch-valueshift"></div></div></div>';
+  var models=S.models;
+  if (models.length<2) { el.innerHTML+='<p style="color:#94a3b8;padding:20px;">Need at least 2 checkpoints.</p>'; return; }
+  var first=models[0], last=models[models.length-1], br=S.buy_rates;
+  if (br[first]&&br[last]) {
+    var allCards=Object.keys(Object.assign({}, br[first], br[last]));
+    var shifts=allCards.map(function(c){var r1=br[first][c]||0, r2=br[last][c]||0; return {card:c,early:r1,late:r2,delta:r2-r1};}).filter(function(s){return Math.abs(s.delta)>2;}).sort(function(a,b){return Math.abs(b.delta)-Math.abs(a.delta);}).slice(0,15);
+    if (shifts.length>0) { Plotly.newPlot('ch-buyshift', [{y:shifts.map(function(s){return s.card}),x:shifts.map(function(s){return s.early}),name:first,type:'bar',orientation:'h',marker:{color:'#64748b'}},{y:shifts.map(function(s){return s.card}),x:shifts.map(function(s){return s.late}),name:last,type:'bar',orientation:'h',marker:{color:'#60a5fa'}}], Object.assign({}, cardLayout, {barmode:'group',xaxis:{gridcolor:plotGrid,title:'Buy Rate %'},yaxis:{gridcolor:plotGrid,autorange:'reversed'},height:Math.max(400,shifts.length*32)}), plotConfig); }
+  }
+  var vr=S.value_reactions;
+  if (vr[first]&&vr[last]) {
+    var vrCards=Object.keys(Object.assign({}, vr[first], vr[last]));
+    var vrShifts=vrCards.map(function(c){var v1=vr[first][c]||0,v2=vr[last][c]||0;return {card:c,early:v1,late:v2,delta:v2-v1};}).filter(function(s){return Math.abs(s.delta)>0.001;}).sort(function(a,b){return Math.abs(b.delta)-Math.abs(a.delta);}).slice(0,15);
+    if (vrShifts.length>0) { Plotly.newPlot('ch-valueshift', [{y:vrShifts.map(function(s){return s.card}),x:vrShifts.map(function(s){return s.early}),name:first,type:'bar',orientation:'h',marker:{color:'#64748b'}},{y:vrShifts.map(function(s){return s.card}),x:vrShifts.map(function(s){return s.late}),name:last,type:'bar',orientation:'h',marker:{color:'#60a5fa'}}], Object.assign({}, cardLayout, {barmode:'group',xaxis:{gridcolor:plotGrid,title:'Avg Value Delta'},yaxis:{gridcolor:plotGrid,autorange:'reversed'},height:Math.max(400,vrShifts.length*32)}), plotConfig); }
+  }
+}
+renderTab('elo');
+"""

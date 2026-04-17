@@ -57,6 +57,9 @@ class GameReplay:
     total_turns: int
     opponent_type: str
     decisions: list[DecisionRecord] = field(default_factory=list)
+    # Model identity for comparative analysis (set during Elo tournaments)
+    player_model: str = ""
+    opponent_model: str = ""
 
 
 class ReplayCollector:
@@ -157,6 +160,8 @@ class ReplayCollector:
         winner: str,
         total_turns: int,
         opponent_type: str,
+        player_model: str = "",
+        opponent_model: str = "",
     ) -> None:
         """Finalize the game in this slot and add it to completed replays."""
         decisions = self._active.pop(slot, [])
@@ -168,6 +173,8 @@ class ReplayCollector:
             total_turns=total_turns,
             opponent_type=opponent_type,
             decisions=decisions,
+            player_model=player_model,
+            opponent_model=opponent_model,
         )
         self.replays.append(replay)
         self._next_game_id += 1
