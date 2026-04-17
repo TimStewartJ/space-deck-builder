@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Space Deck Builder &mdash; Architecture Visualizer</title>
+<style>
+:root { --bg: #0d1117; --surface: #161b22; --border: #30363d; --text: #e6edf3;
+  --accent: #58a6ff; --green: #3fb950; --purple: #bc8cff; --orange: #f0883e;
+  --red: #f85149; --yellow: #d29922; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.5; }
+.tabs { display: flex; gap: 4px; padding: 16px 24px 0; background: var(--surface);
+  border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
+.tab { padding: 10px 20px; cursor: pointer; border: 1px solid transparent;
+  border-bottom: none; border-radius: 8px 8px 0 0; background: transparent;
+  color: var(--text); font-size: 14px; font-weight: 500; transition: all .2s; }
+.tab:hover { background: rgba(88,166,255,.1); }
+.tab.active { background: var(--bg); border-color: var(--border); color: var(--accent); }
+.panel { display: none; padding: 32px 24px; max-width: 1100px; margin: 0 auto; }
+.panel.active { display: block; }
+h2 { color: var(--accent); margin-bottom: 16px; font-size: 22px; }
+h3 { color: var(--purple); margin: 20px 0 10px; font-size: 17px; }
+p, li { font-size: 14px; margin-bottom: 8px; }
+ul { padding-left: 20px; }
+.arch-diagram { background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 24px; margin: 16px 0; overflow-x: auto; }
+.layer { display: flex; align-items: center; justify-content: center; gap: 8px;
+  margin: 8px 0; flex-wrap: wrap; }
+.box { padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+  text-align: center; min-width: 100px; border: 2px solid; }
+.box.input { background: rgba(63,185,80,.15); border-color: var(--green); color: var(--green); }
+.box.embed { background: rgba(188,140,255,.15); border-color: var(--purple); color: var(--purple); }
+.box.trunk { background: rgba(88,166,255,.15); border-color: var(--accent); color: var(--accent); }
+.box.head { background: rgba(240,136,62,.15); border-color: var(--orange); color: var(--orange); }
+.box.output { background: rgba(248,81,73,.15); border-color: var(--red); color: var(--red); }
+.box.attn { background: rgba(210,153,34,.15); border-color: var(--yellow); color: var(--yellow); }
+.arrow { color: var(--border); font-size: 20px; font-weight: bold; }
+.arrow-down { text-align: center; color: var(--border); font-size: 24px; margin: 4px 0; }
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin: 16px 0; }
+.compare > div { background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 20px; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px;
+  font-weight: 700; margin-right: 6px; }
+.tag.pro { background: rgba(63,185,80,.2); color: var(--green); }
+.tag.con { background: rgba(248,81,73,.2); color: var(--red); }
+.tag.info { background: rgba(88,166,255,.2); color: var(--accent); }
+.interactive { margin: 16px 0; }
+.interactive label { font-size: 13px; margin-right: 12px; }
+.interactive input[type=range] { width: 120px; vertical-align: middle; }
+.interactive select { background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  padding: 4px 8px; border-radius: 4px; }
+.dim-display { font-family: monospace; font-size: 13px; color: var(--accent);
+  background: var(--surface); padding: 12px; border-radius: 8px; border: 1px solid var(--border);
+  margin: 8px 0; }
+@media (max-width: 768px) { .compare { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab(0)">1. Current Model</div>
+  <div class="tab" onclick="showTab(1)">2. Proposed Attention</div>
+  <div class="tab" onclick="showTab(2)">3. Game AI Architectures</div>
+  <div class="tab" onclick="showTab(3)">4. Attention in LLMs</div>
+</div>
+
+<div class="panel active" id="panel-0">
+<h2>Current Model: PPOActorCritic</h2>
+<p>A shared-trunk actor-critic with per-zone card embeddings and sum pooling.</p>
+
+<div class="interactive">
+  <label>Cards (C): <input type="range" min="20" max="60" value="39" id="numCards" oninput="updateDims()">
+    <span id="numCardsVal">39</span></label>
+  <label>Emb dim (E): <select id="embDim" onchange="updateDims()">
+    <option value="16">16</option><option value="32" selected>32</option><option value="64">64</option>
+  </select></label>
+</div>
+<div class="dim-display" id="dimDisplay"></div>
+
+<div class="arch-diagram">
+  <h3 style="text-align:center; margin-bottom: 12px;">Forward Pass</h3>
+
+  <div class="layer">
+    <div class="box input">Game State<br><small>[B, state_dim]</small></div>
+  </div>
+  <div class="arrow-down">&darr; unpack_state()</div>
+
+  <div class="layer">
+    <div class="box input" style="min-width:140px">8 Zone Vectors<br><small>[B, C] each</small></div>
+    <div class="box input">4 Flags<br><small>[B, 4]</small></div>
+    <div class="box input">5 Train Res<br><small>[B, 5]</small></div>
+    <div class="box input">6 Opp Res<br><small>[B, 6]</small></div>
+  </div>
+  <div class="arrow-down">&darr;</div>
+
+  <div class="layer">
+    <div class="box embed">card_emb<br><small>[C, E]</small></div>
+    <div class="arrow">+</div>
+    <div class="box embed">zone_emb<br><small>[8, E]</small></div>
+  </div>
+  <div class="arrow-down">&darr; presence &times; (card + zone) &rarr; sum</div>
+
+  <div class="layer">
+    <div class="box embed">8 Pooled Zones<br><small>[B, 8&middot;E]</small></div>
+    <div class="arrow">&Vert;</div>
+    <div class="box input">Numeric<br><small>[B, 15]</small></div>
+  </div>
+  <div class="arrow-down">&darr; concat &rarr; [B, 8&middot;E + 15]</div>
+
+  <div class="layer">
+    <div class="box trunk">Trunk: Linear(271&rarr;256) &rarr; ReLU<br>&rarr; Linear(256&rarr;256) &rarr; ReLU</div>
+  </div>
+  <div class="arrow-down">&darr; shared hidden [B, 256]</div>
+
+  <div class="layer">
+    <div class="box head">Actor Head<br><small>Linear(256&rarr;128)&rarr;ReLU&rarr;Linear(128&rarr;A)</small></div>
+    <div class="box head">Critic Head<br><small>Linear(256&rarr;128)&rarr;ReLU&rarr;Linear(128&rarr;1)</small></div>
+  </div>
+  <div class="arrow-down">&darr;</div>
+
+  <div class="layer">
+    <div class="box output">Logits [B, A]<br><small>&rarr; masked softmax &rarr; &pi;(a|s)</small></div>
+    <div class="box output">Value [B]<br><small>&rarr; V(s)</small></div>
+  </div>
+</div>
+
+<h3>Key Design Choices</h3>
+<ul>
+  <li><span class="tag pro">PRO</span> Card embeddings are <b>shared</b> across zones &mdash; same card in hand vs trade row uses the same identity vector plus a zone offset.</li>
+  <li><span class="tag pro">PRO</span> Sum pooling is permutation-invariant (card order doesn't matter in a zone).</li>
+  <li><span class="tag con">CON</span> After sum pooling, individual card identities are lost &mdash; the actor head can't attend to specific cards when choosing actions.</li>
+  <li><span class="tag con">CON</span> Actor outputs a flat logit vector over <em>all possible actions</em>, most of which are masked out. No structural link between &ldquo;buy card X&rdquo; and &ldquo;card X is in trade row.&rdquo;</li>
+</ul>
+</div>
+<div class="panel" id="panel-1">
+<h2>Proposed: Attention-Based Actor Head</h2>
+<p>Replace the flat MLP actor head with query-key dot products. The core idea: for card-indexed actions
+(play, buy, attack_base), the network <b>attends to specific card embeddings</b> rather than mapping
+through a giant linear layer.</p>
+
+<div class="compare">
+  <div>
+    <h3 style="color:var(--orange)">Before (Current)</h3>
+    <div class="arch-diagram" style="margin:8px 0; padding:12px">
+      <div class="layer"><div class="box trunk">trunk h [256]</div></div>
+      <div class="arrow-down">&darr;</div>
+      <div class="layer"><div class="box head">Linear(256&rarr;128)&rarr;ReLU</div></div>
+      <div class="arrow-down">&darr;</div>
+      <div class="layer"><div class="box head">Linear(128&rarr;A)</div></div>
+      <div class="arrow-down">&darr;</div>
+      <div class="layer"><div class="box output">flat logits [A &asymp; 400+]</div></div>
+    </div>
+    <p><span class="tag con">CON</span> The weight matrix for &ldquo;buy card 7&rdquo; is completely unrelated to
+    &ldquo;buy card 8&rdquo;. No weight sharing across card slots.</p>
+    <p><span class="tag con">CON</span> Adding a new card means the output layer changes size &mdash; retrain from scratch.</p>
+  </div>
+  <div>
+    <h3 style="color:var(--yellow)">After (Attention)</h3>
+    <div class="arch-diagram" style="margin:8px 0; padding:12px">
+      <div class="layer">
+        <div class="box trunk">trunk h [256]</div>
+        <div class="box embed">card embs [C, E]</div>
+      </div>
+      <div class="arrow-down">&darr;</div>
+      <div class="layer">
+        <div class="box attn">query = W_q &middot; h<br><small>[E] per action type</small></div>
+        <div class="box attn">keys = card_emb + zone_emb<br><small>[C, E]</small></div>
+      </div>
+      <div class="arrow-down">&darr; dot product</div>
+      <div class="layer"><div class="box attn">scores = query &middot; keys<sup>T</sup> / &radic;E<br><small>[C] per action type</small></div></div>
+      <div class="arrow-down">&darr; concat with scalar heads</div>
+      <div class="layer"><div class="box output">logits [A]<br><small>structurally linked to cards</small></div></div>
+    </div>
+    <p><span class="tag pro">PRO</span> &ldquo;Buy card X&rdquo; reuses X's embedding &mdash; weight sharing across all card-indexed actions.</p>
+    <p><span class="tag pro">PRO</span> Adding new cards only needs new embeddings, not new output weights.</p>
+  </div>
+</div>
+
+<h3>How Attention Helps in Star Realms</h3>
+<ul>
+  <li><b>Faction synergy</b>: The query can learn to attend to cards matching the current faction
+  composition (e.g., prefer Blob cards when you already have Blob cards in play).</li>
+  <li><b>Cost awareness</b>: The dot-product score naturally captures &ldquo;this card's features match
+  what I want to buy given my current resources.&rdquo;</li>
+  <li><b>Generalization</b>: A card the model has never seen in a specific slot can still get correct
+  logits if its embedding is close to similar cards.</li>
+  <li><b>Scalability</b>: Colony Wars or other expansions just need new embeddings &mdash; architecture
+  stays fixed.</li>
+</ul>
+
+<h3>Incremental Implementation Plan</h3>
+<div class="arch-diagram">
+  <p><span class="tag info">STEP 1</span> <b>Attention actor head only</b> &mdash; swap the actor's final
+  Linear(128&rarr;A) with query-key attention for card-indexed action types. Keep scalar actions
+  (end_turn, skip, attack_player) as a small MLP head. Critic head stays unchanged.</p>
+  <p style="margin-top:8px"><span class="tag info">STEP 2</span> <b>Multi-head attention</b> &mdash;
+  use H heads (e.g. 4) so different heads can capture different card relationships (cost vs. faction vs. zone).</p>
+  <p style="margin-top:8px"><span class="tag info">STEP 3</span> <b>Cross-attention in trunk</b> &mdash;
+  before the actor head, let zones attend to each other (hand cards attend to trade row for synergy detection).</p>
+</div>
+</div>
+<div class="panel" id="panel-2">
+<h2>Architectures in Other Game AIs</h2>
+
+<div class="compare">
+  <div>
+    <h3 style="color:var(--green)">AlphaGo / AlphaZero</h3>
+    <div class="arch-diagram" style="padding:12px">
+      <div class="layer"><div class="box input">Board State<br><small>[19&times;19&times;17] planes</small></div></div>
+      <div class="arrow-down">&darr;</div>
+      <div class="layer"><div class="box trunk">Residual CNN Tower<br><small>40 blocks of Conv &rarr; BN &rarr; ReLU</small></div></div>
+      <div class="arrow-down">&darr;</div>
+      <div class="layer">
+        <div class="box head">Policy Head<br><small>Conv&rarr;softmax [362]</small></div>
+        <div class="box head">Value Head<br><small>Conv&rarr;FC&rarr;tanh</small></div>
+      </div>
+    </div>
+    <p><span class="tag info">KEY</span> Board is spatial &rarr; CNNs exploit locality. Policy output
+    is per-position (like our per-card attention idea). MCTS provides training signal.</p>
+  </div>
+  <div>
+    <h3 style="color:var(--green)">OpenAI Five (Dota 2)</h3>
+    <div class="arch-diagram" style="padding:12px">
+      <div class="layer"><div class="box input">Game Obs<br><small>~20k features</small></div></div>
+      <div class="arrow-down">&darr;</div>
+      <div class="layer"><div class="box trunk">LSTM (1024 units)<br><small>across time steps</small></div></div>
+      <div class="arrow-down">&darr;</div>
+      <div class="layer">
+        <div class="box head">Action Type<br><small>softmax</small></div>
+        <div class="box head">Target<br><small>pointer net</small></div>
+        <div class="box head">Value</div>
+      </div>
+    </div>
+    <p><span class="tag info">KEY</span> Hierarchical action space: first pick action type, then target.
+    <b>Pointer network</b> attends to entities &mdash; exactly our proposed idea.</p>
+  </div>
+</div>
+
+<div class="compare">
+  <div>
+    <h3 style="color:var(--green)">AlphaStar (StarCraft II)</h3>
+    <div class="arch-diagram" style="padding:12px">
+      <div class="layer">
+        <div class="box input">Minimap<br><small>Conv</small></div>
+        <div class="box input">Entities<br><small>Transformer</small></div>
+        <div class="box input">Scalars</div>
+      </div>
+      <div class="arrow-down">&darr;</div>
+      <div class="layer"><div class="box trunk">Deep LSTM Core<br><small>+ relational module</small></div></div>
+      <div class="arrow-down">&darr;</div>
+      <div class="layer">
+        <div class="box attn">Pointer Net<br><small>query-key attention over entities</small></div>
+        <div class="box head">Auto-regressive action decoder</div>
+      </div>
+    </div>
+    <p><span class="tag info">KEY</span> Entities processed with <b>Transformer</b>, selected via
+    <b>pointer attention</b>. Closest analogy to our card game.</p>
+  </div>
+  <div>
+    <h3 style="color:var(--green)">Hanabi (card game)</h3>
+    <div class="arch-diagram" style="padding:12px">
+      <div class="layer"><div class="box input">Belief State<br><small>per-card probabilities</small></div></div>
+      <div class="arrow-down">&darr;</div>
+      <div class="layer"><div class="box trunk">MLP / LSTM<br><small>+ belief module</small></div></div>
+      <div class="arrow-down">&darr;</div>
+      <div class="layer">
+        <div class="box head">Actions<br><small>per-card scores</small></div>
+      </div>
+    </div>
+    <p><span class="tag info">KEY</span> Partial observability like Star Realms (opponent hand is hidden).
+    Per-card action scoring &mdash; similar to our attention proposal.</p>
+  </div>
+</div>
+
+<h3>Common Pattern</h3>
+<p>All modern game AIs with variable-size entity sets (units, cards, pieces) use some form of
+<b>entity attention</b> &mdash; the policy head attends to individual entities rather than flattening
+everything into a fixed vector. Our current model is the flat approach; the attention proposal
+aligns with the state of the art.</p>
+</div>
+<div class="panel" id="panel-3">
+<h2>Attention in LLMs</h2>
+<p>The same query-key-value mechanism, but applied to <b>token sequences</b> rather than card sets.</p>
+
+<div class="arch-diagram">
+  <h3 style="text-align:center; margin-bottom: 12px;">Transformer Self-Attention (one head)</h3>
+  <div class="layer">
+    <div class="box input">Input tokens X<br><small>[seq_len, d_model]</small></div>
+  </div>
+  <div class="arrow-down">&darr; three linear projections</div>
+  <div class="layer">
+    <div class="box attn">Q = X&middot;W_Q<br><small>[seq, d_k]</small></div>
+    <div class="box attn">K = X&middot;W_K<br><small>[seq, d_k]</small></div>
+    <div class="box attn">V = X&middot;W_V<br><small>[seq, d_v]</small></div>
+  </div>
+  <div class="arrow-down">&darr; Attention(Q,K,V) = softmax(QK<sup>T</sup> / &radic;d_k) &middot; V</div>
+  <div class="layer">
+    <div class="box attn">Attention Output<br><small>[seq, d_v]</small></div>
+  </div>
+  <div class="arrow-down">&darr; + residual + LayerNorm + FFN</div>
+  <div class="layer">
+    <div class="box trunk">Transformer Block Output<br><small>[seq, d_model]</small></div>
+  </div>
+</div>
+
+<div class="compare">
+  <div>
+    <h3 style="color:var(--accent)">LLM Self-Attention</h3>
+    <ul>
+      <li><b>Entities:</b> Tokens (words/subwords)</li>
+      <li><b>Q, K, V:</b> All come from the same sequence</li>
+      <li><b>Purpose:</b> Every token attends to every other token to build contextual representations</li>
+      <li><b>Scale:</b> d_model = 4096+, 32+ heads, 80+ layers</li>
+      <li><b>Output:</b> Next token prediction via final projection</li>
+    </ul>
+  </div>
+  <div>
+    <h3 style="color:var(--yellow)">Our Proposed Card Attention</h3>
+    <ul>
+      <li><b>Entities:</b> Cards (with zone context)</li>
+      <li><b>Q:</b> From trunk hidden state (&ldquo;what I want&rdquo;)</li>
+      <li><b>K:</b> From card embeddings (&ldquo;what's available&rdquo;)</li>
+      <li><b>Purpose:</b> Score each card for a specific action type</li>
+      <li><b>Scale:</b> E = 32, 1-4 heads, 1 layer</li>
+      <li><b>Output:</b> Per-card action logits (no V needed &mdash; just scores)</li>
+    </ul>
+  </div>
+</div>
+
+<h3>The Connection</h3>
+<p>Our card attention is <b>cross-attention</b> &mdash; the query comes from a different source (trunk)
+than the keys (card embeddings). LLMs primarily use self-attention. But the math is identical:
+<code>score = q &middot; k / &radic;d</code>. The key insight is that dot-product attention is a universal
+mechanism for &ldquo;which of these things should I focus on?&rdquo; &mdash; whether &ldquo;these things&rdquo;
+are words in a sentence or cards in a trade row.</p>
+
+<div class="arch-diagram">
+  <h3 style="text-align:center; margin-bottom: 8px;">Analogy Map</h3>
+  <table style="width:100%; font-size:13px; border-collapse:collapse;">
+    <tr style="border-bottom:1px solid var(--border)">
+      <th style="padding:8px; text-align:left; color:var(--accent)">Concept</th>
+      <th style="padding:8px; text-align:left; color:var(--accent)">LLM</th>
+      <th style="padding:8px; text-align:left; color:var(--yellow)">Star Realms</th>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px">Entity</td><td style="padding:8px">Token</td><td style="padding:8px">Card</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px">Embedding</td><td style="padding:8px">token_emb + pos_emb</td><td style="padding:8px">card_emb + zone_emb</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px">Query source</td><td style="padding:8px">Same sequence</td><td style="padding:8px">Trunk hidden state</td>
+    </tr>
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:8px">Attention output</td><td style="padding:8px">Contextual repr</td><td style="padding:8px">Action logits</td>
+    </tr>
+    <tr>
+      <td style="padding:8px">Masking</td><td style="padding:8px">Causal mask</td><td style="padding:8px">Action validity mask</td>
+    </tr>
+  </table>
+</div>
+</div>
+
+<script>
+function showTab(idx) {
+  document.querySelectorAll('.tab').forEach((t, i) => t.classList.toggle('active', i === idx));
+  document.querySelectorAll('.panel').forEach((p, i) => p.classList.toggle('active', i === idx));
+}
+
+function updateDims() {
+  const C = parseInt(document.getElementById('numCards').value);
+  const E = parseInt(document.getElementById('embDim').value);
+  document.getElementById('numCardsVal').textContent = C;
+
+  const zones = 8;
+  const numeric = 15;
+  const combined = zones * E + numeric;
+  const stateSize = 4 + C + (5 + C*4) + (6 + C*3);
+  const actionSize = 1 + 1 + 1 + C + C + 1 + C + C + 2*C + 3*C + C;
+
+  const cardParams = C * E;
+  const zoneParams = zones * E;
+  const trunkParams = combined * 256 + 256 + 256 * 256 + 256;
+  const actorParams = 256 * 128 + 128 + 128 * actionSize + actionSize;
+  const criticParams = 256 * 128 + 128 + 128 * 1 + 1;
+  const totalParams = cardParams + zoneParams + trunkParams + actorParams + criticParams;
+
+  document.getElementById('dimDisplay').innerHTML =
+    '<b>Dimensions with C=' + C + ', E=' + E + ':</b><br>' +
+    'State vector: ' + stateSize + ' | Action space: ' + actionSize + '<br>' +
+    'Trunk input: ' + zones + '\u00b7' + E + ' + ' + numeric + ' = ' + combined + '<br>' +
+    'Embeddings: ' + cardParams.toLocaleString() + ' (card) + ' + zoneParams.toLocaleString() + ' (zone)<br>' +
+    'Trunk: ' + trunkParams.toLocaleString() + ' params | Actor: ' + actorParams.toLocaleString() + ' | Critic: ' + criticParams.toLocaleString() + '<br>' +
+    '<b>Total: ' + totalParams.toLocaleString() + ' parameters</b>';
+}
+
+updateDims();
+</script>
+</body>
+</html>

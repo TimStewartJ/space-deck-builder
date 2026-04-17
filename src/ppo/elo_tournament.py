@@ -47,6 +47,44 @@ _AGENT_FACTORIES: dict[str, Callable] = {
 }
 
 
+def _make_opponent_factory(
+    state_dict: dict, card_names: list[str], device: str,
+    model_config: ModelConfig | None = None,
+) -> Callable:
+    """Create an opponent factory from an in-memory state_dict.
+
+    Builds one shared model on the target device. Each factory call returns
+    a lightweight PPOAgent wrapper pointing to that shared model, avoiding
+    per-game GPU allocations.
+    """
+    from src.encoding.state_encoder import get_state_size
+    from src.ai.ppo_agent import PPOAgent
+
+    state_dim = get_state_size(card_names)
+    action_dim = get_action_space_size(card_names)
+    cfg = model_config or ModelConfig()
+
+    shared_model = PPOActorCritic(
+        state_dim=state_dim,
+        action_dim=action_dim,
+        num_cards=len(card_names),
+        model_config=cfg,
+    ).to(device)
+    shared_model.load_state_dict(state_dict)
+    shared_model.eval()
+
+    def factory() -> PPOAgent:
+        agent = PPOAgent(
+            "Opponent", card_names,
+            device=device, main_device=device, simulation_device=device,
+            model_config=cfg,
+        )
+        agent.model = shared_model
+        return agent
+
+    return factory
+
+
 @dataclass
 class EloResult:
     """Results for a single participant after the tournament."""
@@ -505,6 +543,7 @@ def _collect_tournament_replays(
     """
     import os
     from src.analysis.replay_collector import ReplayCollector
+    from src.ppo.batch_runner import BatchRunner
 
     replay_files: list[str] = []
     registry = data_cfg.build_registry(cards)
