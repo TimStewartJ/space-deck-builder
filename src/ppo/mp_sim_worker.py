@@ -352,9 +352,15 @@ def _sim_worker_inner(
         registry=registry,
     )
 
-    # Pre-allocate reusable buffers for encoding
-    state_buf = np.zeros(state_size, dtype=np.float32)
-    mask_buf = np.zeros(action_dim, dtype=bool)
+    # Pre-allocate reusable buffers for encoding. The state buffer is a
+    # (num_concurrent, state_size) matrix so each game slot owns a
+    # contiguous row view — encode_state fills the row in place and the
+    # rollout buffer captures a per-row copy. The mask buffer is the
+    # same shape in bool; fancy-indexing it selects the active rows for
+    # a batched inference request (view(uint8) is zero-copy since bool
+    # and uint8 share byte width).
+    states_rows_buf = np.zeros((num_concurrent, state_size), dtype=np.float32)
+    masks_rows_buf = np.zeros((num_concurrent, action_dim), dtype=bool)
 
     # Game slots
     games: list[Optional[Game]] = [None] * num_concurrent
@@ -407,12 +413,13 @@ def _sim_worker_inner(
                     buffers[i] = None
 
         # Step 3: Collect ALL pending neural-net decisions — both training
-        # agent and opponent PPO. Send as a single batched request (the server
-        # groups by model_id internally). This avoids desync where opponent
-        # decisions end up as batch-size-1 requests.
+        # agent and opponent PPO. Each game slot owns a row in
+        # ``states_rows_buf`` / ``masks_rows_buf`` so encode_state and
+        # build_action_context can fill them in place with no intermediate
+        # copies. Only resolver dicts (for decoding the sampled action)
+        # and per-slot flags are carried across to Step 5.
         pending_indices: list[int] = []
-        pending_states: list[np.ndarray] = []
-        pending_contexts: list[ActionContext] = []
+        pending_resolvers: list[dict] = []
         pending_is_training: list[bool] = []
         pending_model_ids: list[str] = []
 
@@ -427,40 +434,35 @@ def _sim_worker_inner(
 
             ctx = build_action_context(
                 games[i], player, card_index_map,
-                action_dim, mask_buf=mask_buf,
+                action_dim, mask_buf=masks_rows_buf[i],
             )
-            state = encode_state(
+            encode_state(
                 games[i], is_current_player_training=is_training,
                 cards=card_names,
                 card_index_map=card_index_map,
-                state_buf=state_buf,
+                state_buf=states_rows_buf[i],
                 can_buy=ctx.can_buy,
                 has_actions=ctx.has_meaningful,
+                return_numpy=True,
             )
+            # Suppress END_TURN inline so we don't touch the mask again later.
+            if ctx.has_meaningful:
+                masks_rows_buf[i, END_TURN_INDEX] = False
 
             pending_indices.append(i)
-            pending_states.append(state.numpy().copy())
-            pending_contexts.append(ActionContext(
-                mask=ctx.mask.copy(),
-                has_meaningful=ctx.has_meaningful,
-                can_buy=ctx.can_buy,
-                resolvers=ctx.resolvers,
-            ))
+            pending_resolvers.append(ctx.resolvers)
             pending_is_training.append(is_training)
             pending_model_ids.append(
                 "training" if is_training else player.agent.model_id
             )
 
-        if not pending_states:
+        if not pending_indices:
             continue
 
-        # Step 4: Build batch, group by model_id, send to GPU
-        states_np = np.stack(pending_states)
-        masks_np = np.zeros((len(pending_states), action_dim), dtype=np.uint8)
-        for j, ctx in enumerate(pending_contexts):
-            masks_np[j] = ctx.mask.astype(np.uint8)
-            if ctx.has_meaningful:
-                masks_np[j, END_TURN_INDEX] = 0
+        # Step 4: Build batch (single fancy-indexed copy per tensor),
+        # group by model_id, send to GPU.
+        states_np = states_rows_buf[pending_indices]
+        masks_np = masks_rows_buf[pending_indices].view(np.uint8)
 
         model_groups: dict[str, list[int]] = {}
         for j, mid in enumerate(pending_model_ids):
@@ -490,25 +492,27 @@ def _sim_worker_inner(
                     for k, j in enumerate(indices):
                         all_responses[j] = (
                             int(response.action_indices[k]),
-                            response.log_probs[k],
-                            response.values[k],
+                            float(response.log_probs[k]),
+                            float(response.values[k]),
                         )
                     break
 
-        # Step 5: Distribute actions — record in buffer only for training
+        # Step 5: Distribute actions — record in buffer only for training.
+        # The rollout buffer now accepts numpy + Python primitives directly,
+        # so we copy the per-slot row once and skip all torch wrapping.
         for j, i in enumerate(pending_indices):
             act_idx, log_prob, value = all_responses[j]
-            action = pending_contexts[j].resolvers[act_idx]
+            action = pending_resolvers[j][act_idx]
 
             if pending_is_training[j]:
                 buffers[i].add(
-                    torch.from_numpy(pending_states[j]),
+                    states_rows_buf[i].copy(),
                     act_idx,
-                    torch.tensor(log_prob),
-                    torch.tensor(value),
+                    log_prob,
+                    value,
                     reward=0.0,
                     done=False,
-                    mask=torch.from_numpy(masks_np[j].astype(np.float32)).bool(),
+                    mask=masks_rows_buf[i].copy(),
                 )
 
             games[i].apply_decision(action)
@@ -626,8 +630,8 @@ def _sim_worker_eval_inner(
         registry=registry,
     )
 
-    state_buf = np.zeros(state_size, dtype=np.float32)
-    mask_buf = np.zeros(action_dim, dtype=bool)
+    states_rows_buf = np.zeros((num_concurrent, state_size), dtype=np.float32)
+    masks_rows_buf = np.zeros((num_concurrent, action_dim), dtype=bool)
 
     games: list[Optional[Game]] = [None] * num_concurrent
     step_counts: list[int] = [0] * num_concurrent
@@ -689,10 +693,13 @@ def _sim_worker_eval_inner(
 
         # Collect ALL pending neural-net decisions — both training agent
         # and _ServerPPOAgent opponents. Group by model_id for batched
-        # inference through the server.
+        # inference through the server. Each game slot owns a row in the
+        # pre-allocated state/mask buffers — encode_state and
+        # build_action_context fill them in place, and fancy-indexing the
+        # active rows produces the contiguous batch tensors with no
+        # extra per-row copies.
         pending_indices: list[int] = []
-        pending_states: list[np.ndarray] = []
-        pending_contexts: list[ActionContext] = []
+        pending_resolvers: list[dict] = []
         pending_model_ids: list[str] = []
 
         for i in range(num_concurrent):
@@ -706,39 +713,32 @@ def _sim_worker_eval_inner(
 
             ctx = build_action_context(
                 games[i], player, card_index_map,
-                action_dim, mask_buf=mask_buf,
+                action_dim, mask_buf=masks_rows_buf[i],
             )
-            state = encode_state(
+            encode_state(
                 games[i], is_current_player_training=is_training,
                 cards=card_names,
                 card_index_map=card_index_map,
-                state_buf=state_buf,
+                state_buf=states_rows_buf[i],
                 can_buy=ctx.can_buy,
                 has_actions=ctx.has_meaningful,
+                return_numpy=True,
             )
+            if ctx.has_meaningful:
+                masks_rows_buf[i, END_TURN_INDEX] = False
 
             pending_indices.append(i)
-            pending_states.append(state.numpy().copy())
-            pending_contexts.append(ActionContext(
-                mask=ctx.mask.copy(),
-                has_meaningful=ctx.has_meaningful,
-                can_buy=ctx.can_buy,
-                resolvers=ctx.resolvers,
-            ))
+            pending_resolvers.append(ctx.resolvers)
             pending_model_ids.append(
                 "training" if is_training else player.agent.model_id
             )
 
-        if not pending_states:
+        if not pending_indices:
             continue
 
         # Build batch and group by model_id for server inference
-        states_np = np.stack(pending_states)
-        masks_np = np.zeros((len(pending_states), action_dim), dtype=np.uint8)
-        for j, ctx in enumerate(pending_contexts):
-            masks_np[j] = ctx.mask.astype(np.uint8)
-            if ctx.has_meaningful:
-                masks_np[j, END_TURN_INDEX] = 0
+        states_np = states_rows_buf[pending_indices]
+        masks_np = masks_rows_buf[pending_indices].view(np.uint8)
 
         model_groups: dict[str, list[int]] = {}
         for j, mid in enumerate(pending_model_ids):
@@ -769,7 +769,7 @@ def _sim_worker_eval_inner(
 
         for j, i in enumerate(pending_indices):
             act_idx = all_responses[j]
-            action = pending_contexts[j].resolvers[act_idx]
+            action = pending_resolvers[j][act_idx]
             games[i].apply_decision(action)
             step_counts[i] += 1
 
