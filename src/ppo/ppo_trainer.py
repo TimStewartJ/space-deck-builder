@@ -5,6 +5,7 @@ import torch
 import torch.optim.lr_scheduler as lr_sched
 import time
 import copy
+import gc
 
 from src.config import (
     DataConfig, PPOConfig, RunConfig, DeviceConfig, ModelConfig,
@@ -430,6 +431,22 @@ def train(
                 },
             }
         metrics_writer.write(row)
+
+        # Per-update GPU/Python hygiene. Each update spawns a fresh
+        # MultiProcessBatchRunner + InferenceServer (which loads up to
+        # snapshot_cap+1 models onto the device), runs rollout + PPO, then
+        # tears it all down. Long-running ROCm sessions on Windows have been
+        # observed to crash with c10::cuda::memcpy_and_sync errors after
+        # ~25-30 such cycles when running in --resume mode (see overnight
+        # crash logs from 2026-04-18). Forcing a Python GC cycle and
+        # emptying the CUDA caching allocator between updates reclaims
+        # references to the just-torn-down server/workers and reduces the
+        # chance of allocator fragmentation accumulating across updates.
+        del runner
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
 
     # --- Training complete ---
     logger.info(f"Episodes:    {total_time_spent_on_episodes:.1f}s total, "
