@@ -79,9 +79,13 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                    help="Device for episode simulation")
     # Model loading
     p.add_argument("--model-path",        type=str, default=None,
-                   help="Path to a pretrained PPO model")
+                   help="Path to a pretrained PPO model (weights only)")
     p.add_argument("--load-latest-model", action="store_true",
-                   help="Auto-load the latest model from models/")
+                   help="Auto-load the latest model from models/ (weights only)")
+    p.add_argument("--resume",            type=str, default=None,
+                   help="Resume training from a checkpoint: restores weights, "
+                        "optimizer, LR scheduler, snapshot pool, and update counter. "
+                        "--updates is interpreted as additional updates beyond the resumed step.")
     return p
 
 
@@ -256,6 +260,7 @@ def _run_train(args):
         pfsp_mode=args.pfsp,
         num_workers=args.num_workers,
         num_concurrent=args.num_concurrent,
+        resume=args.resume,
     )
     dev_cfg = DeviceConfig(
         main_device=args.main_device,

@@ -37,6 +37,10 @@ class PPOAgent(Agent):
         model_config: ModelConfig | None = None,
         device_config: DeviceConfig | None = None,
         registry=None,
+        # Resume support: when True and model_path points to a v3 checkpoint
+        # with optimizer_state_dict, restore that state as well so training
+        # continues with warm Adam moments instead of a cold restart.
+        load_optimizer_state: bool = False,
     ):
         super().__init__(name)
 
@@ -118,6 +122,16 @@ class PPOAgent(Agent):
         if model_path:
             self.model.load_state_dict(ckpt["model_state_dict"])
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.ppo_config.lr)
+        if model_path and load_optimizer_state:
+            opt_state = ckpt.get("optimizer_state_dict")
+            if opt_state is not None:
+                self.optimizer.load_state_dict(opt_state)
+                log(f"Restored optimizer state from {model_path}")
+            else:
+                log(
+                    f"Optimizer-state restore requested but checkpoint {model_path} "
+                    f"has no optimizer_state_dict; starting Adam moments cold."
+                )
 
         # rollout buffers
         self.states = []
