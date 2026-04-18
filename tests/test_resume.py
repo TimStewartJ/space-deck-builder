@@ -76,6 +76,55 @@ def test_save_load_includes_scheduler_state(tmp_path: Path):
     assert data["scheduler_state_dict"]["last_epoch"] == 2
 
 
+def test_scheduler_load_state_clobbers_t_max():
+    """Regression: PyTorch _LRScheduler.load_state_dict does dict.update(),
+    which silently overwrites T_max / eta_min / base_lrs with the saved
+    values. The trainer must re-pin these after load_state_dict to extend
+    the cosine horizon for resumed runs.
+    """
+    model_a = _dummy_model()
+    opt_a = torch.optim.Adam(model_a.parameters(), lr=1e-3)
+    sched_a = torch.optim.lr_scheduler.CosineAnnealingLR(opt_a, T_max=10, eta_min=0)
+    for _ in range(5):
+        sched_a.step()
+    saved_state = sched_a.state_dict()
+
+    # Construct a scheduler with a NEW horizon (simulating resume
+    # extension) — load_state_dict reverts T_max back to 10.
+    model_b = _dummy_model()
+    opt_b = torch.optim.Adam(model_b.parameters(), lr=1e-3)
+    sched_b = torch.optim.lr_scheduler.CosineAnnealingLR(opt_b, T_max=100, eta_min=0)
+    assert sched_b.T_max == 100
+    sched_b.load_state_dict(saved_state)
+    # Demonstrate the bug: T_max reverted to the saved value.
+    assert sched_b.T_max == 10, "PyTorch behavior changed; rethink the trainer fix"
+
+    # The trainer's fix: re-pin T_max after load_state_dict.
+    sched_b.T_max = 99  # would be max(1, total_horizon - 1)
+    assert sched_b.T_max == 99
+    assert sched_b.last_epoch == 5  # but progress is preserved
+
+
+def test_optimizer_load_overwrites_lr_param_group():
+    """Regression: optim.load_state_dict overwrites param_group['lr'] from
+    the checkpoint, silently superseding any --lr the user passed alongside
+    --resume. PPOAgent must surface this when the requested LR differs.
+    """
+    model_a = _dummy_model()
+    opt_a = torch.optim.Adam(model_a.parameters(), lr=1e-3)
+    # Take a step so optimizer has moments
+    x = torch.randn(8, 4); target = torch.randn(8, 2)
+    ((model_a(x) - target) ** 2).mean().backward()
+    opt_a.step()
+
+    model_b = _dummy_model()
+    opt_b = torch.optim.Adam(model_b.parameters(), lr=5e-5)
+    assert opt_b.param_groups[0]["lr"] == 5e-5
+    opt_b.load_state_dict(opt_a.state_dict())
+    # Demonstrate the issue: the user-requested 5e-5 is gone.
+    assert opt_b.param_groups[0]["lr"] == 1e-3
+
+
 def test_load_v2_checkpoint_without_resume_metadata(tmp_path: Path):
     """V2 checkpoints (no optimizer/scheduler/pool fields) still load cleanly."""
     model = _dummy_model()

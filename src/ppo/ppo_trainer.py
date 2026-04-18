@@ -201,8 +201,35 @@ def train(
             sched_state = resume_ckpt.get("scheduler_state_dict")
             if sched_state is not None:
                 scheduler.load_state_dict(sched_state)
+                # _LRScheduler.load_state_dict does dict.update(), which clobbers
+                # T_max / eta_min / base_lrs back to the original run's values.
+                # Re-pin the curve to the new (extended) horizon so resumed
+                # training rides a smooth continuation of the cosine schedule
+                # rather than re-warming from base_lr.
+                target_t_max = max(1, total_horizon - 1)
+                if getattr(scheduler, "T_max", None) != target_t_max:
+                    logger.info(
+                        f"Re-pinning LR scheduler T_max: "
+                        f"{getattr(scheduler, 'T_max', '?')} -> {target_t_max} "
+                        f"(extending cosine horizon for resumed run)."
+                    )
+                    scheduler.T_max = target_t_max
+                scheduler.eta_min = ppo_cfg.lr_end
+                # base_lrs is set at constructor time from optimizer param_groups;
+                # load_state_dict overwrites it to the saved values. If the user
+                # passed an explicit --lr, they'd expect it to take effect, but
+                # for now we log if there's a mismatch so it's not silent.
+                saved_base_lrs = scheduler.base_lrs
+                expected_base_lrs = [ppo_cfg.lr] * len(saved_base_lrs)
+                if any(abs(s - e) > 1e-12 for s, e in zip(saved_base_lrs, expected_base_lrs)):
+                    logger.info(
+                        f"Note: scheduler base_lrs from checkpoint ({saved_base_lrs}) "
+                        f"differ from --lr setting ({expected_base_lrs}); "
+                        f"using checkpoint values to preserve continuity."
+                    )
                 logger.info(
-                    f"Restored LR scheduler state (last_epoch={scheduler.last_epoch})."
+                    f"Restored LR scheduler state "
+                    f"(last_epoch={scheduler.last_epoch}, T_max={scheduler.T_max})."
                 )
             else:
                 # Manually fast-forward the scheduler to the resumed step so
