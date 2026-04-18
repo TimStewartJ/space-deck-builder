@@ -113,6 +113,26 @@ function Run-DetachedPython {
     return @{ exit_code = $exitCode; log = $logPath; started_at = $started; ended_at = (Get-Date).ToString("o") }
 }
 
+# Wraps a phase's training/tournament invocation. Records FAILED entries when
+# exit_code != 0 (instead of marking them completed, which the original
+# Mark-Done helper did unconditionally), and aborts the orchestrator so a
+# crashed run doesn't silently flow into the next phase. Idempotent on retry:
+# a failed phase is re-run on next orchestrator invocation.
+function Mark-Failed($phaseKey, $extra, $reason) {
+    $manifest = Read-Manifest
+    $entry = [PSCustomObject]@{
+        key       = $phaseKey
+        completed = $false
+        failed_at = (Get-Date).ToString("o")
+        reason    = $reason
+        extra     = $extra
+    }
+    Add-PhaseEntry $manifest $entry
+    Write-Manifest $manifest
+    Set-Status "FAILED" "$phaseKey: $reason"
+    Write-Host "[$phaseKey] PHASE FAILED: $reason. Aborting orchestrator."
+}
+
 function Find-NewestCheckpointMatching {
     param(
         [string]$pattern,
@@ -225,6 +245,14 @@ if (-not (Skip-If-Done "hp3_resume_100_to_200")) {
 
     # Final checkpoint: highest upd200 written after start
     $hp3At200 = Find-NewestCheckpointMatching "ppo_agent_*upd200_wins*.pth" -mustBeAfter $startTime
+    if ($r.exit_code -ne 0) {
+        Mark-Failed "hp3_resume_100_to_200" @{
+            log              = $log
+            exit_code        = $r.exit_code
+            final_checkpoint = $hp3At200
+        } "training process exited with code $($r.exit_code)"
+        exit 1
+    }
     Mark-Done "hp3_resume_100_to_200" @{
         log              = $log
         exit_code        = $r.exit_code
@@ -268,6 +296,14 @@ if (-not (Skip-If-Done "sum_resume_100_to_200")) {
     $r = Run-DetachedPython -logPath $log -pythonArgs $args -tag "sum_to_200"
 
     $sumAt200 = Find-NewestCheckpointMatching "ppo_agent_*upd200_wins*.pth" -mustBeAfter $startTime
+    if ($r.exit_code -ne 0) {
+        Mark-Failed "sum_resume_100_to_200" @{
+            log              = $log
+            exit_code        = $r.exit_code
+            final_checkpoint = $sumAt200
+        } "training process exited with code $($r.exit_code)"
+        exit 1
+    }
     Mark-Done "sum_resume_100_to_200" @{
         log              = $log
         exit_code        = $r.exit_code
