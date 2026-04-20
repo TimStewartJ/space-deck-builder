@@ -80,6 +80,9 @@ class MultiProcessBatchRunner:
         else:
             from src.encoding.state_encoder import build_card_index_map
             self.card_index_map = build_card_index_map(card_names)
+        # Retain the full registry so snapshot opponent models built below
+        # can construct their CardFeatureTable when token_features is enabled.
+        self.registry = registry
 
         self._state_size = get_state_size(card_names)
         # Per-opponent result tracking (merged from all workers)
@@ -135,6 +138,7 @@ class MultiProcessBatchRunner:
                         action_dim=self.model.action_dim,
                         num_cards=self.model.num_cards,
                         model_config=snap_cfg,
+                        card_registry=self.registry,
                     )
                 else:
                     opp = copy.deepcopy(self.model)

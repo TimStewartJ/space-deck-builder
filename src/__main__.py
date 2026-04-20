@@ -49,6 +49,11 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--pool-type",   type=str, default=_mdl.pool_type,
                    choices=["sum", "attention"],
                    help="Zone feature pooling: sum (presence-weighted) or attention (learned per-zone query)")
+    p.add_argument("--token-features", action="store_true",
+                   default=_mdl.token_features,
+                   help="Enable per-card static feature tokens (cost, defense, faction, "
+                        "ally faction, type) instead of pure embedding lookup. "
+                        "Requires the card registry at model construction time.")
     # Run topology (defaults sourced from RunConfig dataclass)
     p.add_argument("--episodes",    type=int,   default=_run.episodes)
     p.add_argument("--updates",     type=int,   default=_run.updates)
@@ -259,7 +264,10 @@ def _run_train(args):
         adv_norm=args.adv_norm,
         lr_end=args.lr_end, lr_schedule=args.lr_schedule,
     )
-    model_cfg = ModelConfig(actor_type=args.actor_type, pool_type=args.pool_type)
+    model_cfg = ModelConfig(
+        actor_type=args.actor_type, pool_type=args.pool_type,
+        token_features=args.token_features,
+    )
     run_cfg = RunConfig(
         episodes=args.episodes, updates=args.updates,
         eval_every=args.eval_every, eval_games=args.eval_games,
@@ -423,7 +431,8 @@ def _run_analyze(args):
     action_dim = get_action_space_size(card_names)
 
     model = PPOActorCritic(
-        state_dim, action_dim, len(card_names), model_config=model_config
+        state_dim, action_dim, len(card_names), model_config=model_config,
+        card_registry=registry,
     ).to(device)
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
@@ -470,12 +479,12 @@ def _run_analyze(args):
         if opp_type == "self":
             factory = _make_opponent_factory(
                 ckpt["model_state_dict"], card_names, device,
-                model_config=model_config,
+                model_config=model_config, card_registry=registry,
             )
         elif opp_type == "ppo-opponent":
             factory = _make_opponent_factory(
                 opp_model_sd, card_names, device,
-                model_config=opp_model_config,
+                model_config=opp_model_config, card_registry=registry,
             )
         else:
             factory = pool.make_factory_for_type(opp_type, card_names, device=device)

@@ -50,12 +50,16 @@ _AGENT_FACTORIES: dict[str, Callable] = {
 def _make_opponent_factory(
     state_dict: dict, card_names: list[str], device: str,
     model_config: ModelConfig | None = None,
+    card_registry=None,
 ) -> Callable:
     """Create an opponent factory from an in-memory state_dict.
 
     Builds one shared model on the target device. Each factory call returns
     a lightweight PPOAgent wrapper pointing to that shared model, avoiding
     per-game GPU allocations.
+
+    ``card_registry`` is required when the model_config has
+    ``token_features=True``; otherwise it can be None.
     """
     from src.encoding.state_encoder import get_state_size
     from src.ai.ppo_agent import PPOAgent
@@ -69,6 +73,7 @@ def _make_opponent_factory(
         action_dim=action_dim,
         num_cards=len(card_names),
         model_config=cfg,
+        card_registry=card_registry,
     ).to(device)
     shared_model.load_state_dict(state_dict)
     shared_model.eval()
@@ -77,7 +82,7 @@ def _make_opponent_factory(
         agent = PPOAgent(
             "Opponent", card_names,
             device=device, main_device=device, simulation_device=device,
-            model_config=cfg,
+            model_config=cfg, registry=card_registry,
         )
         agent.model = shared_model
         return agent
@@ -453,6 +458,7 @@ def run_tournament(
             num_workers=num_workers,
             num_concurrent=num_concurrent,
             data_cfg=data_cfg,
+            card_registry=registry,
             match_wins=match_wins,
             match_games=match_games,
             wins_total=wins_total,
@@ -520,6 +526,7 @@ def run_tournament(
             num_concurrent=num_concurrent,
             output_dir=replay_output_dir,
             data_cfg=data_cfg,
+            card_registry=registry,
         )
 
         if replay_files:
@@ -637,10 +644,14 @@ def _dispatch_parallel_pairings(
 def _build_model_registry(
     participants: list, card_names: list[str],
     action_dim: int, state_dim: int,
+    card_registry=None,
 ) -> dict:
     """Build the ``label -> PPOActorCritic`` registry the InferenceServer
     needs. One model per :class:`CheckpointParticipant`; built-ins are
     served inline by workers and don't appear here.
+
+    ``card_registry`` is required when any participant's model_config has
+    ``token_features=True``.
     """
     models: dict[str, PPOActorCritic] = {}
     for p in participants:
@@ -648,6 +659,7 @@ def _build_model_registry(
             m = PPOActorCritic(
                 state_dim=state_dim, action_dim=action_dim,
                 num_cards=len(card_names), model_config=p.model_config,
+                card_registry=card_registry,
             )
             m.load_state_dict(p.state_dict)
             m.eval()
@@ -680,6 +692,7 @@ def _collect_tournament_replays(
     num_concurrent: int,
     output_dir: str,
     data_cfg: 'DataConfig',
+    card_registry=None,
 ) -> list[str]:
     """Run a replay-collection pass over PPO pairings in parallel.
 
@@ -699,6 +712,7 @@ def _collect_tournament_replays(
 
     model_registry = _build_model_registry(
         participants, card_names, action_dim, state_dim,
+        card_registry=card_registry,
     )
 
     tasks: list[PairingTask] = []
@@ -762,6 +776,7 @@ def _run_parallel_pairings(
     num_workers: int,
     num_concurrent: int,
     data_cfg: DataConfig,
+    card_registry=None,
     match_wins: dict,
     match_games: dict,
     wins_total: list,
@@ -782,6 +797,7 @@ def _run_parallel_pairings(
 
     model_registry = _build_model_registry(
         participants, card_names, action_dim, state_dim,
+        card_registry=card_registry,
     )
 
     tasks: list[PairingTask] = []

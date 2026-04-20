@@ -546,7 +546,7 @@ class BatchRunner:
 def _worker_run_episodes(state_dict, card_names, cards, action_dim,
                          num_episodes, num_concurrent, opponent_type,
                          opponent_state_dict, seed, model_config=None,
-                         opponent_model_config=None):
+                         opponent_model_config=None, card_registry=None):
     """Top-level worker function for ProcessPoolExecutor.
 
     Reconstructs model + BatchRunner in a subprocess, runs episodes on CPU,
@@ -557,6 +557,10 @@ def _worker_run_episodes(state_dict, card_names, cards, action_dim,
     ``load_state_dict`` will fail on shape/key mismatches (e.g. when
     ``pool_type="attention"`` or ``actor_type="attention"`` add parameters
     beyond the default architecture).
+
+    ``card_registry`` is required when either model uses
+    ``token_features=True`` so the worker can build the per-card static
+    feature table; otherwise it can be None.
     """
     random.seed(seed)
     torch.manual_seed(seed)
@@ -569,6 +573,7 @@ def _worker_run_episodes(state_dict, card_names, cards, action_dim,
     model = PPOActorCritic(
         get_state_size(card_names), action_dim, len(card_names),
         model_config=model_config,
+        card_registry=card_registry,
     ).to(device)
     model.load_state_dict(state_dict)
 
@@ -579,7 +584,7 @@ def _worker_run_episodes(state_dict, card_names, cards, action_dim,
             from src.ai.ppo_agent import PPOAgent
             opp = PPOAgent("Opp", card_names, device="cpu",
                            main_device="cpu", simulation_device="cpu",
-                           model_config=opp_cfg)
+                           model_config=opp_cfg, registry=card_registry)
             opp.model.load_state_dict(opp_sd)
             return opp
     else:
@@ -594,6 +599,7 @@ def _worker_run_episodes(state_dict, card_names, cards, action_dim,
         device=device,
         opponent_factory=make_opponent,
         num_concurrent=num_concurrent,
+        registry=card_registry,
     )
     return runner.run_episodes(num_episodes)
 
@@ -604,6 +610,7 @@ def run_episodes_parallel(model, card_names, cards, action_dim,
                           opponent_type="random",
                           opponent_state_dict=None,
                           opponent_model_config=None,
+                          card_registry=None,
                           device=torch.device("cpu")):
     """Run episodes across multiple worker processes, each with its own BatchRunner.
 
@@ -624,6 +631,7 @@ def run_episodes_parallel(model, card_names, cards, action_dim,
         card_emb_dim=model.card_emb.embedding_dim,
         actor_type=getattr(model, 'actor_type', 'mlp'),
         pool_type=getattr(model, 'pool_type', 'sum'),
+        token_features=getattr(model, 'token_features', False),
     )
 
     # Divide episodes across workers
@@ -640,7 +648,7 @@ def run_episodes_parallel(model, card_names, cards, action_dim,
                 state_dict, card_names, cards, action_dim,
                 ep_count, games_per_worker, opponent_type,
                 opponent_state_dict, seed, model_config,
-                opponent_model_config,
+                opponent_model_config, card_registry,
             )
             for ep_count, seed in zip(episode_counts, seeds)
         ]

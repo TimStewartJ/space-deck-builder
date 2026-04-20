@@ -104,6 +104,14 @@ class ModelConfig:
     # that softmax-weights cards by relevance before the weighted sum. Output
     # shape fed into the trunk is identical in both modes.
     pool_type: str = "sum"
+    # When True, build per-slot tokens by fusing card_emb + zone_emb with
+    # static card features (cost, defense, type flags, faction one-hots) from
+    # CardRegistry, then project to emb_dim before pooling. When False, tokens
+    # are just card_emb + zone_emb (legacy behavior). Token features remove
+    # the burden on the embedding table to memorize static card metadata and
+    # are a structural prerequisite for a transformer encoder backbone.
+    # Requires a CardRegistry to be passed to PPOActorCritic.
+    token_features: bool = False
 
     _VALID_ACTOR_TYPES = {"mlp", "attention"}
     _VALID_POOL_TYPES = {"sum", "attention"}
@@ -286,17 +294,19 @@ class SimConfig:
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
 
-# Current checkpoint schema version. V3 adds optional resume-training
-# metadata: optimizer state, LR scheduler state, and a snapshot pool
-# manifest. These are weight-compatible with V2 — V2 checkpoints still
-# load fine, they just can't be resumed from (only weight-loaded).
-CHECKPOINT_VERSION = 3
+# Current checkpoint schema version. V4 adds optional per-card static
+# feature tokens (cost, defense, faction, ally faction, type) gated by
+# ``ModelConfig.token_features``. V2/V3 checkpoints remain weight-loadable
+# as long as their saved ``model_config.token_features`` is False (or
+# absent — defaults to False); cross-mode loads (saved-True vs runtime-False
+# or vice versa) raise a clear error at load time.
+CHECKPOINT_VERSION = 4
 
 # Schema versions whose model weights are compatible with the current
 # architecture. Loading a checkpoint outside this set raises ValueError.
 # Pre-V2 (V0/V1) used a flat embedding + separate actor/critic MLPs and
 # is not loadable.
-COMPAT_CHECKPOINT_VERSIONS = {2, 3}
+COMPAT_CHECKPOINT_VERSIONS = {2, 3, 4}
 
 
 def save_checkpoint(

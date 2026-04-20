@@ -28,6 +28,7 @@ class CardDef:
     card_type: CardType
     defense: Optional[int] = None
     faction: Faction = Faction.NONE
+    ally_factions: Faction = Faction.NONE
     set_name: Optional[str] = None
 
 
@@ -115,6 +116,7 @@ def build_registry(
             card_type=card.card_type,
             defense=card.defense,
             faction=card.faction,
+            ally_factions=card.ally_factions,
             set_name=card.set,
         ))
         index += 1

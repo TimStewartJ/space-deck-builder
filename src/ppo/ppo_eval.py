@@ -236,6 +236,7 @@ def load_and_evaluate(
 
     model = PPOActorCritic(
         state_dim, action_dim, len(card_names), model_config=model_config,
+        card_registry=registry,
     ).to(device)
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()

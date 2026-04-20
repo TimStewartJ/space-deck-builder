@@ -44,7 +44,10 @@ class PPOAgent(Agent):
     ):
         super().__init__(name)
 
-        # Store registry's pre-built card_index_map to avoid per-call rebuilds
+        # Store registry's pre-built card_index_map to avoid per-call rebuilds.
+        # The full registry is also retained when token_features=True so the
+        # model can build its CardFeatureTable from canonical card metadata.
+        self.registry = registry
         if registry is not None:
             self.card_index_map = registry.card_index_map
         else:
@@ -115,9 +118,19 @@ class PPOAgent(Agent):
             if saved_model_cfg:
                 self.model_config = ModelConfig.from_dict(saved_model_cfg)
 
+        # token_features requires the canonical CardRegistry for static
+        # metadata. Fail loudly here rather than deep inside the model so
+        # callers see the missing-plumbing error at construction time.
+        if self.model_config.token_features and self.registry is None:
+            raise ValueError(
+                "PPOAgent: model_config.token_features=True requires a "
+                "CardRegistry. Pass registry= when constructing PPOAgent."
+            )
+
         self.model = PPOActorCritic(
             self.state_dim, self.action_dim, len(card_names),
-            model_config=self.model_config
+            model_config=self.model_config,
+            card_registry=self.registry,
         ).to(self.device)
         if model_path:
             self.model.load_state_dict(ckpt["model_state_dict"])

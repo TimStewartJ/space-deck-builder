@@ -1,5 +1,15 @@
 import torch
 
+# Zone names in fixed order — matches ZONE_NAMES in ppo_actor_critic.py.
+# Exposed here so encoder helpers can build [B, Z, C] presence stacks
+# without importing the model module.
+ZONE_NAMES = [
+    'trade_row',
+    'train_hand', 'train_disc', 'train_deck', 'train_bases',
+    'opp_unseen', 'opp_disc', 'opp_bases',
+]
+
+
 def unpack_state(x: torch.Tensor, num_cards: int, action_dim: int):
     """
     Splits a state-vector into named pieces.
@@ -41,3 +51,28 @@ def unpack_state(x: torch.Tensor, num_cards: int, action_dim: int):
     assert idx == x.shape[-1], f"State layout mismatch: unpacked {idx} elements but tensor has {x.shape[-1]}"
 
     return out, single
+
+
+def unpack_state_tokens(x: torch.Tensor, num_cards: int, action_dim: int):
+    """Reshape a flat state vector into per-zone presence + a numeric vector.
+
+    Returns:
+        presence: ``[B, Z, C]`` per-zone, per-card presence values, with zones
+            in fixed ``ZONE_NAMES`` order.
+        numerics: ``[B, NUMERIC_DIM]`` concatenation of all flag and resource
+            scalars (4 flags + 5 train resources + 6 opponent resources).
+        single: ``True`` when the input was 1-D (caller should squeeze the
+            batch dim from downstream outputs).
+
+    No new buffers are allocated for the encoder hot path — this is a pure
+    view/stack of the existing flat layout produced by ``encode_state``.
+    """
+    pieces, single = unpack_state(x, num_cards, action_dim)
+    presence = torch.stack(
+        [pieces[name] for name in ZONE_NAMES], dim=1,
+    )  # [B, Z, C]
+    numerics = torch.cat([
+        pieces['is_train'], pieces['is_first'], pieces['can_buy'],
+        pieces['has_actions'], pieces['train_res'], pieces['opp_res'],
+    ], dim=1)  # [B, 4 + 5 + 6]
+    return presence, numerics, single

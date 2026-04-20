@@ -53,13 +53,15 @@ def test_attention_pool_module_unit():
     """Direct test of AttentionZonePooling: shape, gating, and gradient flow."""
     B, Z, C, E = 3, NUM_ZONES, 12, 8
     pool = AttentionZonePooling(Z, E)
-    card_w = torch.randn(C, E, requires_grad=True)
-    zone_w = torch.randn(Z, E, requires_grad=True)
+    # Build [B, Z, C, E] tokens directly — the pooler now takes precomputed
+    # tokens instead of raw card/zone embeddings (token construction lives in
+    # PPOActorCritic._build_tokens for the legacy and static-feature paths).
+    tokens = torch.randn(B, Z, C, E, requires_grad=True)
     presence = torch.zeros(B, Z, C)
     # Only batch-0 zone-0 has any cards present.
     presence[0, 0, :3] = 1.0
 
-    out = pool(card_w, zone_w, presence)
+    out = pool(tokens, presence)
     assert out.shape == (B, Z * E)
     # Zones with no present cards must be exactly zero.
     out_view = out.view(B, Z, E)
