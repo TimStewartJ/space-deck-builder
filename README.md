@@ -14,14 +14,14 @@ uv sync --extra cuda    # NVIDIA GPUs (CUDA 12.8)
 # Or auto-detect:
 python scripts/setup_gpu.py detect
 
-# Train a PPO agent
-uv run --extra rocm python -m src train --updates 50 --episodes 128
+# Train a PPO agent (defaults live in src/config.py)
+uv run --extra rocm python -m src train
 
 # Simulate games with a trained model
 uv run --extra rocm python -m src simulate --games 100
 
 # Benchmark training throughput
-uv run --extra rocm python -m src benchmark --episodes 128
+uv run --extra rocm python -m src benchmark
 ```
 
 > **Note:** Replace `--extra rocm` with your GPU backend (`cuda` or `cpu`).
@@ -43,38 +43,26 @@ Run `python -m src <command> --help` for full option details.
 ### Training Examples
 
 ```bash
-# Basic training
-uv run --extra rocm python -m src train --updates 50 --episodes 128
+# Basic training (all hyperparameters from src/config.py)
+uv run --extra rocm python -m src train
 
 # Self-play training
-uv run --extra rocm python -m src train --updates 100 --episodes 128 --self-play
+uv run --extra rocm python -m src train --self-play
 
 # Self-play with PFSP (prioritize challenging snapshots)
-uv run --extra rocm python -m src train --updates 100 --episodes 128 --self-play --pfsp hard
+uv run --extra rocm python -m src train --self-play --pfsp hard
 
 # Mixed opponents with custom weights
 uv run --extra rocm python -m src train --opponents random:0.6,heuristic:0.4
 
-# Resume from a checkpoint
-uv run --extra rocm python -m src train --load-latest-model --updates 50
+# Resume from the latest checkpoint
+uv run --extra rocm python -m src train --load-latest-model
 ```
 
 ### Key Training Options
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--episodes` | 1024 | Episodes per update |
-| `--updates` | 4 | Number of PPO updates |
-| `--lr` | 3e-4 | Learning rate |
-| `--gamma` | 0.995 | Discount factor |
-| `--clip-eps` | 0.3 | PPO clip range |
-| `--entropy` | 0.025 | Entropy bonus coefficient |
-| `--self-play` | off | Train against past snapshots |
-| `--pfsp` | uniform | PFSP snapshot weighting: uniform, hard, or variance |
-| `--opponents` | random | Opponent mix (random, heuristic, simple) |
-| `--main-device` | cuda | Device for gradient updates |
-| `--simulation-device` | cuda | Device for episode simulation |
-| `--eval-every` | 5 | Evaluate every N updates |
+Defaults are defined in `src/config.py` — see the **Configuration System** section below.
+Run `python -m src train --help` for the full, authoritative flag list.
 
 ## Configuration System
 
