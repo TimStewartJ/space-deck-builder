@@ -161,6 +161,7 @@ def train(
         opponent_spec=run_cfg.opponents,
         self_play_ratio=run_cfg.self_play_ratio,
         pfsp_mode=run_cfg.pfsp_mode,
+        snapshot_eviction=run_cfg.snapshot_eviction,
     )
     if resume_ckpt is not None and run_cfg.self_play:
         manifest = resume_ckpt.get("pool_manifest")
@@ -265,6 +266,15 @@ def train(
         logger.info(f"LR schedule: cosine {ppo_cfg.lr:.1e} -> {ppo_cfg.lr_end:.1e} "
                      f"over {total_horizon} updates")
     else:
+        # Constant LR: if we resumed from a checkpoint, the optimizer's loaded
+        # param_group LRs reflect whatever schedule was active when the
+        # checkpoint was saved (e.g. a cosine-annealed 1e-5 floor). A user
+        # passing --lr-schedule constant --lr X expects X to take effect, so
+        # explicitly overwrite the loaded LRs here. Without this override,
+        # --lr is silently ignored on resume.
+        if resume_ckpt is not None:
+            for pg in agent.optimizer.param_groups:
+                pg["lr"] = ppo_cfg.lr
         logger.info(f"LR schedule: constant {ppo_cfg.lr:.1e}")
 
     total_time_spent_on_updates = 0.0
@@ -377,7 +387,8 @@ def train(
         if run_cfg.self_play:
             snapshot_sd = copy.deepcopy(agent.model).cpu().state_dict()
             pool.add_snapshot(snapshot_sd, f"PPO_{upd}",
-                              model_config=agent.model_config)
+                              model_config=agent.model_config,
+                              update=upd)
 
         # Evaluate performance (every N updates, and always on the last)
         is_last_update = upd == end_update

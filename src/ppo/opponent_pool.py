@@ -6,6 +6,7 @@ for adaptive snapshot weighting based on win rate estimates.
 """
 from __future__ import annotations
 
+import math
 import random
 from typing import Callable
 
@@ -25,6 +26,15 @@ AGENT_REGISTRY: dict[str, Callable[[str], Agent]] = {
 VALID_AGENT_NAMES = set(AGENT_REGISTRY.keys())
 
 PFSP_MODES = {"uniform", "hard", "variance"}
+
+# Supported snapshot-pool eviction strategies. ``fifo`` drops the oldest
+# snapshot when the pool is over cap (preserves legacy behavior for callers
+# that don't track update numbers). ``geometric`` keeps a log-spaced ladder
+# of ages — the cap snapshots whose update numbers best match the target
+# ages [1, 2, 4, 8, ..., 2^(cap-1)] relative to the most recently-added
+# snapshot's update — so the pool always covers a wide band of historical
+# selves instead of collapsing to near-clones of the current policy.
+EVICTION_MODES = {"fifo", "geometric"}
 
 
 class OpponentPool:
@@ -49,6 +59,7 @@ class OpponentPool:
         snapshot_cap: int = 10,
         pfsp_mode: str | None = None,
         pfsp_ema_alpha: float = 0.3,
+        snapshot_eviction: str | None = None,
     ):
         from src.config import RunConfig
         _defaults = RunConfig()
@@ -58,15 +69,23 @@ class OpponentPool:
             self_play_ratio = _defaults.self_play_ratio
         if pfsp_mode is None:
             pfsp_mode = _defaults.pfsp_mode
+        if snapshot_eviction is None:
+            snapshot_eviction = _defaults.snapshot_eviction
         if pfsp_mode not in PFSP_MODES:
             raise ValueError(
                 f"Unknown PFSP mode {pfsp_mode!r}. "
                 f"Valid modes: {', '.join(sorted(PFSP_MODES))}"
             )
+        if snapshot_eviction not in EVICTION_MODES:
+            raise ValueError(
+                f"Unknown snapshot_eviction {snapshot_eviction!r}. "
+                f"Valid modes: {', '.join(sorted(EVICTION_MODES))}"
+            )
         self.entries: list[tuple[str, float]] = _parse_opponent_spec(opponent_spec)
         self.self_play_ratio = self_play_ratio
         self.snapshot_cap = snapshot_cap
         self.pfsp_mode = pfsp_mode
+        self.snapshot_eviction = snapshot_eviction
         self._pfsp_ema_alpha = pfsp_ema_alpha
 
         # PPO snapshot state_dicts stored as (name, state_dict, model_config) tuples
@@ -78,6 +97,11 @@ class OpponentPool:
         # the saved manifest (e.g., snapshots loaded from a manifest before
         # the trainer has had a chance to re-save them).
         self._snapshot_paths: dict[str, str] = {}
+        # Training update number at which each snapshot was captured. Used by
+        # the geometric eviction mode to pick log-spaced ages. Optional: when
+        # add_snapshot is called without ``update``, the snapshot participates
+        # only in FIFO eviction (it has no known age).
+        self._snapshot_updates: dict[str, int] = {}
         # EMA win rates per snapshot for PFSP (new snapshots start at 0.5)
         self._snapshot_ema: dict[str, float] = {}
         # Cumulative games observed per snapshot (for confidence weighting)
@@ -93,24 +117,94 @@ class OpponentPool:
         return [name for name, _ in self.entries]
 
     def add_snapshot(self, state_dict: dict, name: str,
-                     model_config=None) -> None:
-        """Add a PPO snapshot for self-play. Evicts oldest when at cap.
+                     model_config=None, *, update: int | None = None) -> None:
+        """Add a PPO snapshot for self-play. Enforces ``snapshot_cap``.
 
         Args:
             state_dict: model weights from the snapshot.
             name: identifier for the snapshot (e.g. "PPO_5").
             model_config: ModelConfig used to build the model architecture.
                 Required to reconstruct the correct actor head type.
+            update: training update number at which this snapshot was saved.
+                Required for geometric eviction to position the snapshot on
+                the log-spaced age ladder. When omitted (or when any pool
+                member lacks an update), eviction falls back to FIFO for
+                this operation.
         """
         self._snapshots.append((name, state_dict, model_config))
+        if update is not None:
+            self._snapshot_updates[name] = update
         self._snapshot_ema.setdefault(name, 0.5)
         self._snapshot_games.setdefault(name, 0)
         if len(self._snapshots) > self.snapshot_cap:
-            evicted_name = self._snapshots[0][0]
-            self._snapshot_ema.pop(evicted_name, None)
-            self._snapshot_games.pop(evicted_name, None)
-            self._snapshot_paths.pop(evicted_name, None)
-            self._snapshots = self._snapshots[-self.snapshot_cap:]
+            self._enforce_cap()
+
+    def _enforce_cap(self) -> None:
+        """Shrink ``self._snapshots`` back down to ``snapshot_cap`` members.
+
+        Uses geometric eviction when the mode is enabled and every current
+        snapshot has a known update number. Falls back to FIFO otherwise
+        so callers that don't track updates (tests, older code paths) see
+        unchanged behavior.
+        """
+        if len(self._snapshots) <= self.snapshot_cap:
+            return
+        have_all_updates = all(
+            name in self._snapshot_updates for name, _, _ in self._snapshots
+        )
+        use_geometric = self.snapshot_eviction == "geometric" and have_all_updates
+        if use_geometric:
+            keep_indices = self._geometric_keep_indices()
+        else:
+            keep_indices = list(range(len(self._snapshots)))[-self.snapshot_cap:]
+        keep_set = set(keep_indices)
+        for idx, (ev_name, _, _) in enumerate(self._snapshots):
+            if idx not in keep_set:
+                self._drop_snapshot_state(ev_name)
+        self._snapshots = [self._snapshots[i] for i in keep_indices]
+
+    def _geometric_keep_indices(self) -> list[int]:
+        """Select ``snapshot_cap`` indices along a log-spaced age ladder.
+
+        Target ages are distributed in log space between 0 (newest) and
+        the full history available in the current (oversized) pool,
+        i.e. ``newest_update - oldest_update``. Each target claims the
+        still-available snapshot whose update is closest to
+        ``newest_update - target_age``. Endpoints are pinned — the
+        newest and oldest pool members are always retained — while the
+        intermediate slots spread geometrically so the pool always
+        covers a wide band of opponent ages rather than collapsing to
+        near-clones of the current policy. When the pool is too small
+        to populate all cap slots with distinct snapshots, duplicate
+        targets share the selection queue and fewer than cap snapshots
+        may be retained; this naturally resolves into a full ladder as
+        training progresses and more history accumulates.
+        """
+        updates = [self._snapshot_updates[name] for name, _, _ in self._snapshots]
+        newest_update = max(updates)
+        oldest_update = min(updates)
+        history = max(0, newest_update - oldest_update)
+        target_ages = _log_spaced_ages(self.snapshot_cap, history)
+        available = set(range(len(self._snapshots)))
+        chosen: list[int] = []
+        for target_age in target_ages:
+            if not available:
+                break
+            target_update = newest_update - target_age
+            best_idx = min(
+                available,
+                key=lambda i: (abs(updates[i] - target_update), -updates[i]),
+            )
+            chosen.append(best_idx)
+            available.remove(best_idx)
+        return sorted(chosen)
+
+    def _drop_snapshot_state(self, name: str) -> None:
+        """Remove all per-snapshot bookkeeping for a name being evicted."""
+        self._snapshot_ema.pop(name, None)
+        self._snapshot_games.pop(name, None)
+        self._snapshot_paths.pop(name, None)
+        self._snapshot_updates.pop(name, None)
 
     def set_snapshot_path(self, name: str, path: str) -> None:
         """Record the on-disk path for a previously-added snapshot.
@@ -131,7 +225,14 @@ class OpponentPool:
         rate and cumulative games) needed to continue PFSP weighting.
         """
         snapshots = [
-            {"name": name, "path": self._snapshot_paths[name]}
+            {
+                "name": name,
+                "path": self._snapshot_paths[name],
+                # ``update`` is nullable; absent for snapshots added pre-
+                # update-tracking. Included here so geometric eviction can
+                # resume its age ladder after a --resume restart.
+                "update": self._snapshot_updates.get(name),
+            }
             for name, _, _ in self._snapshots
             if name in self._snapshot_paths
         ]
@@ -189,19 +290,28 @@ class OpponentPool:
             mcfg = ModelConfig.from_dict(saved_mcfg) if saved_mcfg else None
             self._snapshots.append((name, ckpt["model_state_dict"], mcfg))
             self._snapshot_paths[name] = str(path)
+            manifest_update = entry.get("update")
+            if manifest_update is None:
+                # Older manifests didn't persist updates. Try recovering
+                # from the checkpoint payload itself (the trainer writes
+                # ``update`` as a top-level key) before falling back to
+                # parsing the conventional ``PPO_<N>`` naming scheme.
+                manifest_update = ckpt.get("update")
+                if manifest_update is None and name.startswith("PPO_"):
+                    suffix = name.split("_", 1)[1]
+                    if suffix.isdigit():
+                        manifest_update = int(suffix)
+            if manifest_update is not None:
+                self._snapshot_updates[name] = int(manifest_update)
             ema_map = manifest.get("ema", {})
             games_map = manifest.get("games", {})
             self._snapshot_ema[name] = ema_map.get(name, 0.5)
             self._snapshot_games[name] = games_map.get(name, 0)
             loaded += 1
         # Enforce snapshot cap in case the manifest stored more entries than
-        # the current configuration permits.
-        if len(self._snapshots) > self.snapshot_cap:
-            for evicted_name, _, _ in self._snapshots[:-self.snapshot_cap]:
-                self._snapshot_ema.pop(evicted_name, None)
-                self._snapshot_games.pop(evicted_name, None)
-                self._snapshot_paths.pop(evicted_name, None)
-            self._snapshots = self._snapshots[-self.snapshot_cap:]
+        # the current configuration permits. Uses the same eviction strategy
+        # as live adds so a resumed pool is compacted consistently.
+        self._enforce_cap()
         return loaded
 
     def update_results(self, results: dict[str, tuple[int, int]]) -> None:
@@ -350,6 +460,28 @@ def _make_ppo_opponent(
                    registry=registry, model_config=model_config)
     opp.model.load_state_dict(state_dict)
     return opp
+
+
+def _log_spaced_ages(count: int, history: int) -> list[int]:
+    """Return ``count`` target ages log-spaced between 0 and ``history``.
+
+    The sequence always includes 0 (newest snapshot) and ``history``
+    (oldest available snapshot); intermediate entries are distributed
+    evenly in log space so the returned ladder grows geometrically.
+    When ``history`` is too small to yield ``count`` distinct rounded
+    ages the caller sees duplicates (the geometric-eviction path
+    naturally consumes them without double-picking any snapshot).
+    """
+    if count <= 0:
+        return []
+    if count == 1 or history <= 0:
+        return [0] * count
+    log_h = math.log(history)
+    ages = [0]
+    for i in range(1, count):
+        age = int(round(math.exp(log_h * i / (count - 1))))
+        ages.append(age)
+    return ages
 
 
 def _parse_opponent_spec(spec: str) -> list[tuple[str, float]]:

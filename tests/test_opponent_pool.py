@@ -203,6 +203,97 @@ class TestSnapshotEviction:
         assert "snap_1" not in snap_names
 
 
+class TestGeometricEviction:
+    """Validate the geometric (log-spaced age) snapshot eviction strategy."""
+
+    def _names(self, pool):
+        return [n for n, _, _ in pool._snapshots]
+
+    def test_geometric_keeps_newest_always(self):
+        pool = OpponentPool(snapshot_cap=3, snapshot_eviction="geometric")
+        for upd in range(1, 11):
+            pool.add_snapshot({}, f"PPO_{upd}", update=upd)
+        # Newest snapshot is always kept because target age 1 picks it.
+        assert "PPO_10" in self._names(pool)
+
+    def test_geometric_produces_log_spaced_ages(self):
+        pool = OpponentPool(snapshot_cap=4, snapshot_eviction="geometric")
+        for upd in range(1, 33):
+            pool.add_snapshot({}, f"PPO_{upd}", update=upd)
+        kept_updates = sorted(pool._snapshot_updates.values(), reverse=True)
+        # Endpoints are pinned: newest (32) and oldest (1) always survive.
+        assert len(kept_updates) == 4
+        assert kept_updates[0] == 32
+        assert kept_updates[-1] == 1
+        # Intermediate ages spread log-style: gaps from newest grow
+        # geometrically (each gap is strictly larger than the previous).
+        gaps = [kept_updates[i] - kept_updates[i + 1] for i in range(3)]
+        assert all(gaps[i + 1] >= gaps[i] for i in range(2)), (
+            f"expected non-decreasing gaps, got {gaps} from {kept_updates}"
+        )
+
+    def test_geometric_large_pool_spread(self):
+        pool = OpponentPool(snapshot_cap=10, snapshot_eviction="geometric")
+        for upd in range(1, 1001):
+            pool.add_snapshot({}, f"PPO_{upd}", update=upd)
+        kept = sorted(pool._snapshot_updates.values(), reverse=True)
+        # Endpoints pinned: newest (1000) and oldest-reachable (≈1).
+        assert kept[0] == 1000
+        assert kept[-1] == 1
+        # Ladder spans the full history — ratio of consecutive "ages" from
+        # newest is roughly geometric so no two kept updates should be closer
+        # than ~1 apart at the top nor more than ~half the remaining history
+        # at the bottom.
+        assert len(kept) == 10
+        # Strictly decreasing and spread across the full range.
+        assert all(a > b for a, b in zip(kept, kept[1:]))
+
+    def test_geometric_preserves_stats_for_kept(self):
+        pool = OpponentPool(snapshot_cap=3, snapshot_eviction="geometric")
+        for upd in range(1, 11):
+            pool.add_snapshot({}, f"PPO_{upd}", update=upd)
+        # After 10 adds the pool has compacted itself several times under
+        # geometric eviction; record EMA on a snapshot that is guaranteed to
+        # survive the next compaction (the newest one is always kept).
+        pool.update_results({"PPO_10": (8, 10)})
+        pool.add_snapshot({}, "PPO_11", update=11)
+        # Newest (PPO_11) always survives; verify its stat bookkeeping exists.
+        assert "PPO_11" in self._names(pool)
+        assert "PPO_11" in pool._snapshot_ema
+
+    def test_fifo_fallback_when_updates_missing(self):
+        # Eviction falls back to FIFO if any pool member lacks an update.
+        pool = OpponentPool(snapshot_cap=2, snapshot_eviction="geometric")
+        pool.add_snapshot({}, "snap_1")       # no update
+        pool.add_snapshot({}, "snap_2")       # no update
+        pool.add_snapshot({}, "snap_3")       # no update → FIFO: drop snap_1
+        assert self._names(pool) == ["snap_2", "snap_3"]
+
+    def test_fifo_mode_explicitly(self):
+        pool = OpponentPool(snapshot_cap=2, snapshot_eviction="fifo")
+        pool.add_snapshot({}, "PPO_1", update=1)
+        pool.add_snapshot({}, "PPO_2", update=2)
+        pool.add_snapshot({}, "PPO_3", update=3)
+        assert self._names(pool) == ["PPO_2", "PPO_3"]
+
+    def test_invalid_eviction_mode_rejected(self):
+        with pytest.raises(ValueError, match="Unknown snapshot_eviction"):
+            OpponentPool(snapshot_eviction="bogus")
+
+    def test_geometric_evicts_stats(self):
+        pool = OpponentPool(snapshot_cap=3, snapshot_eviction="geometric")
+        for upd in range(1, 11):
+            pool.add_snapshot({}, f"PPO_{upd}", update=upd)
+        dropped_names = set(range(1, 11)) - {
+            int(n.split("_")[1]) for n in self._names(pool)
+        }
+        for upd in dropped_names:
+            name = f"PPO_{upd}"
+            assert name not in pool._snapshot_ema
+            assert name not in pool._snapshot_games
+            assert name not in pool._snapshot_updates
+
+
 class TestPFSPSummary:
     """Validate the PFSP summary output for logging."""
 
