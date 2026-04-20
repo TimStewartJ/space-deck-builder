@@ -79,8 +79,10 @@ class CardFeatureTable(nn.Module):
                 if cd.ally_factions & bit:
                     row[5 + NUM_FACTIONS + j] = 1.0
 
-        # Buffer (not parameter) — values are static per game configuration.
-        self.register_buffer('features', feats)
+        # Buffer (not parameter) and non-persistent — values are derived
+        # from the CardRegistry at construction time and must always reflect
+        # the current registry, never a stale checkpoint.
+        self.register_buffer('features', feats, persistent=False)
         self.num_cards = num_cards
         self.feature_dim = STATIC_FEATURE_DIM
 
@@ -349,8 +351,10 @@ class PPOActorCritic(nn.Module):
 
         Two paths share the same downstream pooler signature:
           * Legacy (``token_features=False``): tokens are
-            ``card_emb[c] + zone_emb[z]`` broadcast over the batch, matching
-            the original sum-pool semantics bit-for-bit.
+            ``card_emb[c] + zone_emb[z]`` broadcast over the batch. The
+            sum-pool reduction order differs from the pre-refactor per-zone
+            loop (now a fused einsum over [B,Z,C,E]), so outputs are
+            mathematically equivalent but may differ by a few float32 ULPs.
           * Static-feature: concat of card_emb, zone_emb, static features and
             the per-slot presence value, projected to ``emb_dim``.
         """

@@ -223,7 +223,9 @@ def test_token_features_state_dict_incompatible_with_legacy():
     src_model, state_dim, action_dim = _build_token_model(reg, pool_type="sum")
     sd = src_model.state_dict()
     assert any("token_proj" in k for k in sd.keys())
-    assert any("card_features" in k for k in sd.keys())
+    # card_features.features is registered non-persistent, so it must NOT
+    # appear in the state_dict (it's derived from the registry at construction).
+    assert not any("card_features" in k for k in sd.keys())
 
     legacy = PPOActorCritic(
         state_dim, action_dim, reg.num_cards,
