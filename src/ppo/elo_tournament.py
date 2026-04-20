@@ -512,9 +512,11 @@ def run_tournament(
             games_per_pair=min(games_per_pair, 50),  # cap replay collection
             cards=cards,
             card_names=card_names,
+            card_index_map=registry.card_index_map,
             action_dim=action_dim,
             state_dim=state_dim,
             device=device,
+            num_workers=num_workers,
             num_concurrent=num_concurrent,
             output_dir=replay_output_dir,
             data_cfg=data_cfg,
@@ -535,6 +537,133 @@ def run_tournament(
     return results
 
 
+def _dispatch_parallel_pairings(
+    *,
+    tasks: list,
+    model_registry: dict,
+    num_workers: int,
+    num_concurrent: int,
+    data_cfg: DataConfig,
+    card_names: list[str],
+    card_index_map: dict,
+    action_dim: int,
+    state_dim: int,
+    device: str,
+):
+    """Run a list of ``PairingTask``s through one shared
+    :class:`InferenceServer` and a fleet of tournament workers, yielding
+    :class:`TournamentResult`s as they arrive.
+
+    Owns the full lifecycle: server start, worker spawn, task + sentinel
+    enqueue, and shutdown in ``finally``. Raises immediately on any
+    :class:`WorkerError` so callers fail fast instead of hanging.
+
+    Both the regular Elo path and the replay-collection path use this
+    helper. ``model_registry`` should already include every PPO model
+    referenced by any task in ``tasks``; built-in agents don't register.
+    """
+    import multiprocessing as mp
+    from src.ppo.mp_inference_server import InferenceServer, WorkerError
+    from src.ppo.mp_sim_worker import (
+        TournamentResult, tournament_worker_main,
+    )
+
+    if not tasks:
+        return
+
+    ctx = mp.get_context("spawn")
+    actual_workers = min(num_workers, len(tasks))
+    server = InferenceServer(
+        models=model_registry, device=torch.device(device),
+        num_workers=actual_workers, ctx=ctx,
+    )
+    server.start()
+
+    task_queue = ctx.Queue()
+    result_queue = ctx.Queue()
+
+    # Dividing num_concurrent by worker count keeps total GPU batch size
+    # roughly comparable to the serial path.
+    per_worker_concurrent = max(1, num_concurrent // actual_workers)
+
+    processes = []
+    try:
+        for worker_id in range(actual_workers):
+            proc = ctx.Process(
+                target=tournament_worker_main,
+                args=(
+                    worker_id,
+                    per_worker_concurrent,
+                    data_cfg.to_dict(),
+                    card_names,
+                    card_index_map,
+                    action_dim,
+                    state_dim,
+                    task_queue,
+                    result_queue,
+                    server.request_queue,
+                    server.response_queues[worker_id],
+                ),
+            )
+            proc.start()
+            processes.append(proc)
+
+        for task in tasks:
+            task_queue.put(task)
+        for _ in range(actual_workers):
+            task_queue.put(None)
+
+        remaining = len(tasks)
+        while remaining > 0:
+            item = result_queue.get()
+            if isinstance(item, WorkerError):
+                # Fail fast: raising shuts down the server and terminates
+                # workers via the finally block below.
+                raise RuntimeError(f"Tournament worker error:\n{item.error}")
+            assert isinstance(item, TournamentResult)
+            yield item
+            remaining -= 1
+
+    finally:
+        server.stop()
+        for proc in processes:
+            proc.join(timeout=5.0)
+        for proc in processes:
+            if proc.is_alive():
+                proc.terminate()
+                proc.join(timeout=2.0)
+
+
+def _build_model_registry(
+    participants: list, card_names: list[str],
+    action_dim: int, state_dim: int,
+) -> dict:
+    """Build the ``label -> PPOActorCritic`` registry the InferenceServer
+    needs. One model per :class:`CheckpointParticipant`; built-ins are
+    served inline by workers and don't appear here.
+    """
+    models: dict[str, PPOActorCritic] = {}
+    for p in participants:
+        if isinstance(p, CheckpointParticipant):
+            m = PPOActorCritic(
+                state_dim=state_dim, action_dim=action_dim,
+                num_cards=len(card_names), model_config=p.model_config,
+            )
+            m.load_state_dict(p.state_dict)
+            m.eval()
+            models[p.label] = m
+    return models
+
+
+def _kind_and_id(p) -> tuple[str, str]:
+    """Map a participant to the (kind, id) pair the worker uses to build
+    the right player slot for a pairing.
+    """
+    if isinstance(p, CheckpointParticipant):
+        return ("ppo", p.label)
+    return ("builtin", p.agent_type)
+
+
 def _collect_tournament_replays(
     *,
     ppo_pairings: list[tuple[int, int]],
@@ -543,86 +672,77 @@ def _collect_tournament_replays(
     games_per_pair: int,
     cards: list,
     card_names: list[str],
+    card_index_map: dict,
     action_dim: int,
     state_dim: int,
     device: str,
+    num_workers: int,
     num_concurrent: int,
     output_dir: str,
     data_cfg: 'DataConfig',
 ) -> list[str]:
-    """Run a replay-collection pass over PPO pairings.
+    """Run a replay-collection pass over PPO pairings in parallel.
 
-    Uses single-process BatchRunner.run_analysis() per pairing to
-    collect per-decision data. Returns list of saved replay file paths.
+    Reuses the regular tournament's :class:`InferenceServer` + worker fleet
+    via :func:`_dispatch_parallel_pairings`. Each pairing produces one
+    ``{labels[i]}_vs_{labels[j]}.json.gz`` file in ``output_dir``; the
+    worker writes it atomically and reports the path back via
+    :class:`TournamentResult.replay_path`.
+
+    Side A is recorded (the focal PPO checkpoint). In `ppo_pairings` side A
+    is always a CheckpointParticipant since checkpoints precede builtins
+    in :func:`build_participants`.
     """
     import os
-    from src.analysis.replay_collector import ReplayCollector
-    from src.ppo.batch_runner import BatchRunner
+    import random as _random
+    from src.ppo.mp_sim_worker import PairingTask
+
+    model_registry = _build_model_registry(
+        participants, card_names, action_dim, state_dim,
+    )
+
+    tasks: list[PairingTask] = []
+    for pairing_id, (i, j) in enumerate(ppo_pairings):
+        ka, ida = _kind_and_id(participants[i])
+        kb, idb = _kind_and_id(participants[j])
+        replay_path = os.path.join(
+            output_dir, f"{labels[i]}_vs_{labels[j]}.json.gz"
+        )
+        tasks.append(PairingTask(
+            pairing_id=pairing_id, i=i, j=j,
+            num_games=games_per_pair,
+            seed=_random.randint(0, 1_000_000_000),
+            side_a_kind=ka, side_b_kind=kb,
+            side_a_id=ida, side_b_id=idb,
+            collect_replays=True,
+            replay_output_path=replay_path,
+        ))
 
     replay_files: list[str] = []
-    registry = data_cfg.build_registry(cards)
-
-    for idx, (i, j) in enumerate(ppo_pairings):
-        p_a = participants[i]
-        p_b = participants[j]
-
-        # Build model A for batched inference
-        model_a = PPOActorCritic(
-            state_dim=state_dim,
-            action_dim=action_dim,
-            num_cards=len(card_names),
-            model_config=p_a.model_config if isinstance(p_a, CheckpointParticipant) else ModelConfig(),
-        ).to(device)
-        if isinstance(p_a, CheckpointParticipant):
-            model_a.load_state_dict(p_a.state_dict)
-        model_a.eval()
-
-        # Build opponent factory for B
-        if isinstance(p_b, CheckpointParticipant):
-            opp_factory = _make_opponent_factory(
-                p_b.state_dict, card_names, device,
-                model_config=p_b.model_config,
-            )
-        else:
-            from src.ppo.opponent_pool import AGENT_REGISTRY
-            agent_type = p_b.agent_type
-            def opp_factory(at=agent_type):
-                return AGENT_REGISTRY[at](at.capitalize())
-
-        runner = BatchRunner(
-            model=model_a,
-            card_names=card_names,
-            cards=cards,
-            action_dim=action_dim,
-            device=torch.device(device),
-            opponent_factory=opp_factory,
-            num_concurrent=min(num_concurrent, games_per_pair),
-            registry=registry,
-        )
-
-        collector = ReplayCollector(card_names, action_dim)
-        pairing_label = f"{labels[i]}_vs_{labels[j]}"
-
-        set_disabled(True)
-        wins_a, losses_a, _ = runner.run_analysis(games_per_pair, collector, pairing_label)
-        set_disabled(False)
-
-        # Tag replays with model identity
-        for replay in collector.replays:
-            replay.player_model = labels[i]
-            replay.opponent_model = labels[j]
-
-        replay_path = os.path.join(output_dir, f"{labels[i]}_vs_{labels[j]}.json.gz")
-        collector.save(replay_path)
-        replay_files.append(replay_path)
-
-        wr = wins_a / games_per_pair * 100 if games_per_pair > 0 else 0
-        log(f"  Replay [{idx + 1}/{len(ppo_pairings)}] {pairing_label}: "
-            f"{wins_a}/{games_per_pair} ({wr:.0f}%)")
-
-        del model_a, runner
-        if device != "cpu":
-            torch.cuda.empty_cache()
+    t0 = time.time()
+    n_done = 0
+    for result in _dispatch_parallel_pairings(
+        tasks=tasks,
+        model_registry=model_registry,
+        num_workers=num_workers,
+        num_concurrent=num_concurrent,
+        data_cfg=data_cfg,
+        card_names=card_names,
+        card_index_map=card_index_map,
+        action_dim=action_dim,
+        state_dim=state_dim,
+        device=device,
+    ):
+        n_done += 1
+        actual_games = result.wins_a + result.wins_b
+        wr = result.wins_a / actual_games * 100 if actual_games > 0 else 0
+        elapsed = time.time() - t0
+        pairing_label = f"{labels[result.i]}_vs_{labels[result.j]}"
+        log(f"  Replay [{n_done}/{len(tasks)}] {pairing_label}: "
+            f"{result.wins_a}/{actual_games} ({wr:.0f}%)  "
+            f"({elapsed:.1f}s elapsed)")
+        if result.replay_path:
+            replay_files.append(result.replay_path)
 
     return replay_files
 
@@ -657,128 +777,57 @@ def _run_parallel_pairings(
     into the caller-supplied ``match_*`` / ``wins_total`` / ``losses_total``
     / ``games_total`` structures by participant index.
     """
-    import multiprocessing as mp
     import random as _random
-    from src.ppo.mp_inference_server import InferenceServer, WorkerError
-    from src.ppo.mp_sim_worker import (
-        PairingTask, TournamentResult, tournament_worker_main,
+    from src.ppo.mp_sim_worker import PairingTask
+
+    model_registry = _build_model_registry(
+        participants, card_names, action_dim, state_dim,
     )
 
-    # Build the long-lived multi-model registry: one PPOActorCritic per
-    # CheckpointParticipant, keyed by its label. Built-in agents don't
-    # register with the server; they run inline inside the worker.
-    models: dict[str, PPOActorCritic] = {}
-    for p in participants:
-        if isinstance(p, CheckpointParticipant):
-            m = PPOActorCritic(
-                state_dim=state_dim, action_dim=action_dim,
-                num_cards=len(card_names), model_config=p.model_config,
-            )
-            m.load_state_dict(p.state_dict)
-            m.eval()
-            models[p.label] = m
+    tasks: list[PairingTask] = []
+    for pairing_id, (i, j) in enumerate(ppo_pairings):
+        ka, ida = _kind_and_id(participants[i])
+        kb, idb = _kind_and_id(participants[j])
+        tasks.append(PairingTask(
+            pairing_id=pairing_id, i=i, j=j,
+            num_games=games_per_pair,
+            seed=_random.randint(0, 1_000_000_000),
+            side_a_kind=ka, side_b_kind=kb,
+            side_a_id=ida, side_b_id=idb,
+        ))
 
-    ctx = mp.get_context("spawn")
-    actual_workers = min(num_workers, len(ppo_pairings))
-    server = InferenceServer(
-        models=models, device=torch.device(device),
-        num_workers=actual_workers, ctx=ctx,
-    )
-    server.start()
-
-    task_queue = ctx.Queue()
-    result_queue = ctx.Queue()
-
-    # per_worker_concurrent scales the concurrent-game count inside each
-    # worker. Dividing num_concurrent by worker count keeps total GPU
-    # batch size roughly comparable to the serial path.
-    per_worker_concurrent = max(1, num_concurrent // actual_workers)
-
-    processes = []
-    try:
-        for worker_id in range(actual_workers):
-            proc = ctx.Process(
-                target=tournament_worker_main,
-                args=(
-                    worker_id,
-                    per_worker_concurrent,
-                    data_cfg.to_dict(),
-                    card_names,
-                    card_index_map,
-                    action_dim,
-                    state_dim,
-                    task_queue,
-                    result_queue,
-                    server.request_queue,
-                    server.response_queues[worker_id],
-                ),
-            )
-            proc.start()
-            processes.append(proc)
-
-        # Enqueue all pairing tasks, then sentinels so workers exit when done.
-        def _kind_and_id(p):
-            if isinstance(p, CheckpointParticipant):
-                return ("ppo", p.label)
-            return ("builtin", p.agent_type)
-
-        for pairing_id, (i, j) in enumerate(ppo_pairings):
-            ka, ida = _kind_and_id(participants[i])
-            kb, idb = _kind_and_id(participants[j])
-            task_queue.put(PairingTask(
-                pairing_id=pairing_id, i=i, j=j,
-                num_games=games_per_pair,
-                seed=_random.randint(0, 1_000_000_000),
-                side_a_kind=ka, side_b_kind=kb,
-                side_a_id=ida, side_b_id=idb,
-            ))
-        for _ in range(actual_workers):
-            task_queue.put(None)
-
-        # Collect results; track start times per-pairing for logging.
-        start_times: dict[int, float] = {}
-        # Mark every pairing as "started" at dispatch time for a reasonable
-        # per-pairing wall-time estimate. Parallel pairings will show
-        # overlapping durations; that's expected.
-        t0 = time.time()
-        for pairing_id in range(len(ppo_pairings)):
-            start_times[pairing_id] = t0
-
-        remaining = len(ppo_pairings)
-        while remaining > 0:
-            item = result_queue.get()
-            if isinstance(item, WorkerError):
-                # Fail fast: stop the server and terminate workers so we
-                # surface the error instead of hanging on the queue.
-                raise RuntimeError(f"Tournament worker error:\n{item.error}")
-            assert isinstance(item, TournamentResult)
-            i, j = item.i, item.j
-            wins_a, wins_b = item.wins_a, item.wins_b
-            actual_games = wins_a + wins_b
-            match_wins[(i, j)] = wins_a
-            match_games[(i, j)] = actual_games
-            wins_total[i] += wins_a
-            losses_total[i] += wins_b
-            wins_total[j] += wins_b
-            losses_total[j] += wins_a
-            games_total[i] += actual_games
-            games_total[j] += actual_games
-            pairings_done += 1
-            wr_a = wins_a / actual_games * 100 if actual_games > 0 else 0
-            elapsed = time.time() - start_times.get(item.pairing_id, t0)
-            log(f"  [{pairings_done}/{total_pairings}] {labels[i]} vs {labels[j]}: "
-                f"{wins_a}/{actual_games} ({wr_a:.0f}%)  ({elapsed:.1f}s)")
-            remaining -= 1
-
-    finally:
-        # Drain any leftover sentinels / results, then shut everything down.
-        server.stop()
-        for proc in processes:
-            proc.join(timeout=5.0)
-        for proc in processes:
-            if proc.is_alive():
-                proc.terminate()
-                proc.join(timeout=2.0)
+    # Mark every pairing as "started" at dispatch time for a reasonable
+    # per-pairing wall-time estimate. Parallel pairings will show
+    # overlapping durations; that's expected.
+    t0 = time.time()
+    for result in _dispatch_parallel_pairings(
+        tasks=tasks,
+        model_registry=model_registry,
+        num_workers=num_workers,
+        num_concurrent=num_concurrent,
+        data_cfg=data_cfg,
+        card_names=card_names,
+        card_index_map=card_index_map,
+        action_dim=action_dim,
+        state_dim=state_dim,
+        device=device,
+    ):
+        i, j = result.i, result.j
+        wins_a, wins_b = result.wins_a, result.wins_b
+        actual_games = wins_a + wins_b
+        match_wins[(i, j)] = wins_a
+        match_games[(i, j)] = actual_games
+        wins_total[i] += wins_a
+        losses_total[i] += wins_b
+        wins_total[j] += wins_b
+        losses_total[j] += wins_a
+        games_total[i] += actual_games
+        games_total[j] += actual_games
+        pairings_done += 1
+        wr_a = wins_a / actual_games * 100 if actual_games > 0 else 0
+        elapsed = time.time() - t0
+        log(f"  [{pairings_done}/{total_pairings}] {labels[i]} vs {labels[j]}: "
+            f"{wins_a}/{actual_games} ({wr_a:.0f}%)  ({elapsed:.1f}s)")
 
     return pairings_done
 

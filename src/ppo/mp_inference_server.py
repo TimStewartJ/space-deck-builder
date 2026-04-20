@@ -38,6 +38,11 @@ class InferenceRequest:
     states: np.ndarray      # [batch, state_size] float32
     masks: np.ndarray        # [batch, action_dim] uint8 (1=valid, 0=invalid)
     model_id: str = "training"  # which model to use ("training" or snapshot name)
+    # When True, the response carries the masked pre-sample logits for every
+    # row so the worker can compute top-k probabilities and policy entropy
+    # for replay-style analysis. Off by default to keep the regular eval /
+    # rollout path's wire size unchanged.
+    return_logits: bool = False
 
 
 @dataclass
@@ -48,12 +53,18 @@ class InferenceResponse:
     because ``model_id`` was never registered or was unregistered before the
     request arrived). The worker should raise on this field rather than use
     the (zero-filled) output arrays.
+
+    ``logits`` is populated only when the originating request set
+    ``return_logits=True``. Shape is ``[batch, action_dim]`` float32, with
+    invalid actions already filled with ``-inf`` (i.e. the same masked logits
+    used to sample the action).
     """
     request_id: int
     action_indices: np.ndarray   # [batch] int64
     log_probs: np.ndarray        # [batch] float32
     values: np.ndarray           # [batch] float32
     error: str | None = None
+    logits: np.ndarray | None = None  # [batch, action_dim] float32, masked
 
 
 @dataclass
@@ -127,6 +138,10 @@ class _BufferSlot:
         self.host_actions: torch.Tensor | None = None  # pinned [cap] int64
         self.host_logprobs: torch.Tensor | None = None  # pinned [cap] float32
         self.host_values: torch.Tensor | None = None   # pinned [cap] float32
+        # Allocated lazily — only batches with at least one slice requesting
+        # logits ever populate this buffer. Keeps regular eval/rollout paths
+        # from paying for an extra [cap, action_dim] pinned allocation.
+        self.host_logits: torch.Tensor | None = None   # pinned [cap, action_dim] float32
 
         self.dev_states: torch.Tensor | None = None    # [cap, state_size] float32
         self.dev_masks: torch.Tensor | None = None     # [cap, action_dim] float32
@@ -146,6 +161,13 @@ class _BufferSlot:
         self.host_actions = torch.empty((new_cap,), dtype=torch.int64, pin_memory=pin)
         self.host_logprobs = torch.empty((new_cap,), dtype=torch.float32, pin_memory=pin)
         self.host_values = torch.empty((new_cap,), dtype=torch.float32, pin_memory=pin)
+        # If host_logits was previously allocated for an earlier replay batch,
+        # grow it in lock-step so the lazy allocation stays valid across the
+        # slot's lifetime.
+        if self.host_logits is not None:
+            self.host_logits = torch.empty(
+                (new_cap, self.action_dim), dtype=torch.float32, pin_memory=pin
+            )
 
         self.dev_states = torch.empty(
             (new_cap, self.state_size), dtype=torch.float32, device=self.device
@@ -155,6 +177,15 @@ class _BufferSlot:
         )
         self._capacity = new_cap
 
+    def ensure_logits_buffer(self) -> None:
+        """Allocate ``host_logits`` lazily on first batch that requests logits."""
+        if self.host_logits is not None:
+            return
+        pin = self.device.type == "cuda"
+        self.host_logits = torch.empty(
+            (self._capacity, self.action_dim), dtype=torch.float32, pin_memory=pin
+        )
+
 
 @dataclass
 class _PendingBatch:
@@ -163,7 +194,9 @@ class _PendingBatch:
     batch_size: int
     model_id: str
     # Per-request slice metadata so egress can rebuild InferenceResponses.
-    slices: list[tuple[int, int, int, int]]  # (worker_id, request_id, start, end)
+    # ``return_logits`` lets egress decide whether to attach a logits view to
+    # the response for that slice.
+    slices: list[tuple[int, int, int, int, bool]]  # (worker_id, request_id, start, end, return_logits)
 
 
 @dataclass
@@ -171,7 +204,7 @@ class _CompletedBatch:
     """GPU → Egress: outputs copied into pinned host buffers, event to sync on."""
     slot: _BufferSlot
     batch_size: int
-    slices: list[tuple[int, int, int, int]]
+    slices: list[tuple[int, int, int, int, bool]]
     done_event: torch.cuda.Event | None  # None when running on CPU
     # CUDA events bracketing forward+sample on compute_stream; used by egress
     # to attribute GPU compute time. None on the CPU path.
@@ -523,7 +556,7 @@ class InferenceServer:
         slot.ensure_capacity(total)
 
         offset = 0
-        slices: list[tuple[int, int, int, int]] = []
+        slices: list[tuple[int, int, int, int, bool]] = []
         for req in model_reqs:
             n = int(req.states.shape[0])
             # Copy directly into the pinned torch tensor — using the torch
@@ -533,7 +566,7 @@ class InferenceServer:
             slot.host_masks[offset:offset + n].copy_(
                 torch.from_numpy(req.masks.astype(np.float32, copy=False))
             )
-            slices.append((req.worker_id, req.request_id, offset, offset + n))
+            slices.append((req.worker_id, req.request_id, offset, offset + n, req.return_logits))
             offset += n
 
         return _PendingBatch(slot=slot, batch_size=total, model_id=model_id, slices=slices)
@@ -663,7 +696,7 @@ class InferenceServer:
         # original request_id. Order inside the original request list is
         # preserved via the slice structure.
         n_action = self._action_dim or 1
-        for worker_id, request_id, start, end in pending.slices:
+        for worker_id, request_id, start, end, return_logits in pending.slices:
             size = end - start
             resp = InferenceResponse(
                 request_id=request_id,
@@ -671,6 +704,10 @@ class InferenceServer:
                 log_probs=np.zeros((size,), dtype=np.float32),
                 values=np.zeros((size,), dtype=np.float32),
                 error=err,
+                logits=(
+                    np.zeros((size, n_action), dtype=np.float32)
+                    if return_logits else None
+                ),
             )
             self.response_queues[worker_id].put(resp)
             self._requests_served += 1
@@ -686,16 +723,27 @@ class InferenceServer:
     ) -> _CompletedBatch:
         slot = pending.slot
         n = pending.batch_size
+        # If any slice in this batch needs logits, we copy the full
+        # [n, action_dim] masked-logits tensor to a pinned host buffer and let
+        # egress slice it per-request. Allocating once per slot the first time
+        # logits are requested keeps the regular path's memory footprint flat.
+        any_logits = any(s[4] for s in pending.slices)
+        if any_logits:
+            slot.ensure_logits_buffer()
 
         if copy_in_stream is None:
             # CPU path — no streams, no pinned transfers, just run inline.
             with torch.no_grad():
                 states_t = slot.host_states[:n]
                 masks_t = slot.host_masks[:n]
-                actions, log_probs, values = _forward_and_sample(model, states_t, masks_t)
+                actions, log_probs, values, masked_logits = _forward_and_sample(
+                    model, states_t, masks_t,
+                )
                 slot.host_actions[:n].copy_(actions)
                 slot.host_logprobs[:n].copy_(log_probs)
                 slot.host_values[:n].copy_(values)
+                if any_logits:
+                    slot.host_logits[:n].copy_(masked_logits)
             return _CompletedBatch(
                 slot=slot, batch_size=n, slices=pending.slices, done_event=None,
             )
@@ -743,12 +791,16 @@ class InferenceServer:
             actions.record_stream(copy_out_stream)
             log_probs.record_stream(copy_out_stream)
             values.record_stream(copy_out_stream)
+            if any_logits:
+                logits.record_stream(copy_out_stream)
 
             copy_out_stream.wait_stream(compute_stream)
             with torch.cuda.stream(copy_out_stream):
                 slot.host_actions[:n].copy_(actions, non_blocking=True)
                 slot.host_logprobs[:n].copy_(log_probs, non_blocking=True)
                 slot.host_values[:n].copy_(values, non_blocking=True)
+                if any_logits:
+                    slot.host_logits[:n].copy_(logits, non_blocking=True)
                 done_event = torch.cuda.Event()
                 done_event.record(copy_out_stream)
 
@@ -790,13 +842,22 @@ class InferenceServer:
             actions_np = slot.host_actions[:n].numpy().copy()
             logprobs_np = slot.host_logprobs[:n].numpy().copy()
             values_np = slot.host_values[:n].numpy().copy()
+            # Snapshot logits once if any slice in this batch needs them; per-
+            # slice views are sliced out of this copy below.
+            any_logits = any(s[4] for s in completed.slices)
+            logits_np = (
+                slot.host_logits[:n].numpy().copy() if any_logits else None
+            )
 
-            for worker_id, request_id, start, end in completed.slices:
+            for worker_id, request_id, start, end, return_logits in completed.slices:
                 resp = InferenceResponse(
                     request_id=request_id,
                     action_indices=actions_np[start:end],
                     log_probs=logprobs_np[start:end],
                     values=values_np[start:end],
+                    logits=(
+                        logits_np[start:end].copy() if return_logits else None
+                    ),
                 )
                 self.response_queues[worker_id].put(resp)
                 self._requests_served += 1
@@ -805,7 +866,12 @@ class InferenceServer:
 
 
 def _forward_and_sample(model: PPOActorCritic, states: torch.Tensor, masks: torch.Tensor):
-    """CPU fallback path: run forward + masked categorical sample inline."""
+    """CPU fallback path: run forward + masked categorical sample inline.
+
+    Returns ``(actions, log_probs, values, masked_logits)``. ``masked_logits``
+    is the post-mask, post-no-valid-row-fix logits tensor used for sampling;
+    callers that don't need it can ignore it (the cost is negligible on CPU).
+    """
     logits, values = model(states)
     logits = logits.masked_fill(masks == 0, float('-inf'))
     no_valid = (masks > 0).sum(dim=-1) == 0
@@ -814,4 +880,4 @@ def _forward_and_sample(model: PPOActorCritic, states: torch.Tensor, masks: torc
     dist = torch.distributions.Categorical(logits=logits, validate_args=False)
     actions = dist.sample()
     log_probs = dist.log_prob(actions)
-    return actions, log_probs, values.reshape(-1)
+    return actions, log_probs, values.reshape(-1), logits
