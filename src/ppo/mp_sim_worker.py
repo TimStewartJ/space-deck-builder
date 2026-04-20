@@ -827,6 +827,13 @@ class PairingTask:
     side_b_kind: str
     side_a_id: str                  # model_id (if ppo) or agent_type (if builtin)
     side_b_id: str
+    # When set, the worker records per-decision data for side A and writes a
+    # gzipped JSONL replay file to ``replay_output_path``. Side A is always a
+    # CheckpointParticipant in elo_tournament's ppo_pairings (checkpoints are
+    # built before builtins), so focusing on side A is sufficient to capture
+    # PPO behavior. ``replay_output_path`` is required when this is True.
+    collect_replays: bool = False
+    replay_output_path: str | None = None
 
 
 @_dataclass
@@ -837,6 +844,10 @@ class TournamentResult:
     j: int
     wins_a: int
     wins_b: int
+    # Set to the path that the worker wrote when ``collect_replays`` was True.
+    # ``None`` means no replay file was produced (collection wasn't requested,
+    # or every game ended before side A acted — extremely rare).
+    replay_path: str | None = None
 
 
 def _build_slot(kind: str, ident: str, name: str) -> Agent:
@@ -876,10 +887,17 @@ def _play_pairing(
     state_size: int,
     request_queue,
     response_queue,
-) -> tuple[int, int]:
+) -> tuple[int, int, str | None]:
     """Play ``task.num_games`` games for one pairing and return
-    ``(wins_a, wins_b)``. Uses the server's batched inference path for
-    any PPO slots.
+    ``(wins_a, wins_b, replay_path)``. Uses the server's batched inference
+    path for any PPO slots.
+
+    When ``task.collect_replays`` is True, records per-decision data for
+    side A only (which is always a PPO checkpoint in elo_tournament's
+    ppo_pairings — checkpoints are built before builtins). The completed
+    replay is written to ``task.replay_output_path`` via a temp file +
+    atomic rename, and that path is returned. If collection wasn't
+    requested, returns ``None`` for the path.
     """
     random.seed(task.seed)
     np.random.seed(task.seed % (2**32))
@@ -901,28 +919,54 @@ def _play_pairing(
     games_completed = 0
     request_id = 0
 
-    def _new_game() -> Game:
+    # Replay collection — built lazily so the non-replay path pays nothing.
+    collector = None
+    replay_path: str | None = None
+    if task.collect_replays:
+        if not task.replay_output_path:
+            raise ValueError(
+                f"PairingTask {task.pairing_id} sets collect_replays=True "
+                "but replay_output_path is empty"
+            )
+        from src.analysis.replay_collector import ReplayCollector
+        collector = ReplayCollector(card_names, action_dim)
+
+    def _new_game(slot: int) -> Game:
         g = Game(cards, card_index_map=card_index_map)
         g.add_player(name_a, _build_slot(task.side_a_kind, task.side_a_id, name_a))
         g.add_player(name_b, _build_slot(task.side_b_kind, task.side_b_id, name_b))
         g.start_game()
+        if collector is not None:
+            collector.start_game(slot)
         return g
 
-    def _record_result(g: Game) -> None:
+    def _record_result(slot: int, g: Game) -> None:
         nonlocal wins_a, wins_b, games_completed
-        if g.get_winner() == name_a:
+        winner = g.get_winner()
+        if winner == name_a:
             wins_a += 1
         else:
             wins_b += 1
         games_completed += 1
+        if collector is not None:
+            # Tag with model identity so the dashboard can group / compare
+            # decisions across pairings without consulting external metadata.
+            collector.finish_game(
+                slot=slot,
+                winner=winner,
+                total_turns=g.stats.total_turns,
+                opponent_type=task.side_b_id,
+                player_model=task.side_a_id,
+                opponent_model=task.side_b_id,
+            )
 
     active = min(num_concurrent, task.num_games)
     for i in range(active):
-        games[i] = _new_game()
+        games[i] = _new_game(i)
         games_started += 1
         _advance_tourney_non_ppo(games[i])
         if games[i].is_game_over:
-            _record_result(games[i])
+            _record_result(i, games[i])
             games[i] = None
 
     while games_completed < task.num_games:
@@ -930,13 +974,13 @@ def _play_pairing(
         for i in range(num_concurrent):
             if games[i] is None or not games[i].is_game_over:
                 continue
-            _record_result(games[i])
+            _record_result(i, games[i])
             if games_started < task.num_games:
-                games[i] = _new_game()
+                games[i] = _new_game(i)
                 games_started += 1
                 _advance_tourney_non_ppo(games[i])
                 if games[i].is_game_over:
-                    _record_result(games[i])
+                    _record_result(i, games[i])
                     games[i] = None
             else:
                 games[i] = None
@@ -946,6 +990,10 @@ def _play_pairing(
         pending_indices: list[int] = []
         pending_resolvers: list[dict] = []
         pending_model_ids: list[str] = []
+        # Whether each pending slot belongs to side A. Used to gate replay
+        # recording so that PPO-vs-PPO mirror matches don't mix both sides
+        # into one focal-player file.
+        pending_is_side_a: list[bool] = []
 
         for i in range(num_concurrent):
             if games[i] is None or games[i].is_game_over:
@@ -972,6 +1020,7 @@ def _play_pairing(
             pending_indices.append(i)
             pending_resolvers.append(ctx.resolvers)
             pending_model_ids.append(player.agent.model_id)
+            pending_is_side_a.append(player.name == name_a)
 
         if not pending_indices:
             # No PPO slots waiting — advance any remaining games whose
@@ -993,39 +1042,87 @@ def _play_pairing(
         for k, mid in enumerate(pending_model_ids):
             model_groups.setdefault(mid, []).append(k)
 
-        request_ids_by_mid: dict[str, tuple[int, list[int]]] = {}
+        # Per request-id, remember which pending-k indices it covers and
+        # whether any of those need logits returned for replay recording.
+        request_ids_by_mid: dict[str, tuple[int, list[int], bool]] = {}
         for mid, indices in model_groups.items():
+            # When collecting replays, only request logits if at least one
+            # slot in this model-group is side A. Side-B slices in mirror
+            # matches stay on the cheap path.
+            need_logits = collector is not None and any(
+                pending_is_side_a[k] for k in indices
+            )
             request_queue.put(InferenceRequest(
                 worker_id=worker_id,
                 request_id=request_id,
                 states=states_np[indices],
                 masks=masks_np[indices],
                 model_id=mid,
+                return_logits=need_logits,
             ))
-            request_ids_by_mid[mid] = (request_id, indices)
+            request_ids_by_mid[mid] = (request_id, indices, need_logits)
             request_id += 1
 
-        all_responses: dict[int, int] = {}
+        # Per pending-k: (action_idx, value, logits_row_or_None).
+        all_responses: dict[int, tuple[int, float, np.ndarray | None]] = {}
         for _ in range(len(model_groups)):
             response: InferenceResponse = response_queue.get()
             if response.error is not None:
                 raise RuntimeError(
                     f"InferenceServer error (worker={worker_id}): {response.error}"
                 )
-            for mid, (req_id, indices) in request_ids_by_mid.items():
+            for mid, (req_id, indices, need_logits) in request_ids_by_mid.items():
                 if response.request_id == req_id:
-                    for k, j in enumerate(indices):
-                        all_responses[j] = int(response.action_indices[k])
+                    for k_idx, k in enumerate(indices):
+                        logits_row = (
+                            response.logits[k_idx] if (need_logits and response.logits is not None) else None
+                        )
+                        all_responses[k] = (
+                            int(response.action_indices[k_idx]),
+                            float(response.values[k_idx]),
+                            logits_row,
+                        )
                     break
 
         for k, i in enumerate(pending_indices):
-            action = pending_resolvers[k][all_responses[k]]
+            action_idx, value, logits_row = all_responses[k]
+            action = pending_resolvers[k][action_idx]
+
+            if collector is not None and pending_is_side_a[k]:
+                # record_decision computes top-k probs and entropy from a
+                # torch.Tensor logits row; convert here so the collector's
+                # tensor branch (rather than its zeroed numpy fallback) runs.
+                logits_t = (
+                    torch.from_numpy(logits_row) if logits_row is not None
+                    else torch.zeros(action_dim, dtype=torch.float32)
+                )
+                collector.record_decision(
+                    slot=i,
+                    game=games[i],
+                    player=games[i].current_player,
+                    logits=logits_t,
+                    value=value,
+                    mask=masks_rows_buf[i],
+                    action_idx=action_idx,
+                    action_type=action.type.name,
+                    action_card_id=action.card_id,
+                )
+
             games[i].apply_decision(action)
             # Advance past any subsequent builtin turns inline so the
             # next iteration only has to consider PPO slots.
             _advance_tourney_non_ppo(games[i])
 
-    return wins_a, wins_b
+    if collector is not None and task.replay_output_path:
+        # Atomic write so a worker crash mid-save can't leave a partial
+        # gzip file behind that downstream tooling would try to parse.
+        import os as _os
+        tmp_path = task.replay_output_path + ".tmp"
+        collector.save(tmp_path)
+        _os.replace(tmp_path, task.replay_output_path)
+        replay_path = task.replay_output_path
+
+    return wins_a, wins_b, replay_path
 
 
 def tournament_worker_main(
@@ -1067,7 +1164,7 @@ def tournament_worker_main(
             task = task_queue.get()
             if task is None:
                 return
-            wins_a, wins_b = _play_pairing(
+            wins_a, wins_b, replay_path = _play_pairing(
                 task, worker_id, num_concurrent,
                 card_names, card_index_map, cards,
                 action_dim, state_size,
@@ -1076,6 +1173,7 @@ def tournament_worker_main(
             result_queue.put(TournamentResult(
                 pairing_id=task.pairing_id, i=task.i, j=task.j,
                 wins_a=wins_a, wins_b=wins_b,
+                replay_path=replay_path,
             ))
     except BaseException:
         try:
