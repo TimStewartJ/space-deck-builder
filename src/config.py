@@ -185,6 +185,19 @@ class RunConfig:
     self_play_ratio_start: float = 0.0
     self_play_schedule: str = "linear"
     pfsp_mode: str = "uniform"
+    # Path to a checkpoint to resume training from. When set, model weights,
+    # optimizer state, LR scheduler state, snapshot pool manifest, and the
+    # update counter are restored. ``updates`` is interpreted as "additional
+    # updates to run beyond the resumed update count."
+    resume: str | None = None
+    # Override the cosine LR scheduler horizon (T_max + 1). When None, the
+    # scheduler horizon is derived as ``(start_update - 1) + updates`` — i.e.
+    # this run's last update. Set this to the FINAL target update of a
+    # multi-process training arc (e.g. 200 when chunking 100→200 in 25-step
+    # chunks) so each chunk re-pins T_max to the same overall horizon and
+    # the cosine LR curve flows smoothly across processes instead of
+    # collapsing to the floor at the end of every chunk.
+    lr_horizon: int | None = None
 
     _VALID_SCHEDULES = {"constant", "linear", "cosine"}
 
@@ -261,12 +274,17 @@ class SimConfig:
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
 
-# Current checkpoint schema version — bumped to 2 for per-zone embeddings
-# + sum pooling + shared trunk architecture. V3 would be reserved for future
-# architecture changes that alter state-dict shapes; attention zone pooling
-# does not (it adds optional parameters only when pool_type="attention",
-# and those checkpoints self-identify via the saved ModelConfig).
-CHECKPOINT_VERSION = 2
+# Current checkpoint schema version. V3 adds optional resume-training
+# metadata: optimizer state, LR scheduler state, and a snapshot pool
+# manifest. These are weight-compatible with V2 — V2 checkpoints still
+# load fine, they just can't be resumed from (only weight-loaded).
+CHECKPOINT_VERSION = 3
+
+# Schema versions whose model weights are compatible with the current
+# architecture. Loading a checkpoint outside this set raises ValueError.
+# Pre-V2 (V0/V1) used a flat embedding + separate actor/critic MLPs and
+# is not loadable.
+COMPAT_CHECKPOINT_VERSIONS = {2, 3}
 
 
 def save_checkpoint(
@@ -280,9 +298,17 @@ def save_checkpoint(
     game_config: GameConfig | None = None,
     data_config: DataConfig | None = None,
     update: int | None = None,
+    optimizer_state_dict: dict | None = None,
+    scheduler_state_dict: dict | None = None,
+    pool_manifest: dict | None = None,
     extra: dict[str, Any] | None = None,
 ) -> None:
-    """Save a versioned checkpoint with config metadata."""
+    """Save a versioned checkpoint with config metadata.
+
+    Resume-training metadata (optimizer, scheduler, pool_manifest) is
+    optional — checkpoints that omit it can still be loaded for
+    inference/evaluation but cannot be resumed from.
+    """
     import torch
     from datetime import datetime, timezone
 
@@ -306,6 +332,12 @@ def save_checkpoint(
         checkpoint["config"]["data"] = data_config.to_dict()
     if update is not None:
         checkpoint["update"] = update
+    if optimizer_state_dict is not None:
+        checkpoint["optimizer_state_dict"] = optimizer_state_dict
+    if scheduler_state_dict is not None:
+        checkpoint["scheduler_state_dict"] = scheduler_state_dict
+    if pool_manifest is not None:
+        checkpoint["pool_manifest"] = pool_manifest
     if extra is not None:
         checkpoint.update(extra)
 
@@ -337,13 +369,13 @@ def load_checkpoint(path: str, map_location=None) -> dict[str, Any]:
             f"code only supports up to version {CHECKPOINT_VERSION}. "
             f"Update your code to load this checkpoint."
         )
-    if saved_version < CHECKPOINT_VERSION:
+    if saved_version not in COMPAT_CHECKPOINT_VERSIONS:
         raise ValueError(
             f"Checkpoint {path} has schema version {saved_version}, which is "
-            f"incompatible with the current model architecture (version "
-            f"{CHECKPOINT_VERSION}). V1 checkpoints used a flat embedding + "
-            f"separate actor/critic MLPs; V2 uses per-zone embeddings + "
-            f"shared trunk. Please retrain from scratch."
+            f"incompatible with the current model architecture (compatible "
+            f"versions: {sorted(COMPAT_CHECKPOINT_VERSIONS)}). V1 checkpoints "
+            f"used a flat embedding + separate actor/critic MLPs; V2+ uses "
+            f"per-zone embeddings + shared trunk. Please retrain from scratch."
         )
 
     return data

@@ -37,6 +37,10 @@ class PPOAgent(Agent):
         model_config: ModelConfig | None = None,
         device_config: DeviceConfig | None = None,
         registry=None,
+        # Resume support: when True and model_path points to a v3 checkpoint
+        # with optimizer_state_dict, restore that state as well so training
+        # continues with warm Adam moments instead of a cold restart.
+        load_optimizer_state: bool = False,
     ):
         super().__init__(name)
 
@@ -118,6 +122,28 @@ class PPOAgent(Agent):
         if model_path:
             self.model.load_state_dict(ckpt["model_state_dict"])
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.ppo_config.lr)
+        if model_path and load_optimizer_state:
+            opt_state = ckpt.get("optimizer_state_dict")
+            if opt_state is not None:
+                requested_lr = self.ppo_config.lr
+                self.optimizer.load_state_dict(opt_state)
+                # optimizer.load_state_dict overwrites every param_group field,
+                # including lr. Surface the mismatch so a user passing --lr
+                # alongside --resume isn't silently ignored.
+                loaded_lr = self.optimizer.param_groups[0].get("lr")
+                if loaded_lr is not None and abs(loaded_lr - requested_lr) > 1e-12:
+                    log(
+                        f"Note: --lr {requested_lr:.2e} was overridden by "
+                        f"checkpoint's saved lr {loaded_lr:.2e}. To force a "
+                        f"different LR on resume, modify the checkpoint's "
+                        f"optimizer_state_dict or omit --resume."
+                    )
+                log(f"Restored optimizer state from {model_path}")
+            else:
+                log(
+                    f"Optimizer-state restore requested but checkpoint {model_path} "
+                    f"has no optimizer_state_dict; starting Adam moments cold."
+                )
 
         # rollout buffers
         self.states = []

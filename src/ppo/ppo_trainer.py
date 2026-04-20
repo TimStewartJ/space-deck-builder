@@ -5,8 +5,12 @@ import torch
 import torch.optim.lr_scheduler as lr_sched
 import time
 import copy
+import gc
 
-from src.config import DataConfig, PPOConfig, RunConfig, DeviceConfig, ModelConfig, save_checkpoint
+from src.config import (
+    DataConfig, PPOConfig, RunConfig, DeviceConfig, ModelConfig,
+    save_checkpoint, load_checkpoint,
+)
 from src.cards.card import Card
 from src.ai.agent import Agent
 from src.ai.ppo_agent import PPOAgent
@@ -112,6 +116,26 @@ def train(
         else:
             logger.info("No PPO model found in models directory to auto-load.")
 
+    # Resume mode: load full training state from checkpoint. Takes precedence
+    # over --model-path / --load-latest-model since it implies model_path too.
+    resume_path = run_cfg.resume
+    resume_ckpt: dict | None = None
+    start_update = 1
+    if resume_path:
+        resume_ckpt = load_checkpoint(resume_path, map_location="cpu")
+        prev_update = int(resume_ckpt.get("update") or 0)
+        start_update = prev_update + 1
+        # Use resumed checkpoint's saved model_config so the rebuilt model
+        # matches the stored weights regardless of CLI defaults.
+        saved_mcfg = resume_ckpt.get("config", {}).get("model")
+        if saved_mcfg:
+            model_config = ModelConfig.from_dict(saved_mcfg)
+        model_path = resume_path  # PPOAgent loads weights from here
+        logger.info(
+            f"Resuming from {resume_path}: prev_update={prev_update}, "
+            f"will run updates {start_update}..{start_update + run_cfg.updates - 1}"
+        )
+
     set_verbose(False)
     set_disabled(True)
     cards = data_cfg.load_cards()
@@ -123,7 +147,8 @@ def train(
                        model_config=model_config,
                        device_config=dev_cfg,
                        model_path=model_path,
-                       registry=registry)
+                       registry=registry,
+                       load_optimizer_state=resume_ckpt is not None)
     # Log the parameter size of the model
     num_params = sum(p.numel() for p in agent.model.parameters() if p.requires_grad)
     actor_type = getattr(agent.model, 'actor_type', 'mlp')
@@ -137,6 +162,18 @@ def train(
         self_play_ratio=run_cfg.self_play_ratio,
         pfsp_mode=run_cfg.pfsp_mode,
     )
+    if resume_ckpt is not None and run_cfg.self_play:
+        manifest = resume_ckpt.get("pool_manifest")
+        if manifest:
+            loaded = pool.load_from_manifest(
+                manifest, models_dir=data_cfg.models_dir, log_fn=logger.warning,
+            )
+            logger.info(f"Restored {loaded} self-play snapshot(s) from pool manifest.")
+        else:
+            logger.warning(
+                "Resume requested but checkpoint has no pool_manifest; "
+                "self-play snapshot pool starts empty."
+            )
     opp_types = pool.opponent_types
     pool_msg = f"Opponent pool: {', '.join(opp_types)}"
     if run_cfg.self_play:
@@ -150,18 +187,83 @@ def train(
         pool_msg += f" + self-play ({sched_info.lstrip(', ')}{pfsp_info})"
     logger.info(pool_msg)
 
-    # Set up LR scheduler for cosine annealing
+    # Set up LR scheduler for cosine annealing. T_max spans the planned
+    # training horizon. By default that's this run's last update; an explicit
+    # ``run_cfg.lr_horizon`` overrides it so a multi-process chunked resume
+    # can pin every chunk to the same overall horizon (e.g. 200) and produce
+    # a single smooth cosine curve across all chunks rather than re-warming
+    # or floor-pegging inside each one.
     scheduler = None
     if ppo_cfg.lr_schedule == "cosine":
-        # T_max = updates - 1 so the final update trains at exactly lr_end.
-        # Step once after each update (except: the first update uses the initial lr).
+        if run_cfg.lr_horizon is not None:
+            total_horizon = run_cfg.lr_horizon
+            logger.info(
+                f"LR horizon overridden by --lr-horizon: T_max pinned to "
+                f"{max(1, total_horizon - 1)} (cosine spans updates 1..{total_horizon})."
+            )
+        else:
+            total_horizon = (start_update - 1) + run_cfg.updates
         scheduler = lr_sched.CosineAnnealingLR(
             agent.optimizer,
-            T_max=max(1, run_cfg.updates - 1),
+            T_max=max(1, total_horizon - 1),
             eta_min=ppo_cfg.lr_end,
         )
+        if resume_ckpt is not None:
+            sched_state = resume_ckpt.get("scheduler_state_dict")
+            if sched_state is not None:
+                scheduler.load_state_dict(sched_state)
+                # _LRScheduler.load_state_dict does dict.update(), which clobbers
+                # T_max / eta_min / base_lrs back to the original run's values.
+                # Re-pin the curve to the new (extended) horizon so resumed
+                # training rides a smooth continuation of the cosine schedule
+                # rather than re-warming from base_lr.
+                target_t_max = max(1, total_horizon - 1)
+                if getattr(scheduler, "T_max", None) != target_t_max:
+                    logger.info(
+                        f"Re-pinning LR scheduler T_max: "
+                        f"{getattr(scheduler, 'T_max', '?')} -> {target_t_max} "
+                        f"(extending cosine horizon for resumed run)."
+                    )
+                    scheduler.T_max = target_t_max
+                scheduler.eta_min = ppo_cfg.lr_end
+                # PyTorch's CosineAnnealingLR.step() uses a recurrence formula
+                # that multiplies by (last_lr - eta_min); if the loaded checkpoint
+                # was at the end of its cosine (last_lr ≈ eta_min), the recurrence
+                # stays pegged at eta_min forever, even after we re-pin T_max to
+                # a longer horizon. Re-seed _last_lr (and the live optimizer LR)
+                # from the closed-form cosine value so the next step() resumes
+                # mid-curve correctly.
+                closed_form_lrs = scheduler._get_closed_form_lr()
+                scheduler._last_lr = list(closed_form_lrs)
+                for pg, lr in zip(agent.optimizer.param_groups, closed_form_lrs):
+                    pg["lr"] = lr
+                # base_lrs is set at constructor time from optimizer param_groups;
+                # load_state_dict overwrites it to the saved values. If the user
+                # passed an explicit --lr, they'd expect it to take effect, but
+                # for now we log if there's a mismatch so it's not silent.
+                saved_base_lrs = scheduler.base_lrs
+                expected_base_lrs = [ppo_cfg.lr] * len(saved_base_lrs)
+                if any(abs(s - e) > 1e-12 for s, e in zip(saved_base_lrs, expected_base_lrs)):
+                    logger.info(
+                        f"Note: scheduler base_lrs from checkpoint ({saved_base_lrs}) "
+                        f"differ from --lr setting ({expected_base_lrs}); "
+                        f"using checkpoint values to preserve continuity."
+                    )
+                logger.info(
+                    f"Restored LR scheduler state "
+                    f"(last_epoch={scheduler.last_epoch}, T_max={scheduler.T_max})."
+                )
+            else:
+                # Manually fast-forward the scheduler to the resumed step so
+                # the LR curve continues smoothly even for old checkpoints.
+                for _ in range(start_update - 1):
+                    scheduler.step()
+                logger.info(
+                    f"No scheduler state in checkpoint; fast-forwarded "
+                    f"{start_update - 1} step(s) to align cosine schedule."
+                )
         logger.info(f"LR schedule: cosine {ppo_cfg.lr:.1e} -> {ppo_cfg.lr_end:.1e} "
-                     f"over {run_cfg.updates} updates")
+                     f"over {total_horizon} updates")
     else:
         logger.info(f"LR schedule: constant {ppo_cfg.lr:.1e}")
 
@@ -172,9 +274,13 @@ def train(
 
     sim_device = str(agent.simulation_device)
 
-    for upd in range(1, run_cfg.updates + 1):
-        # Compute the self-play ratio for this update based on the schedule
-        progress = (upd - 1) / max(1, run_cfg.updates - 1)
+    end_update = start_update + run_cfg.updates - 1
+    total_horizon = end_update  # used for self-play progress and final-update detection
+    for upd in range(start_update, end_update + 1):
+        # Compute the self-play ratio for this update based on the schedule.
+        # Progress is measured against the full horizon (including resumed
+        # updates) so the curve continues from where it left off.
+        progress = (upd - 1) / max(1, total_horizon - 1)
         current_sp_ratio = _compute_self_play_ratio(
             run_cfg.self_play_ratio_start,
             run_cfg.self_play_ratio,
@@ -186,7 +292,7 @@ def train(
         make_opponent = pool.make_factory(card_names, device=sim_device, registry=registry)
         snap_msg = " + snapshots" if pool.has_snapshots else ""
         sp_ratio_msg = f", sp_ratio: {current_sp_ratio:.2f}" if run_cfg.self_play else ""
-        logger.info(f"--- Update {upd}/{run_cfg.updates} "
+        logger.info(f"--- Update {upd}/{end_update} "
                      f"(opponents: {', '.join(opp_types)}{snap_msg}{sp_ratio_msg}) ---")
 
         # Collect trajectories
@@ -274,7 +380,7 @@ def train(
                               model_config=agent.model_config)
 
         # Evaluate performance (every N updates, and always on the last)
-        is_last_update = upd == run_cfg.updates
+        is_last_update = upd == end_update
         wins = -1  # default: no eval this round
         eval_result = None
         if upd % run_cfg.eval_every == 0 or is_last_update:
@@ -291,10 +397,17 @@ def train(
             next_eval = upd + run_cfg.eval_every - upd % run_cfg.eval_every
             logger.debug(f"Skipping eval (next eval at update {next_eval}).")
 
-        # Save checkpoint per update
+        # Save checkpoint per update. Includes optimizer + scheduler state
+        # and the snapshot pool manifest so this checkpoint is sufficient
+        # to fully resume training via --resume.
         ts = datetime.now().strftime("%m%d_%H%M")
         Path(data_cfg.models_dir).mkdir(exist_ok=True)
         ckpt_path = f"{data_cfg.models_dir}/ppo_agent_{ts}_upd{upd}_wins{wins}.pth"
+        # Pre-record this checkpoint's path on the snapshot we just added so
+        # the manifest written into the same checkpoint references itself
+        # (which lets a future resume immediately have one snapshot to fight).
+        if run_cfg.self_play:
+            pool.set_snapshot_path(f"PPO_{upd}", ckpt_path)
         save_checkpoint(
             ckpt_path,
             agent.model.state_dict(),
@@ -303,6 +416,9 @@ def train(
             run_config=run_cfg,
             device_config=dev_cfg,
             update=upd,
+            optimizer_state_dict=agent.optimizer.state_dict(),
+            scheduler_state_dict=scheduler.state_dict() if scheduler is not None else None,
+            pool_manifest=pool.to_manifest() if run_cfg.self_play else None,
         )
         logger.info(f"Checkpoint saved: {ckpt_path}")
 
@@ -336,6 +452,22 @@ def train(
                 },
             }
         metrics_writer.write(row)
+
+        # Per-update GPU/Python hygiene. Each update spawns a fresh
+        # MultiProcessBatchRunner + InferenceServer (which loads up to
+        # snapshot_cap+1 models onto the device), runs rollout + PPO, then
+        # tears it all down. Long-running ROCm sessions on Windows have been
+        # observed to crash with c10::cuda::memcpy_and_sync errors after
+        # ~25-30 such cycles when running in --resume mode (see overnight
+        # crash logs from 2026-04-18). Forcing a Python GC cycle and
+        # emptying the CUDA caching allocator between updates reclaims
+        # references to the just-torn-down server/workers and reduces the
+        # chance of allocator fragmentation accumulating across updates.
+        del runner
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
 
     # --- Training complete ---
     logger.info(f"Episodes:    {total_time_spent_on_episodes:.1f}s total, "

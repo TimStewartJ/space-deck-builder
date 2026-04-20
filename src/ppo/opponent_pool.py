@@ -69,8 +69,15 @@ class OpponentPool:
         self.pfsp_mode = pfsp_mode
         self._pfsp_ema_alpha = pfsp_ema_alpha
 
-        # PPO snapshot state_dicts stored as (name, state_dict) pairs
-        self._snapshots: list[tuple[str, dict]] = []
+        # PPO snapshot state_dicts stored as (name, state_dict, model_config) tuples
+        self._snapshots: list[tuple[str, dict, "ModelConfig | None"]] = []
+        # On-disk paths for snapshots, keyed by name. Recorded by the trainer
+        # after each checkpoint save so that the pool can be reconstructed
+        # from a manifest on resume without bloating each checkpoint with
+        # full state_dicts. Snapshots without a known path are omitted from
+        # the saved manifest (e.g., snapshots loaded from a manifest before
+        # the trainer has had a chance to re-save them).
+        self._snapshot_paths: dict[str, str] = {}
         # EMA win rates per snapshot for PFSP (new snapshots start at 0.5)
         self._snapshot_ema: dict[str, float] = {}
         # Cumulative games observed per snapshot (for confidence weighting)
@@ -102,7 +109,100 @@ class OpponentPool:
             evicted_name = self._snapshots[0][0]
             self._snapshot_ema.pop(evicted_name, None)
             self._snapshot_games.pop(evicted_name, None)
+            self._snapshot_paths.pop(evicted_name, None)
             self._snapshots = self._snapshots[-self.snapshot_cap:]
+
+    def set_snapshot_path(self, name: str, path: str) -> None:
+        """Record the on-disk path for a previously-added snapshot.
+
+        Called by the trainer after each per-update ``save_checkpoint`` so
+        that the in-memory snapshot can later be rehydrated from disk on
+        resume. Snapshots without a recorded path are skipped when building
+        the manifest (i.e., they exist in this process only).
+        """
+        self._snapshot_paths[name] = path
+
+    def to_manifest(self) -> dict:
+        """Serialize the snapshot pool to a small dict for checkpointing.
+
+        Includes only snapshots whose on-disk path is known. The manifest
+        records the snapshot order (so PFSP eviction order is preserved on
+        resume), each snapshot's path, and the PFSP statistics (EMA win
+        rate and cumulative games) needed to continue PFSP weighting.
+        """
+        snapshots = [
+            {"name": name, "path": self._snapshot_paths[name]}
+            for name, _, _ in self._snapshots
+            if name in self._snapshot_paths
+        ]
+        return {
+            "snapshots": snapshots,
+            "ema": {n: self._snapshot_ema.get(n, 0.5) for n in (s["name"] for s in snapshots)},
+            "games": {n: self._snapshot_games.get(n, 0) for n in (s["name"] for s in snapshots)},
+        }
+
+    def load_from_manifest(
+        self,
+        manifest: dict,
+        *,
+        models_dir: str | None = None,
+        log_fn: Callable[[str], None] | None = None,
+    ) -> int:
+        """Rehydrate snapshots from a manifest produced by ``to_manifest``.
+
+        Each manifest entry's checkpoint is read from disk and its
+        model_state_dict + saved ModelConfig are pushed into the pool.
+        Missing or unreadable paths are skipped with a warning so a partial
+        pool still functions (degrading gracefully to "fewer self-play
+        opponents" rather than aborting training).
+
+        Args:
+            manifest: dict produced by ``to_manifest``.
+            models_dir: if a manifest path is relative, resolve it against
+                this directory (defaults to the path as-is).
+            log_fn: optional callback for warnings about missing paths;
+                defaults to silent.
+
+        Returns:
+            Number of snapshots successfully loaded.
+        """
+        from src.config import ModelConfig, load_checkpoint
+        from pathlib import Path
+
+        warn = log_fn if log_fn is not None else (lambda _msg: None)
+        loaded = 0
+        for entry in manifest.get("snapshots", []):
+            name = entry["name"]
+            raw_path = entry["path"]
+            path = Path(raw_path)
+            if not path.is_absolute() and models_dir is not None and not path.exists():
+                path = Path(models_dir) / path.name
+            if not path.exists():
+                warn(f"Pool manifest: snapshot {name!r} path missing ({raw_path}); skipping.")
+                continue
+            try:
+                ckpt = load_checkpoint(str(path), map_location="cpu")
+            except Exception as exc:
+                warn(f"Pool manifest: failed to load {raw_path}: {exc}; skipping.")
+                continue
+            saved_mcfg = ckpt.get("config", {}).get("model")
+            mcfg = ModelConfig.from_dict(saved_mcfg) if saved_mcfg else None
+            self._snapshots.append((name, ckpt["model_state_dict"], mcfg))
+            self._snapshot_paths[name] = str(path)
+            ema_map = manifest.get("ema", {})
+            games_map = manifest.get("games", {})
+            self._snapshot_ema[name] = ema_map.get(name, 0.5)
+            self._snapshot_games[name] = games_map.get(name, 0)
+            loaded += 1
+        # Enforce snapshot cap in case the manifest stored more entries than
+        # the current configuration permits.
+        if len(self._snapshots) > self.snapshot_cap:
+            for evicted_name, _, _ in self._snapshots[:-self.snapshot_cap]:
+                self._snapshot_ema.pop(evicted_name, None)
+                self._snapshot_games.pop(evicted_name, None)
+                self._snapshot_paths.pop(evicted_name, None)
+            self._snapshots = self._snapshots[-self.snapshot_cap:]
+        return loaded
 
     def update_results(self, results: dict[str, tuple[int, int]]) -> None:
         """Update PFSP EMA win rates from a training batch.
