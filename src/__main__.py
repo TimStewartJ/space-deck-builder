@@ -86,6 +86,12 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                    help="Resume training from a checkpoint: restores weights, "
                         "optimizer, LR scheduler, snapshot pool, and update counter. "
                         "--updates is interpreted as additional updates beyond the resumed step.")
+    p.add_argument("--lr-horizon",        type=int, default=None,
+                   help="Override the cosine LR scheduler horizon (final update). "
+                        "Use this when chunking a multi-process resume so each chunk "
+                        "re-pins T_max to the same final-target update (e.g. 200) "
+                        "and the cosine LR curve flows smoothly across chunks "
+                        "instead of decaying to the floor inside each one.")
     return p
 
 
@@ -261,6 +267,7 @@ def _run_train(args):
         num_workers=args.num_workers,
         num_concurrent=args.num_concurrent,
         resume=args.resume,
+        lr_horizon=args.lr_horizon,
     )
     dev_cfg = DeviceConfig(
         main_device=args.main_device,

@@ -82,7 +82,11 @@ while ($currentUpd -lt $TargetUpdate) {
     $args = @(
         "-u", "-m", "src", "train",
         "--resume", $currentCkpt,
-        "--updates", "$thisChunk"
+        "--updates", "$thisChunk",
+        # Pin every chunk's cosine LR horizon to the overall TargetUpdate so
+        # the LR curve flows smoothly across chunks instead of pegging to the
+        # floor inside each one.
+        "--lr-horizon", "$TargetUpdate"
     ) + $ExtraArgs
 
     Write-Host "[chunked_resume:$Tag] chunk start: from=upd$currentUpd → upd$($currentUpd + $thisChunk)  log=$log"

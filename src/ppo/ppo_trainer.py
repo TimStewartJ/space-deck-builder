@@ -187,12 +187,22 @@ def train(
         pool_msg += f" + self-play ({sched_info.lstrip(', ')}{pfsp_info})"
     logger.info(pool_msg)
 
-    # Set up LR scheduler for cosine annealing. T_max spans the entire
-    # planned training horizon — when resuming, that's prev_update + this
-    # run's updates so the final update lands at exactly lr_end.
+    # Set up LR scheduler for cosine annealing. T_max spans the planned
+    # training horizon. By default that's this run's last update; an explicit
+    # ``run_cfg.lr_horizon`` overrides it so a multi-process chunked resume
+    # can pin every chunk to the same overall horizon (e.g. 200) and produce
+    # a single smooth cosine curve across all chunks rather than re-warming
+    # or floor-pegging inside each one.
     scheduler = None
     if ppo_cfg.lr_schedule == "cosine":
-        total_horizon = (start_update - 1) + run_cfg.updates
+        if run_cfg.lr_horizon is not None:
+            total_horizon = run_cfg.lr_horizon
+            logger.info(
+                f"LR horizon overridden by --lr-horizon: T_max pinned to "
+                f"{max(1, total_horizon - 1)} (cosine spans updates 1..{total_horizon})."
+            )
+        else:
+            total_horizon = (start_update - 1) + run_cfg.updates
         scheduler = lr_sched.CosineAnnealingLR(
             agent.optimizer,
             T_max=max(1, total_horizon - 1),
@@ -216,6 +226,17 @@ def train(
                     )
                     scheduler.T_max = target_t_max
                 scheduler.eta_min = ppo_cfg.lr_end
+                # PyTorch's CosineAnnealingLR.step() uses a recurrence formula
+                # that multiplies by (last_lr - eta_min); if the loaded checkpoint
+                # was at the end of its cosine (last_lr ≈ eta_min), the recurrence
+                # stays pegged at eta_min forever, even after we re-pin T_max to
+                # a longer horizon. Re-seed _last_lr (and the live optimizer LR)
+                # from the closed-form cosine value so the next step() resumes
+                # mid-curve correctly.
+                closed_form_lrs = scheduler._get_closed_form_lr()
+                scheduler._last_lr = list(closed_form_lrs)
+                for pg, lr in zip(agent.optimizer.param_groups, closed_form_lrs):
+                    pg["lr"] = lr
                 # base_lrs is set at constructor time from optimizer param_groups;
                 # load_state_dict overwrites it to the saved values. If the user
                 # passed an explicit --lr, they'd expect it to take effect, but

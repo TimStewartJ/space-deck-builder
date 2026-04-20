@@ -190,6 +190,14 @@ class RunConfig:
     # update counter are restored. ``updates`` is interpreted as "additional
     # updates to run beyond the resumed update count."
     resume: str | None = None
+    # Override the cosine LR scheduler horizon (T_max + 1). When None, the
+    # scheduler horizon is derived as ``(start_update - 1) + updates`` — i.e.
+    # this run's last update. Set this to the FINAL target update of a
+    # multi-process training arc (e.g. 200 when chunking 100→200 in 25-step
+    # chunks) so each chunk re-pins T_max to the same overall horizon and
+    # the cosine LR curve flows smoothly across processes instead of
+    # collapsing to the floor at the end of every chunk.
+    lr_horizon: int | None = None
 
     _VALID_SCHEDULES = {"constant", "linear", "cosine"}
 
