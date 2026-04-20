@@ -72,6 +72,11 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--pfsp", type=str, default=_run.pfsp_mode,
                    choices=["uniform", "hard", "variance"],
                    help="PFSP snapshot weighting: uniform (default), hard, or variance")
+    p.add_argument("--snapshot-eviction", type=str, default=_run.snapshot_eviction,
+                   choices=["fifo", "geometric"],
+                   help="Snapshot-pool eviction strategy. 'geometric' (default) "
+                        "keeps opponents at log-spaced ages for a diverse pool; "
+                        "'fifo' evicts the oldest snapshot each time.")
     # Devices (defaults sourced from DeviceConfig dataclass)
     p.add_argument("--main-device",       type=str, default=_dev.main_device,
                    help="Device for training updates")
@@ -264,6 +269,7 @@ def _run_train(args):
         self_play_ratio_start=args.self_play_ratio_start,
         self_play_schedule=args.self_play_schedule,
         pfsp_mode=args.pfsp,
+        snapshot_eviction=args.snapshot_eviction,
         num_workers=args.num_workers,
         num_concurrent=args.num_concurrent,
         resume=args.resume,

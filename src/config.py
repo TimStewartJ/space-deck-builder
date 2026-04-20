@@ -185,6 +185,12 @@ class RunConfig:
     self_play_ratio_start: float = 0.0
     self_play_schedule: str = "linear"
     pfsp_mode: str = "uniform"
+    # Snapshot-pool eviction strategy. ``geometric`` keeps opponents at
+    # log-spaced ages (most-recent, then ~2, 4, 8, ... updates ago) so the
+    # self-play pool always contains a meaningful spread of historical
+    # selves. ``fifo`` preserves the pre-2026 behavior of evicting the
+    # oldest snapshot — useful mainly for reproducing old runs.
+    snapshot_eviction: str = "geometric"
     # Path to a checkpoint to resume training from. When set, model weights,
     # optimizer state, LR scheduler state, snapshot pool manifest, and the
     # update counter are restored. ``updates`` is interpreted as "additional
@@ -200,12 +206,18 @@ class RunConfig:
     lr_horizon: int | None = None
 
     _VALID_SCHEDULES = {"constant", "linear", "cosine"}
+    _VALID_EVICTION_MODES = {"fifo", "geometric"}
 
     def __post_init__(self):
         if self.self_play_schedule not in self._VALID_SCHEDULES:
             raise ValueError(
                 f"Unknown self_play_schedule {self.self_play_schedule!r}. "
                 f"Valid: {', '.join(sorted(self._VALID_SCHEDULES))}"
+            )
+        if self.snapshot_eviction not in self._VALID_EVICTION_MODES:
+            raise ValueError(
+                f"Unknown snapshot_eviction {self.snapshot_eviction!r}. "
+                f"Valid: {', '.join(sorted(self._VALID_EVICTION_MODES))}"
             )
         if not (0.0 <= self.self_play_ratio_start <= 1.0):
             raise ValueError(

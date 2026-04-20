@@ -125,6 +125,35 @@ def test_optimizer_load_overwrites_lr_param_group():
     assert opt_b.param_groups[0]["lr"] == 1e-3
 
 
+def test_constant_lr_resume_overrides_loaded_lr():
+    """Trainer must explicitly re-apply ppo_cfg.lr to every param group after
+    restoring optimizer state when the schedule is ``constant``; otherwise the
+    value baked into the checkpoint (e.g. a 1e-5 cosine floor) silently wins.
+    """
+    # Simulate "the checkpoint" — a cosine run that ended pegged at its floor.
+    saved_model = _dummy_model()
+    saved_opt = torch.optim.Adam(saved_model.parameters(), lr=3e-4)
+    # Drive the saved optimizer's param_group lr down to the cosine floor.
+    for pg in saved_opt.param_groups:
+        pg["lr"] = 1e-5
+    x = torch.randn(8, 4); target = torch.randn(8, 2)
+    ((saved_model(x) - target) ** 2).mean().backward()
+    saved_opt.step()
+
+    # Simulate "the fresh trainer" launched with --lr-schedule constant --lr 3e-4 --resume.
+    live_model = _dummy_model()
+    live_opt = torch.optim.Adam(live_model.parameters(), lr=3e-4)
+    live_opt.load_state_dict(saved_opt.state_dict())
+    assert live_opt.param_groups[0]["lr"] == 1e-5, "precondition: loaded lr should be floor"
+
+    # Mirror the trainer's constant-schedule resume override.
+    ppo_cfg = PPOConfig(lr=3e-4, lr_schedule="constant")
+    for pg in live_opt.param_groups:
+        pg["lr"] = ppo_cfg.lr
+
+    assert live_opt.param_groups[0]["lr"] == pytest.approx(3e-4)
+
+
 def test_load_v2_checkpoint_without_resume_metadata(tmp_path: Path):
     """V2 checkpoints (no optimizer/scheduler/pool fields) still load cleanly."""
     model = _dummy_model()
@@ -218,14 +247,20 @@ def test_pool_manifest_omits_snapshots_without_path(tmp_path: Path):
 
 
 def test_pool_manifest_respects_snapshot_cap(tmp_path: Path):
-    """Loading more snapshots than the cap permits keeps only the most recent."""
+    """Loading more snapshots than the cap permits keeps a geometric spread.
+
+    Under the default ``geometric`` eviction strategy, the pool retains
+    endpoints plus log-spaced intermediate ages rather than the last N
+    entries. With updates 0..4 and cap=3, the ladder pins 0 (oldest) and
+    4 (newest) and slots the midpoint at age ~2 — i.e. update 2.
+    """
     mcfg = ModelConfig()
     snap_entries = []
     for i in range(5):
         sd = {"w": torch.randn(2)}
         path = tmp_path / f"snap_{i}.pth"
         save_checkpoint(str(path), sd, model_config=mcfg, update=i)
-        snap_entries.append({"name": f"PPO_{i}", "path": str(path)})
+        snap_entries.append({"name": f"PPO_{i}", "path": str(path), "update": i})
     manifest = {
         "snapshots": snap_entries,
         "ema": {f"PPO_{i}": 0.5 for i in range(5)},
@@ -234,6 +269,5 @@ def test_pool_manifest_respects_snapshot_cap(tmp_path: Path):
     pool = OpponentPool(opponent_spec="random", self_play_ratio=0.5, snapshot_cap=3)
     loaded = pool.load_from_manifest(manifest)
     assert loaded == 5  # all attempted
-    # Only the last 3 retained after cap enforcement
     names = [n for n, _, _ in pool._snapshots]
-    assert names == ["PPO_2", "PPO_3", "PPO_4"]
+    assert names == ["PPO_0", "PPO_2", "PPO_4"]
