@@ -103,6 +103,35 @@ baseline. The v0.1 baseline is deliberately the cleanest, most
 reproducible thing — `git checkout v0.1-baseline`, `python -m src
 train --seed N`, exact numbers.
 
+## Cross-play Elo (secondary metric)
+
+Round-robin tournament of the 3 baselines + 3 fixed opponents, 1000
+games per pairing, alternating first-player seat per pairing. 15
+pairings × 1000 games = 15000 games total, ~70s wall time.
+
+| Rank | Player | Elo | W / L | Win % |
+|---|---|---|---|---|
+| 1 | baseline seed 1 (`0421_2055_upd200`) | **1016** | 3747 / 1253 | 74.9% |
+| 2 | baseline seed 0 (`0421_1915_upd200`) | **1000** | 3653 / 1347 | 73.1% |
+| 3 | baseline seed 2 (`0421_2237_upd200`) | **985**  | 3562 / 1438 | 71.2% |
+| 4 | `heuristic` | 844 | 2739 / 2261 | 54.8% |
+| 5 | `simple`    | 502 | 1237 / 3763 | 24.7% |
+| 6 | `random`    | -22 |   62 / 4938 |  1.2% |
+
+Head-to-head between baselines (1000 games each):
+
+| Pairing | Seed-A wins |
+|---|---|
+| seed 0 vs seed 1 | 460 / 1000 (46%) |
+| seed 0 vs seed 2 | 520 / 1000 (52%) |
+| seed 1 vs seed 2 | 536 / 1000 (54%) |
+
+The three baselines are within 31 Elo of each other and all three
+inter-baseline pairings are within ~5pp of 50/50, so they are
+essentially indistinguishable as players. Each baseline is ~150 Elo
+above `heuristic`, validating that the gauntlet-primary ordering
+(random « simple « heuristic) matches the cross-play ordering.
+
 ## Notes on the ROCm cross-stream sync bug
 
 These numbers were produced *after* commit `26ea81a` (see
