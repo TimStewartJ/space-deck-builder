@@ -794,9 +794,9 @@ def _sim_worker_eval_inner(
                         all_responses[j] = int(response.action_indices[k])
                     break
 
-        for j, i in enumerate(pending_indices):
-            act_idx = all_responses[j]
-            action = pending_resolvers[j][act_idx]
+        for k, i in enumerate(pending_indices):
+            act_idx = all_responses[k]
+            action = pending_resolvers[k][act_idx]
             games[i].apply_decision(action)
             step_counts[i] += 1
 
