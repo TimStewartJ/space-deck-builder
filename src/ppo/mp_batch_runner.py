@@ -280,8 +280,7 @@ class MultiProcessBatchRunner:
         log_probs = torch.cat(all_log_probs).to(self.device)
         returns = torch.cat(all_returns).to(self.device)
         advs = torch.cat(all_advantages)
-        if self.ppo_config.adv_norm == "global":
-            advs = (advs - advs.mean()) / (advs.std(unbiased=False) + 1e-8)
+        advs = (advs - advs.mean()) / (advs.std(unbiased=False) + 1e-8)
         advs = advs.to(self.device)
         masks = torch.cat(all_masks).to(self.device) if has_masks and all_masks else None
 

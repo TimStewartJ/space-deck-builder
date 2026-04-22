@@ -26,7 +26,6 @@ relevant knobs:
 | Run | `updates`, `episodes` | 200, 16000 |
 | Run | `self_play`, `self_play_ratio` | true, 0.5 (linear ramp from 0.0) |
 | Run | `opponents` (training pool) | `random` |
-| Run | `snapshot_eviction` | `geometric` |
 
 Each seed was launched with `python -m src train --seed N`, fully
 detached, sequential. Per-seed wall time: ~100 minutes on AMD RX 9070

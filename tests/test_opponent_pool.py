@@ -210,14 +210,14 @@ class TestGeometricEviction:
         return [n for n, _, _ in pool._snapshots]
 
     def test_geometric_keeps_newest_always(self):
-        pool = OpponentPool(snapshot_cap=3, snapshot_eviction="geometric")
+        pool = OpponentPool(snapshot_cap=3)
         for upd in range(1, 11):
             pool.add_snapshot({}, f"PPO_{upd}", update=upd)
         # Newest snapshot is always kept because target age 1 picks it.
         assert "PPO_10" in self._names(pool)
 
     def test_geometric_produces_log_spaced_ages(self):
-        pool = OpponentPool(snapshot_cap=4, snapshot_eviction="geometric")
+        pool = OpponentPool(snapshot_cap=4)
         for upd in range(1, 33):
             pool.add_snapshot({}, f"PPO_{upd}", update=upd)
         kept_updates = sorted(pool._snapshot_updates.values(), reverse=True)
@@ -233,7 +233,7 @@ class TestGeometricEviction:
         )
 
     def test_geometric_large_pool_spread(self):
-        pool = OpponentPool(snapshot_cap=10, snapshot_eviction="geometric")
+        pool = OpponentPool(snapshot_cap=10)
         for upd in range(1, 1001):
             pool.add_snapshot({}, f"PPO_{upd}", update=upd)
         kept = sorted(pool._snapshot_updates.values(), reverse=True)
@@ -249,7 +249,7 @@ class TestGeometricEviction:
         assert all(a > b for a, b in zip(kept, kept[1:]))
 
     def test_geometric_preserves_stats_for_kept(self):
-        pool = OpponentPool(snapshot_cap=3, snapshot_eviction="geometric")
+        pool = OpponentPool(snapshot_cap=3)
         for upd in range(1, 11):
             pool.add_snapshot({}, f"PPO_{upd}", update=upd)
         # After 10 adds the pool has compacted itself several times under
@@ -262,26 +262,16 @@ class TestGeometricEviction:
         assert "PPO_11" in pool._snapshot_ema
 
     def test_fifo_fallback_when_updates_missing(self):
-        # Eviction falls back to FIFO if any pool member lacks an update.
-        pool = OpponentPool(snapshot_cap=2, snapshot_eviction="geometric")
+        # Eviction transparently falls back to FIFO if any pool member lacks
+        # an update — geometric age-spacing requires update numbers.
+        pool = OpponentPool(snapshot_cap=2)
         pool.add_snapshot({}, "snap_1")       # no update
         pool.add_snapshot({}, "snap_2")       # no update
         pool.add_snapshot({}, "snap_3")       # no update → FIFO: drop snap_1
         assert self._names(pool) == ["snap_2", "snap_3"]
 
-    def test_fifo_mode_explicitly(self):
-        pool = OpponentPool(snapshot_cap=2, snapshot_eviction="fifo")
-        pool.add_snapshot({}, "PPO_1", update=1)
-        pool.add_snapshot({}, "PPO_2", update=2)
-        pool.add_snapshot({}, "PPO_3", update=3)
-        assert self._names(pool) == ["PPO_2", "PPO_3"]
-
-    def test_invalid_eviction_mode_rejected(self):
-        with pytest.raises(ValueError, match="Unknown snapshot_eviction"):
-            OpponentPool(snapshot_eviction="bogus")
-
     def test_geometric_evicts_stats(self):
-        pool = OpponentPool(snapshot_cap=3, snapshot_eviction="geometric")
+        pool = OpponentPool(snapshot_cap=3)
         for upd in range(1, 11):
             pool.add_snapshot({}, f"PPO_{upd}", update=upd)
         dropped_names = set(range(1, 11)) - {

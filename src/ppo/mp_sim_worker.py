@@ -271,7 +271,7 @@ def _finish_game(
         gamma=ppo_config.gamma,
         lam=ppo_config.lam,
         device=torch.device("cpu"),
-        normalize=(ppo_config.adv_norm == "per_episode"),
+        normalize=False,
     )
     completed_rollouts.append(rollout)
     games[i] = None
