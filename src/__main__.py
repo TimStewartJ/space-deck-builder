@@ -97,6 +97,14 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                         "re-pins T_max to the same final-target update (e.g. 200) "
                         "and the cosine LR curve flows smoothly across chunks "
                         "instead of decaying to the floor inside each one.")
+    # Reproducibility (per docs/eval_protocol.md). When set, seeds Python
+    # `random`, `numpy`, and `torch` deterministically — which in turn makes
+    # the per-worker seed lists in batch_runner / mp_batch_runner reproducible
+    # since they are drawn from `random.randint`.
+    p.add_argument("--seed",              type=int, default=None,
+                   help="Master RNG seed for reproducibility. Seeds Python "
+                        "random, numpy, and torch (CPU+CUDA). When omitted, "
+                        "training uses non-reproducible OS entropy.")
     return p
 
 
@@ -183,6 +191,13 @@ def _build_eval_parser(sub: argparse._SubParsersAction):
                    help="Concurrent games per worker (default: games/workers)")
     p.add_argument("--num-workers", type=int, default=_run.num_workers,
                    help=f"Simulation worker processes (default: {_run.num_workers})")
+    # Reproducibility (per docs/eval_protocol.md). Seeds Python random,
+    # numpy, and torch before per-worker seed derivation so gauntlet runs
+    # are reproducible up to the limits of GPU non-determinism.
+    p.add_argument("--seed", type=int, default=None,
+                   help="Master RNG seed for reproducible eval. Seeds "
+                        "Python random, numpy, and torch (CPU+CUDA). When "
+                        "omitted, eval uses non-reproducible OS entropy.")
 
 
 def _build_analyze_parser(sub: argparse._SubParsersAction):
@@ -282,7 +297,8 @@ def _run_train(args):
     train(data_cfg, ppo_cfg, run_cfg, dev_cfg,
           model_path=args.model_path,
           load_latest=args.load_latest_model,
-          model_config=model_cfg)
+          model_config=model_cfg,
+          seed=args.seed)
 
 
 def _run_simulate(args):
@@ -362,6 +378,7 @@ def _run_eval(args):
             eval_games=args.games,
             num_concurrent=args.num_concurrent,
             num_workers=args.num_workers,
+            seed=args.seed,
         )
     except FileNotFoundError as e:
         print(f"Error: {e}")

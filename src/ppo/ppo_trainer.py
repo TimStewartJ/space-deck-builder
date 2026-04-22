@@ -99,12 +99,33 @@ def train(
     model_path: str | None = None,
     load_latest: bool = False,
     model_config: ModelConfig | None = None,
+    seed: int | None = None,
 ):
-    """Run PPO training with the given configuration."""
+    """Run PPO training with the given configuration.
+
+    When *seed* is provided, Python ``random``, NumPy, and PyTorch
+    (CPU + all CUDA devices) are seeded before any model construction
+    or worker-seed derivation. This propagates into the per-worker
+    seed lists generated in ``batch_runner`` / ``mp_batch_runner``
+    (which call ``random.randint`` against the now-seeded global RNG),
+    making a full training run reproducible up to the limits of
+    GPU non-determinism. See ``docs/eval_protocol.md``.
+    """
     # --- Logging setup ---
     logger = setup_training_logger("logs")
     metrics_writer = MetricsWriter("logs")
     logger.info(f"Metrics file: {metrics_writer.path}")
+
+    if seed is not None:
+        import random as _random
+        import numpy as _np
+        import torch as _torch
+        _random.seed(seed)
+        _np.random.seed(seed % (2**32))
+        _torch.manual_seed(seed)
+        if _torch.cuda.is_available():
+            _torch.cuda.manual_seed_all(seed)
+        logger.info(f"Master seed set to {seed} (random/numpy/torch).")
 
     if load_latest and not model_path:
         import glob, os
