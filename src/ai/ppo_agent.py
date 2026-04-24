@@ -280,7 +280,10 @@ class PPOAgent(Agent):
             all_vals = []
             for i in range(0, len(states), chunk_size):
                 _, v = self.model(states[i:i + chunk_size])
-                all_vals.append(v.squeeze(-1))
+                # reshape(-1) (not squeeze(-1)) to keep a 1-d tensor even when the
+                # final chunk has size 1: squeeze would collapse [1,1] -> [1] but
+                # could collapse [1] -> [] (0-d), which torch.cat rejects.
+                all_vals.append(v.reshape(-1))
             pred_values = torch.cat(all_vals)
             var_returns = returns.var()
             explained_var = (

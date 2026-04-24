@@ -207,3 +207,32 @@ class TestPpoAgentUpdateMetrics:
             "explained_variance", "nan_detected",
         }
         assert set(result.keys()) == expected_keys
+
+    def test_singleton_tail_chunk_does_not_crash(self, agent_and_data):
+        """Regression for ppo_agent.py:284 zero-dim concat crash.
+
+        Explained-variance is computed by chunking the rollout in 4096-step
+        slices and concatenating per-chunk value predictions. When the rollout
+        length leaves a 1-step tail (``len(states) % 4096 == 1``) the model's
+        critic returns a tensor that, after an over-eager ``squeeze(-1)``,
+        collapses to a 0-d scalar — which ``torch.cat`` rejects with
+        "zero-dimensional tensor (at position N) cannot be concatenated".
+
+        Use ``reshape(-1)`` instead so a singleton tail stays 1-d.
+        """
+        agent, _, _, _, _, _, _ = agent_and_data
+
+        n = 4097  # one full chunk + a 1-step tail
+        state_dim = agent.state_dim
+        action_dim = agent.action_dim
+
+        states = torch.randn(n, state_dim)
+        actions = torch.randint(0, action_dim, (n,))
+        old_lp = torch.randn(n)
+        returns = torch.randn(n)
+        advs = torch.randn(n)
+        masks = torch.ones(n, action_dim, dtype=torch.bool)
+
+        result = agent.update(states, actions, old_lp, returns, advs, masks)
+        assert result["nan_detected"] is False
+        assert isinstance(result["explained_variance"], float)
