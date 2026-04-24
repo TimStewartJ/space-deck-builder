@@ -247,6 +247,10 @@ def _sum_pool_tokens(
     ``pooled[b, z] = Σ_c presence[b, z, c] * tokens[b, z, c]``. Shares the
     ``(tokens, presence) → [B, Z * E]`` signature with ``AttentionZonePooling``
     so the trunk is agnostic to the pool choice.
+
+    Used for the legacy (non-token-features) path and as the slow fallback
+    for the attention pool with token features. The fast token-features sum
+    path skips this entirely — see ``PPOActorCritic._token_features_sum_pool``.
     """
     B, Z, C, E = tokens.shape
     pooled = torch.einsum('bzc,bzce->bze', presence, tokens)
@@ -343,6 +347,64 @@ class PPOActorCritic(nn.Module):
         # Value head (unchanged regardless of actor type)
         self.critic_head = _build_head(trunk_out_dim, cfg.critic_head_sizes, 1)
 
+    def _token_features_sum_pool(
+        self,
+        presence: torch.Tensor,     # [B, Z, C]
+    ) -> torch.Tensor:
+        """Cube-free fused sum-pool for the token-features path.
+
+        Returns ``[B, Z * E]`` matching the legacy ``_sum_pool_tokens`` output
+        without ever materializing the ``[B, Z, C, E]`` token tensor.
+
+        Math: ``token_proj`` is linear, so ``Linear(cat(card, zone, static, p))``
+        decomposes into separate matmuls on each piece. The presence-weighted
+        sum then collapses to:
+
+            pooled[b, z] = Σ_c P[b, z, c] · tokens[b, z, c]
+                         = einsum(P, W_card · card_emb)
+                         + einsum(P, W_static · static)
+                         + (Σ_c P) · W_zone · zone_emb[z]
+                         + (Σ_c P²) · W_pres
+                         + (Σ_c P) · bias
+
+        ``Σ_c P²`` (not ``Σ_c P``) appears because ``presence`` doubles as a
+        feature column; stacked copies of a card make ``P > 1`` and so
+        ``P² ≠ P``. Math is exact, not approximate, vs the cube path.
+
+        Memory: ``B·Z·C·E`` → ``B·Z·E`` (≈50× reduction at training shapes).
+        """
+        B, Z, C = presence.shape
+        E = self.card_emb.embedding_dim
+        S = self.card_features.feature_dim
+
+        # Slice token_proj.weight column-wise into the four input blocks. The
+        # weight is shape [E_out, 2*E + S + 1]. Slices participate in autograd
+        # of the same parameter, so gradients flow correctly.
+        W = self.token_proj.weight                               # [E, 2E+S+1]
+        bias = self.token_proj.bias                              # [E]
+        W_card   = W[:, :E]                                       # [E, E]
+        W_zone   = W[:, E:2 * E]                                  # [E, E]
+        W_static = W[:, 2 * E:2 * E + S]                          # [E, S]
+        W_pres   = W[:, 2 * E + S]                                # [E]
+
+        # Per-card and per-zone projections, computed once per forward.
+        card_proj   = self.card_emb.weight @ W_card.t()           # [C, E]
+        static_proj = self.card_features.features @ W_static.t()  # [C, E]
+        zone_proj   = self.zone_emb.weight @ W_zone.t()           # [Z, E]
+
+        # Reductions over the card axis. P_sq accounts for stacked cards.
+        P_sum = presence.sum(dim=-1)                              # [B, Z]
+        P_sq  = (presence * presence).sum(dim=-1)                 # [B, Z]
+
+        card_term   = torch.einsum('bzc,ce->bze', presence, card_proj)
+        static_term = torch.einsum('bzc,ce->bze', presence, static_proj)
+        zone_term   = P_sum.unsqueeze(-1) * zone_proj.unsqueeze(0)   # [1,Z,E]
+        pres_term   = P_sq.unsqueeze(-1)  * W_pres.view(1, 1, E)     # [B,Z,E]
+        bias_term   = P_sum.unsqueeze(-1) * bias.view(1, 1, E)       # [B,Z,E]
+
+        pooled = card_term + zone_term + static_term + pres_term + bias_term
+        return pooled.reshape(B, Z * E)
+
     def _build_tokens(
         self,
         presence: torch.Tensor,     # [B, Z, C]
@@ -383,14 +445,17 @@ class PPOActorCritic(nn.Module):
             x, self.num_cards, self.action_dim,
         )
 
-        # Build per-slot tokens [B, Z, C, E] under both code paths.
-        tokens = self._build_tokens(presence)
-
-        # Pool: attention or presence-weighted sum.
-        if self.zone_pool is not None:
-            card_feat = self.zone_pool(tokens, presence)
+        # Fast path: token-features + sum pool avoids the [B,Z,C,E] cube
+        # entirely. Math is identical; see _token_features_sum_pool docstring.
+        # All other combinations build the cube and pool over it.
+        if self.token_features and self.zone_pool is None:
+            card_feat = self._token_features_sum_pool(presence)
         else:
-            card_feat = _sum_pool_tokens(tokens, presence)
+            tokens = self._build_tokens(presence)
+            if self.zone_pool is not None:
+                card_feat = self.zone_pool(tokens, presence)
+            else:
+                card_feat = _sum_pool_tokens(tokens, presence)
 
         # Shared trunk
         h = self.trunk(torch.cat([card_feat, numeric], dim=1))

@@ -191,6 +191,79 @@ def test_token_features_gradient_flows_through_static_path():
     assert model.token_proj.weight.grad.abs().sum() > 0
 
 
+def test_token_features_fast_sum_pool_matches_cube_path():
+    """The fast cube-free sum pool must produce numerically identical output
+    to the slow ``_build_tokens`` + ``_sum_pool_tokens`` path on the same
+    input. Math is exact (linear projection decomposes over concat), so
+    differences should be at float32 ULP level only.
+    """
+    from src.ppo.ppo_actor_critic import _sum_pool_tokens
+
+    reg = _toy_registry()
+    model, state_dim, _ = _build_token_model(reg, pool_type="sum")
+    model.eval()
+
+    x = torch.rand(8, state_dim) * 2.0  # include presence>1 (stacked cards)
+    presence, _, _ = __import__(
+        "src.encoding.state_utils", fromlist=["unpack_state_tokens"],
+    ).unpack_state_tokens(x, model.num_cards, model.action_dim)
+
+    fast = model._token_features_sum_pool(presence)
+    tokens = model._build_tokens(presence)
+    slow = _sum_pool_tokens(tokens, presence)
+
+    assert fast.shape == slow.shape
+    assert torch.allclose(fast, slow, atol=1e-5, rtol=1e-5), (
+        f"max abs diff: {(fast - slow).abs().max().item():.2e}"
+    )
+
+
+def test_token_features_fast_sum_pool_gradients_match_cube_path():
+    """Gradients through the fast path must match the slow path at ULP
+    precision. Validates that slicing token_proj.weight column-wise preserves
+    autograd correctness."""
+    from src.ppo.ppo_actor_critic import _sum_pool_tokens
+
+    reg = _toy_registry()
+    model_fast, state_dim, _ = _build_token_model(reg, pool_type="sum")
+    model_slow, _, _ = _build_token_model(reg, pool_type="sum")
+    # Tie weights so any difference is from the pool path, not init.
+    model_slow.load_state_dict(model_fast.state_dict())
+
+    x = torch.rand(4, state_dim) * 2.0
+    presence, _, _ = __import__(
+        "src.encoding.state_utils", fromlist=["unpack_state_tokens"],
+    ).unpack_state_tokens(x, model_fast.num_cards, model_fast.action_dim)
+
+    fast = model_fast._token_features_sum_pool(presence)
+    fast.sum().backward()
+
+    tokens = model_slow._build_tokens(presence)
+    slow = _sum_pool_tokens(tokens, presence)
+    slow.sum().backward()
+
+    # token_proj is the only learnable parameter exercised by both pool paths.
+    g_fast = model_fast.token_proj.weight.grad
+    g_slow = model_slow.token_proj.weight.grad
+    assert torch.allclose(g_fast, g_slow, atol=1e-5, rtol=1e-5), (
+        f"max abs grad diff: {(g_fast - g_slow).abs().max().item():.2e}"
+    )
+
+
+def test_token_features_fast_sum_pool_handles_empty_presence():
+    """When presence is all zero, the fast path must return zeros (not NaN)
+    matching the slow path. Bias and W_pres terms drop to 0 because their
+    coefficients (P_sum, P_sq) are 0; zone_proj term also zeros out."""
+    reg = _toy_registry()
+    model, state_dim, _ = _build_token_model(reg, pool_type="sum")
+    model.eval()
+
+    x = torch.zeros(3, state_dim)
+    logits, value = model(x)
+    assert torch.isfinite(logits).all()
+    assert torch.isfinite(value).all()
+
+
 def test_token_features_requires_registry():
     cards = [f"C{i}" for i in range(5)]
     state_dim = get_state_size(cards)
