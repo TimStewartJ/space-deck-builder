@@ -99,12 +99,33 @@ def train(
     model_path: str | None = None,
     load_latest: bool = False,
     model_config: ModelConfig | None = None,
+    seed: int | None = None,
 ):
-    """Run PPO training with the given configuration."""
+    """Run PPO training with the given configuration.
+
+    When *seed* is provided, Python ``random``, NumPy, and PyTorch
+    (CPU + all CUDA devices) are seeded before any model construction
+    or worker-seed derivation. This propagates into the per-worker
+    seed lists generated in ``batch_runner`` / ``mp_batch_runner``
+    (which call ``random.randint`` against the now-seeded global RNG),
+    making a full training run reproducible up to the limits of
+    GPU non-determinism. See ``docs/eval_protocol.md``.
+    """
     # --- Logging setup ---
     logger = setup_training_logger("logs")
     metrics_writer = MetricsWriter("logs")
     logger.info(f"Metrics file: {metrics_writer.path}")
+
+    if seed is not None:
+        import random as _random
+        import numpy as _np
+        import torch as _torch
+        _random.seed(seed)
+        _np.random.seed(seed % (2**32))
+        _torch.manual_seed(seed)
+        if _torch.cuda.is_available():
+            _torch.cuda.manual_seed_all(seed)
+        logger.info(f"Master seed set to {seed} (random/numpy/torch).")
 
     if load_latest and not model_path:
         import glob, os
@@ -161,7 +182,6 @@ def train(
         opponent_spec=run_cfg.opponents,
         self_play_ratio=run_cfg.self_play_ratio,
         pfsp_mode=run_cfg.pfsp_mode,
-        snapshot_eviction=run_cfg.snapshot_eviction,
     )
     if resume_ckpt is not None and run_cfg.self_play:
         manifest = resume_ckpt.get("pool_manifest")
@@ -188,94 +208,80 @@ def train(
         pool_msg += f" + self-play ({sched_info.lstrip(', ')}{pfsp_info})"
     logger.info(pool_msg)
 
-    # Set up LR scheduler for cosine annealing. T_max spans the planned
-    # training horizon. By default that's this run's last update; an explicit
-    # ``run_cfg.lr_horizon`` overrides it so a multi-process chunked resume
-    # can pin every chunk to the same overall horizon (e.g. 200) and produce
-    # a single smooth cosine curve across all chunks rather than re-warming
-    # or floor-pegging inside each one.
-    scheduler = None
-    if ppo_cfg.lr_schedule == "cosine":
-        if run_cfg.lr_horizon is not None:
-            total_horizon = run_cfg.lr_horizon
+    # Set up cosine LR scheduler. T_max spans the planned training horizon.
+    # By default that's this run's last update; an explicit ``run_cfg.lr_horizon``
+    # overrides it so a multi-process chunked resume can pin every chunk to the
+    # same overall horizon (e.g. 200) and produce a single smooth cosine curve
+    # across all chunks rather than re-warming or floor-pegging inside each one.
+    if run_cfg.lr_horizon is not None:
+        total_horizon = run_cfg.lr_horizon
+        logger.info(
+            f"LR horizon overridden by --lr-horizon: T_max pinned to "
+            f"{max(1, total_horizon - 1)} (cosine spans updates 1..{total_horizon})."
+        )
+    else:
+        total_horizon = (start_update - 1) + run_cfg.updates
+    scheduler = lr_sched.CosineAnnealingLR(
+        agent.optimizer,
+        T_max=max(1, total_horizon - 1),
+        eta_min=ppo_cfg.lr_end,
+    )
+    if resume_ckpt is not None:
+        sched_state = resume_ckpt.get("scheduler_state_dict")
+        if sched_state is not None:
+            scheduler.load_state_dict(sched_state)
+            # _LRScheduler.load_state_dict does dict.update(), which clobbers
+            # T_max / eta_min / base_lrs back to the original run's values.
+            # Re-pin the curve to the new (extended) horizon so resumed
+            # training rides a smooth continuation of the cosine schedule
+            # rather than re-warming from base_lr.
+            target_t_max = max(1, total_horizon - 1)
+            if getattr(scheduler, "T_max", None) != target_t_max:
+                logger.info(
+                    f"Re-pinning LR scheduler T_max: "
+                    f"{getattr(scheduler, 'T_max', '?')} -> {target_t_max} "
+                    f"(extending cosine horizon for resumed run)."
+                )
+                scheduler.T_max = target_t_max
+            scheduler.eta_min = ppo_cfg.lr_end
+            # PyTorch's CosineAnnealingLR.step() uses a recurrence formula
+            # that multiplies by (last_lr - eta_min); if the loaded checkpoint
+            # was at the end of its cosine (last_lr ≈ eta_min), the recurrence
+            # stays pegged at eta_min forever, even after we re-pin T_max to
+            # a longer horizon. Re-seed _last_lr (and the live optimizer LR)
+            # from the closed-form cosine value so the next step() resumes
+            # mid-curve correctly.
+            closed_form_lrs = scheduler._get_closed_form_lr()
+            scheduler._last_lr = list(closed_form_lrs)
+            for pg, lr in zip(agent.optimizer.param_groups, closed_form_lrs):
+                pg["lr"] = lr
+            # base_lrs is set at constructor time from optimizer param_groups;
+            # load_state_dict overwrites it to the saved values. If the user
+            # passed an explicit --lr, they'd expect it to take effect, but
+            # for now we log if there's a mismatch so it's not silent.
+            saved_base_lrs = scheduler.base_lrs
+            expected_base_lrs = [ppo_cfg.lr] * len(saved_base_lrs)
+            if any(abs(s - e) > 1e-12 for s, e in zip(saved_base_lrs, expected_base_lrs)):
+                logger.info(
+                    f"Note: scheduler base_lrs from checkpoint ({saved_base_lrs}) "
+                    f"differ from --lr setting ({expected_base_lrs}); "
+                    f"using checkpoint values to preserve continuity."
+                )
             logger.info(
-                f"LR horizon overridden by --lr-horizon: T_max pinned to "
-                f"{max(1, total_horizon - 1)} (cosine spans updates 1..{total_horizon})."
+                f"Restored LR scheduler state "
+                f"(last_epoch={scheduler.last_epoch}, T_max={scheduler.T_max})."
             )
         else:
-            total_horizon = (start_update - 1) + run_cfg.updates
-        scheduler = lr_sched.CosineAnnealingLR(
-            agent.optimizer,
-            T_max=max(1, total_horizon - 1),
-            eta_min=ppo_cfg.lr_end,
-        )
-        if resume_ckpt is not None:
-            sched_state = resume_ckpt.get("scheduler_state_dict")
-            if sched_state is not None:
-                scheduler.load_state_dict(sched_state)
-                # _LRScheduler.load_state_dict does dict.update(), which clobbers
-                # T_max / eta_min / base_lrs back to the original run's values.
-                # Re-pin the curve to the new (extended) horizon so resumed
-                # training rides a smooth continuation of the cosine schedule
-                # rather than re-warming from base_lr.
-                target_t_max = max(1, total_horizon - 1)
-                if getattr(scheduler, "T_max", None) != target_t_max:
-                    logger.info(
-                        f"Re-pinning LR scheduler T_max: "
-                        f"{getattr(scheduler, 'T_max', '?')} -> {target_t_max} "
-                        f"(extending cosine horizon for resumed run)."
-                    )
-                    scheduler.T_max = target_t_max
-                scheduler.eta_min = ppo_cfg.lr_end
-                # PyTorch's CosineAnnealingLR.step() uses a recurrence formula
-                # that multiplies by (last_lr - eta_min); if the loaded checkpoint
-                # was at the end of its cosine (last_lr ≈ eta_min), the recurrence
-                # stays pegged at eta_min forever, even after we re-pin T_max to
-                # a longer horizon. Re-seed _last_lr (and the live optimizer LR)
-                # from the closed-form cosine value so the next step() resumes
-                # mid-curve correctly.
-                closed_form_lrs = scheduler._get_closed_form_lr()
-                scheduler._last_lr = list(closed_form_lrs)
-                for pg, lr in zip(agent.optimizer.param_groups, closed_form_lrs):
-                    pg["lr"] = lr
-                # base_lrs is set at constructor time from optimizer param_groups;
-                # load_state_dict overwrites it to the saved values. If the user
-                # passed an explicit --lr, they'd expect it to take effect, but
-                # for now we log if there's a mismatch so it's not silent.
-                saved_base_lrs = scheduler.base_lrs
-                expected_base_lrs = [ppo_cfg.lr] * len(saved_base_lrs)
-                if any(abs(s - e) > 1e-12 for s, e in zip(saved_base_lrs, expected_base_lrs)):
-                    logger.info(
-                        f"Note: scheduler base_lrs from checkpoint ({saved_base_lrs}) "
-                        f"differ from --lr setting ({expected_base_lrs}); "
-                        f"using checkpoint values to preserve continuity."
-                    )
-                logger.info(
-                    f"Restored LR scheduler state "
-                    f"(last_epoch={scheduler.last_epoch}, T_max={scheduler.T_max})."
-                )
-            else:
-                # Manually fast-forward the scheduler to the resumed step so
-                # the LR curve continues smoothly even for old checkpoints.
-                for _ in range(start_update - 1):
-                    scheduler.step()
-                logger.info(
-                    f"No scheduler state in checkpoint; fast-forwarded "
-                    f"{start_update - 1} step(s) to align cosine schedule."
-                )
-        logger.info(f"LR schedule: cosine {ppo_cfg.lr:.1e} -> {ppo_cfg.lr_end:.1e} "
-                     f"over {total_horizon} updates")
-    else:
-        # Constant LR: if we resumed from a checkpoint, the optimizer's loaded
-        # param_group LRs reflect whatever schedule was active when the
-        # checkpoint was saved (e.g. a cosine-annealed 1e-5 floor). A user
-        # passing --lr-schedule constant --lr X expects X to take effect, so
-        # explicitly overwrite the loaded LRs here. Without this override,
-        # --lr is silently ignored on resume.
-        if resume_ckpt is not None:
-            for pg in agent.optimizer.param_groups:
-                pg["lr"] = ppo_cfg.lr
-        logger.info(f"LR schedule: constant {ppo_cfg.lr:.1e}")
+            # Manually fast-forward the scheduler to the resumed step so
+            # the LR curve continues smoothly even for old checkpoints.
+            for _ in range(start_update - 1):
+                scheduler.step()
+            logger.info(
+                f"No scheduler state in checkpoint; fast-forwarded "
+                f"{start_update - 1} step(s) to align cosine schedule."
+            )
+    logger.info(f"LR schedule: cosine {ppo_cfg.lr:.1e} -> {ppo_cfg.lr_end:.1e} "
+                 f"over {total_horizon} updates")
 
     total_time_spent_on_updates = 0.0
     total_time_spent_on_episodes = 0.0
@@ -379,9 +385,8 @@ def train(
             logger.error("NaN/Inf detected in loss — aborting training.")
             break
 
-        # Step LR scheduler after each update
-        if scheduler is not None:
-            scheduler.step()
+        # Step the cosine LR scheduler after each update.
+        scheduler.step()
 
         # Add snapshot for self-play after each update
         if run_cfg.self_play:
@@ -428,7 +433,7 @@ def train(
             device_config=dev_cfg,
             update=upd,
             optimizer_state_dict=agent.optimizer.state_dict(),
-            scheduler_state_dict=scheduler.state_dict() if scheduler is not None else None,
+            scheduler_state_dict=scheduler.state_dict(),
             pool_manifest=pool.to_manifest() if run_cfg.self_play else None,
         )
         logger.info(f"Checkpoint saved: {ckpt_path}")

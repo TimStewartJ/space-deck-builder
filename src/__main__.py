@@ -28,10 +28,7 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     # PPO hyperparameters (defaults sourced from PPOConfig dataclass)
     p.add_argument("--lr",          type=float, default=_ppo.lr)
     p.add_argument("--lr-end",     type=float, default=_ppo.lr_end,
-                   help="Terminal learning rate for cosine schedule")
-    p.add_argument("--lr-schedule", type=str, default=_ppo.lr_schedule,
-                   choices=["constant", "cosine"],
-                   help="LR schedule: cosine annealing (default) or constant")
+                   help="Terminal learning rate for cosine annealing")
     p.add_argument("--gamma",       type=float, default=_ppo.gamma)
     p.add_argument("--lam",         type=float, default=_ppo.lam)
     p.add_argument("--clip-eps",    type=float, default=_ppo.clip_eps)
@@ -39,9 +36,6 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--batch-size",  type=int,   default=_ppo.batch_size)
     p.add_argument("--entropy",     type=float, default=_ppo.entropy_coef,
                    help="Entropy bonus coefficient")
-    p.add_argument("--adv-norm",    type=str,   default=_ppo.adv_norm,
-                   choices=["per_episode", "global"],
-                   help="Advantage normalization mode")
     # Model architecture
     p.add_argument("--actor-type",  type=str, default=_mdl.actor_type,
                    choices=["mlp", "attention"],
@@ -77,11 +71,6 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--pfsp", type=str, default=_run.pfsp_mode,
                    choices=["uniform", "hard", "variance"],
                    help="PFSP snapshot weighting: uniform (default), hard, or variance")
-    p.add_argument("--snapshot-eviction", type=str, default=_run.snapshot_eviction,
-                   choices=["fifo", "geometric"],
-                   help="Snapshot-pool eviction strategy. 'geometric' (default) "
-                        "keeps opponents at log-spaced ages for a diverse pool; "
-                        "'fifo' evicts the oldest snapshot each time.")
     # Devices (defaults sourced from DeviceConfig dataclass)
     p.add_argument("--main-device",       type=str, default=_dev.main_device,
                    help="Device for training updates")
@@ -102,6 +91,14 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                         "re-pins T_max to the same final-target update (e.g. 200) "
                         "and the cosine LR curve flows smoothly across chunks "
                         "instead of decaying to the floor inside each one.")
+    # Reproducibility (per docs/eval_protocol.md). When set, seeds Python
+    # `random`, `numpy`, and `torch` deterministically — which in turn makes
+    # the per-worker seed lists in batch_runner / mp_batch_runner reproducible
+    # since they are drawn from `random.randint`.
+    p.add_argument("--seed",              type=int, default=None,
+                   help="Master RNG seed for reproducibility. Seeds Python "
+                        "random, numpy, and torch (CPU+CUDA). When omitted, "
+                        "training uses non-reproducible OS entropy.")
     return p
 
 
@@ -188,6 +185,13 @@ def _build_eval_parser(sub: argparse._SubParsersAction):
                    help="Concurrent games per worker (default: games/workers)")
     p.add_argument("--num-workers", type=int, default=_run.num_workers,
                    help=f"Simulation worker processes (default: {_run.num_workers})")
+    # Reproducibility (per docs/eval_protocol.md). Seeds Python random,
+    # numpy, and torch before per-worker seed derivation so gauntlet runs
+    # are reproducible up to the limits of GPU non-determinism.
+    p.add_argument("--seed", type=int, default=None,
+                   help="Master RNG seed for reproducible eval. Seeds "
+                        "Python random, numpy, and torch (CPU+CUDA). When "
+                        "omitted, eval uses non-reproducible OS entropy.")
 
 
 def _build_analyze_parser(sub: argparse._SubParsersAction):
@@ -261,8 +265,7 @@ def _run_train(args):
         lr=args.lr, gamma=args.gamma, lam=args.lam,
         clip_eps=args.clip_eps, epochs=args.epochs,
         batch_size=args.batch_size, entropy_coef=args.entropy,
-        adv_norm=args.adv_norm,
-        lr_end=args.lr_end, lr_schedule=args.lr_schedule,
+        lr_end=args.lr_end,
     )
     model_cfg = ModelConfig(
         actor_type=args.actor_type, pool_type=args.pool_type,
@@ -277,7 +280,6 @@ def _run_train(args):
         self_play_ratio_start=args.self_play_ratio_start,
         self_play_schedule=args.self_play_schedule,
         pfsp_mode=args.pfsp,
-        snapshot_eviction=args.snapshot_eviction,
         num_workers=args.num_workers,
         num_concurrent=args.num_concurrent,
         resume=args.resume,
@@ -290,7 +292,8 @@ def _run_train(args):
     train(data_cfg, ppo_cfg, run_cfg, dev_cfg,
           model_path=args.model_path,
           load_latest=args.load_latest_model,
-          model_config=model_cfg)
+          model_config=model_cfg,
+          seed=args.seed)
 
 
 def _run_simulate(args):
@@ -370,6 +373,7 @@ def _run_eval(args):
             eval_games=args.games,
             num_concurrent=args.num_concurrent,
             num_workers=args.num_workers,
+            seed=args.seed,
         )
     except FileNotFoundError as e:
         print(f"Error: {e}")

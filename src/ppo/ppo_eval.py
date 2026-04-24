@@ -193,12 +193,29 @@ def load_and_evaluate(
     eval_games: int = 3200,
     num_concurrent: int | None = None,
     num_workers: int = 20,
+    seed: int | None = None,
 ) -> EvalResult:
     """Load a checkpoint and run evaluation — convenience wrapper for CLI use.
 
     Handles model loading, device resolution, and dimension validation before
     delegating to :func:`evaluate`.
+
+    When *seed* is provided, Python ``random``, NumPy, and PyTorch
+    (CPU + all CUDA devices) are seeded before any RNG draws — most
+    importantly, before ``mp_batch_runner`` derives its per-worker seed
+    list via ``random.randint``. This makes a full eval gauntlet
+    reproducible up to the limits of GPU non-determinism.
+    See ``docs/eval_protocol.md``.
     """
+    if seed is not None:
+        import random as _random
+        import numpy as _np
+        _random.seed(seed)
+        _np.random.seed(seed % (2**32))
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(seed)
+
     if data_cfg is None:
         data_cfg = DataConfig()
 
@@ -221,6 +238,8 @@ def load_and_evaluate(
 
     print(f"Model: {model_path}")
     print(f"Device: {device}")
+    if seed is not None:
+        print(f"Seed: {seed}")
 
     # Load checkpoint and reconstruct model
     ckpt = load_checkpoint(model_path, map_location=device)

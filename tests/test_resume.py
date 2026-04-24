@@ -125,35 +125,6 @@ def test_optimizer_load_overwrites_lr_param_group():
     assert opt_b.param_groups[0]["lr"] == 1e-3
 
 
-def test_constant_lr_resume_overrides_loaded_lr():
-    """Trainer must explicitly re-apply ppo_cfg.lr to every param group after
-    restoring optimizer state when the schedule is ``constant``; otherwise the
-    value baked into the checkpoint (e.g. a 1e-5 cosine floor) silently wins.
-    """
-    # Simulate "the checkpoint" — a cosine run that ended pegged at its floor.
-    saved_model = _dummy_model()
-    saved_opt = torch.optim.Adam(saved_model.parameters(), lr=3e-4)
-    # Drive the saved optimizer's param_group lr down to the cosine floor.
-    for pg in saved_opt.param_groups:
-        pg["lr"] = 1e-5
-    x = torch.randn(8, 4); target = torch.randn(8, 2)
-    ((saved_model(x) - target) ** 2).mean().backward()
-    saved_opt.step()
-
-    # Simulate "the fresh trainer" launched with --lr-schedule constant --lr 3e-4 --resume.
-    live_model = _dummy_model()
-    live_opt = torch.optim.Adam(live_model.parameters(), lr=3e-4)
-    live_opt.load_state_dict(saved_opt.state_dict())
-    assert live_opt.param_groups[0]["lr"] == 1e-5, "precondition: loaded lr should be floor"
-
-    # Mirror the trainer's constant-schedule resume override.
-    ppo_cfg = PPOConfig(lr=3e-4, lr_schedule="constant")
-    for pg in live_opt.param_groups:
-        pg["lr"] = ppo_cfg.lr
-
-    assert live_opt.param_groups[0]["lr"] == pytest.approx(3e-4)
-
-
 def test_load_v2_checkpoint_without_resume_metadata(tmp_path: Path):
     """V2 checkpoints (no optimizer/scheduler/pool fields) still load cleanly."""
     model = _dummy_model()

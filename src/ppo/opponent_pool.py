@@ -27,21 +27,21 @@ VALID_AGENT_NAMES = set(AGENT_REGISTRY.keys())
 
 PFSP_MODES = {"uniform", "hard", "variance"}
 
-# Supported snapshot-pool eviction strategies. ``fifo`` drops the oldest
-# snapshot when the pool is over cap (preserves legacy behavior for callers
-# that don't track update numbers). ``geometric`` keeps a log-spaced ladder
-# of ages — the cap snapshots whose update numbers best match the target
-# ages [1, 2, 4, 8, ..., 2^(cap-1)] relative to the most recently-added
-# snapshot's update — so the pool always covers a wide band of historical
-# selves instead of collapsing to near-clones of the current policy.
-EVICTION_MODES = {"fifo", "geometric"}
-
 
 class OpponentPool:
     """Weighted pool of opponent agents for training and evaluation.
 
     Fixed agents are always available. PPO snapshots are added during
     self-play and stored separately with a configurable pool cap.
+
+    Snapshots are evicted on a log-spaced age ladder (the geometric
+    strategy): when the pool exceeds ``snapshot_cap``, the survivors
+    are chosen so the oldest, newest, and intermediate ages are spread
+    geometrically. This keeps a meaningful spread of historical selves
+    in the pool instead of letting it collapse to near-clones of the
+    current policy. When a snapshot is added without a known update
+    (e.g. from tests), eviction transparently falls back to FIFO for
+    that operation since age-spacing requires update numbers.
 
     When pfsp_mode is "hard" or "variance", snapshot selection uses
     Prioritized Fictitious Self-Play instead of uniform random:
@@ -59,7 +59,6 @@ class OpponentPool:
         snapshot_cap: int = 10,
         pfsp_mode: str | None = None,
         pfsp_ema_alpha: float = 0.3,
-        snapshot_eviction: str | None = None,
     ):
         from src.config import RunConfig
         _defaults = RunConfig()
@@ -69,23 +68,15 @@ class OpponentPool:
             self_play_ratio = _defaults.self_play_ratio
         if pfsp_mode is None:
             pfsp_mode = _defaults.pfsp_mode
-        if snapshot_eviction is None:
-            snapshot_eviction = _defaults.snapshot_eviction
         if pfsp_mode not in PFSP_MODES:
             raise ValueError(
                 f"Unknown PFSP mode {pfsp_mode!r}. "
                 f"Valid modes: {', '.join(sorted(PFSP_MODES))}"
             )
-        if snapshot_eviction not in EVICTION_MODES:
-            raise ValueError(
-                f"Unknown snapshot_eviction {snapshot_eviction!r}. "
-                f"Valid modes: {', '.join(sorted(EVICTION_MODES))}"
-            )
         self.entries: list[tuple[str, float]] = _parse_opponent_spec(opponent_spec)
         self.self_play_ratio = self_play_ratio
         self.snapshot_cap = snapshot_cap
         self.pfsp_mode = pfsp_mode
-        self.snapshot_eviction = snapshot_eviction
         self._pfsp_ema_alpha = pfsp_ema_alpha
 
         # PPO snapshot state_dicts stored as (name, state_dict, model_config) tuples
@@ -142,18 +133,17 @@ class OpponentPool:
     def _enforce_cap(self) -> None:
         """Shrink ``self._snapshots`` back down to ``snapshot_cap`` members.
 
-        Uses geometric eviction when the mode is enabled and every current
-        snapshot has a known update number. Falls back to FIFO otherwise
-        so callers that don't track updates (tests, older code paths) see
-        unchanged behavior.
+        Uses geometric (log-spaced age) eviction when every current snapshot
+        has a known update number. Falls back to FIFO when any snapshot is
+        missing its update — this keeps test/legacy callers that don't
+        provide updates working without a separate code path.
         """
         if len(self._snapshots) <= self.snapshot_cap:
             return
         have_all_updates = all(
             name in self._snapshot_updates for name, _, _ in self._snapshots
         )
-        use_geometric = self.snapshot_eviction == "geometric" and have_all_updates
-        if use_geometric:
+        if have_all_updates:
             keep_indices = self._geometric_keep_indices()
         else:
             keep_indices = list(range(len(self._snapshots)))[-self.snapshot_cap:]

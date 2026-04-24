@@ -1,22 +1,35 @@
-"""Centralized, pipelined GPU inference server for multi-process training.
+"""Centralized GPU inference server for multi-process training.
 
-Runs a 3-stage pipeline (ingress → GPU → egress) in the main process, serving
-batched model forward passes to simulation worker processes over
-multiprocessing queues. Stages run on dedicated Python threads; CUDA kernels
-release the GIL so the compute thread executes in parallel with the IPC
-threads.
+Worker processes (training rollouts, eval, tournaments) ship encoded
+states + action masks to this server over an :class:`mp.Queue` and
+receive sampled actions, log-probs, and values back over per-worker
+response queues. Centralizing inference lets us run one batched forward
+pass per server tick instead of one per worker, which is a large
+speedup whenever workers contend for the GPU.
 
-The GPU thread is the only thread that touches the CUDA API. It uses three
-CUDA streams (copy-in, compute, copy-out) chained via stream events so that
-H2D of batch N+1 overlaps with compute of batch N and D2H of batch N-1.
-Host buffers are pre-allocated pinned torch tensors reused from a small pool.
+Single-thread / single-stream design
+------------------------------------
+A single dedicated server thread is the only thread that ever touches
+the CUDA API. It runs the obvious loop:
 
-Worker-facing protocol (InferenceRequest / InferenceResponse over mp.Queue)
-is unchanged from the pre-pipelined server — callers in mp_sim_worker and
-mp_batch_runner do not need to adapt.
+  1. drain pending control messages (register / unregister)
+  2. drain ``request_queue`` (block on first, opportunistically drain rest)
+  3. group requests by ``model_id`` and stage them into reusable buffers
+  4. run forward + sampling on the default stream
+  5. dispatch :class:`InferenceResponse` per slice
+
+There is no multi-stream pipeline and no inter-stage queue. We previously
+used a 3-stream / 3-thread setup (copy-in, compute, copy-out) chained via
+``Stream.wait_stream`` and CUDA events, but cross-stream sync proved
+unreliable on ROCm 7.2 (RX 9070), causing compute to read uninitialized
+device memory and produce garbage actions. See ``docs/decisions/0001-drop-multistream-inference.md``.
+
+Worker-facing protocol (:class:`InferenceRequest` / :class:`InferenceResponse`
+over :class:`mp.Queue`) is unchanged.
 """
 import queue
 import threading
+import time
 from dataclasses import dataclass
 
 import numpy as np
@@ -97,16 +110,12 @@ class EvalWorkerResult:
     total_steps: int
 
 
-# Pool size is chosen so that with Q_in / Q_out capacities of 2 we can always
-# have one batch being filled by ingress, one in compute, one in egress.
-_POOL_SIZE = 3
-_QUEUE_CAPACITY = 2
-# Small timeout on all blocking queue ops so threads re-check _shutdown.
-_STAGE_TIMEOUT = 1.0
+# Small timeout on blocking queue ops so the server thread re-checks _shutdown.
+_LOOP_TIMEOUT = 0.1
 
 
 # ----------------------------------------------------------------------
-# Control plane: register/unregister requests handled by the GPU thread
+# Control plane: register/unregister requests handled by the server thread
 # so that only one thread ever touches the CUDA API.
 # ----------------------------------------------------------------------
 @dataclass
@@ -118,38 +127,35 @@ class _ControlMsg:
     error: list                    # single-element list written by GPU thread
 
 
-class _BufferSlot:
-    """Pool entry holding reusable pinned host buffers + device buffers.
+class _Buffers:
+    """Reusable host (pinned on CUDA) and device buffers, grown on demand.
 
-    Buffers grow on demand to the largest batch size observed so far and are
-    never shrunk. All tensors are allocated lazily on first use so that a
-    purely CPU run pays no pinned-memory cost.
+    A single buffer set is enough because the server thread runs one batch
+    at a time end-to-end — there is no pipelining that would require
+    multiple slots. Buffers double in size on growth and never shrink, so
+    after a short warm-up every batch is a no-op allocation-wise.
     """
 
-    def __init__(self, slot_idx: int, state_size: int, action_dim: int, device: torch.device):
-        self.slot_idx = slot_idx
+    def __init__(self, state_size: int, action_dim: int, device: torch.device):
         self.state_size = state_size
         self.action_dim = action_dim
         self.device = device
         self._capacity = 0
 
-        self.host_states: torch.Tensor | None = None   # pinned [cap, state_size] float32
-        self.host_masks: torch.Tensor | None = None    # pinned [cap, action_dim] float32
-        self.host_actions: torch.Tensor | None = None  # pinned [cap] int64
+        self.host_states: torch.Tensor | None = None    # pinned [cap, state_size] float32
+        self.host_masks: torch.Tensor | None = None     # pinned [cap, action_dim] float32
+        self.host_actions: torch.Tensor | None = None   # pinned [cap] int64
         self.host_logprobs: torch.Tensor | None = None  # pinned [cap] float32
-        self.host_values: torch.Tensor | None = None   # pinned [cap] float32
-        # Allocated lazily — only batches with at least one slice requesting
-        # logits ever populate this buffer. Keeps regular eval/rollout paths
-        # from paying for an extra [cap, action_dim] pinned allocation.
-        self.host_logits: torch.Tensor | None = None   # pinned [cap, action_dim] float32
+        self.host_values: torch.Tensor | None = None    # pinned [cap] float32
+        # Lazily allocated only when at least one batch requests logits.
+        self.host_logits: torch.Tensor | None = None    # pinned [cap, action_dim] float32
 
-        self.dev_states: torch.Tensor | None = None    # [cap, state_size] float32
-        self.dev_masks: torch.Tensor | None = None     # [cap, action_dim] float32
+        self.dev_states: torch.Tensor | None = None     # [cap, state_size] float32
+        self.dev_masks: torch.Tensor | None = None      # [cap, action_dim] float32
 
     def ensure_capacity(self, needed: int) -> None:
         if needed <= self._capacity:
             return
-        # Grow by doubling to amortize reallocations.
         new_cap = max(needed, self._capacity * 2 if self._capacity else needed)
         pin = self.device.type == "cuda"
         self.host_states = torch.empty(
@@ -161,24 +167,20 @@ class _BufferSlot:
         self.host_actions = torch.empty((new_cap,), dtype=torch.int64, pin_memory=pin)
         self.host_logprobs = torch.empty((new_cap,), dtype=torch.float32, pin_memory=pin)
         self.host_values = torch.empty((new_cap,), dtype=torch.float32, pin_memory=pin)
-        # If host_logits was previously allocated for an earlier replay batch,
-        # grow it in lock-step so the lazy allocation stays valid across the
-        # slot's lifetime.
         if self.host_logits is not None:
             self.host_logits = torch.empty(
                 (new_cap, self.action_dim), dtype=torch.float32, pin_memory=pin
             )
-
-        self.dev_states = torch.empty(
-            (new_cap, self.state_size), dtype=torch.float32, device=self.device
-        )
-        self.dev_masks = torch.empty(
-            (new_cap, self.action_dim), dtype=torch.float32, device=self.device
-        )
+        if self.device.type == "cuda":
+            self.dev_states = torch.empty(
+                (new_cap, self.state_size), dtype=torch.float32, device=self.device
+            )
+            self.dev_masks = torch.empty(
+                (new_cap, self.action_dim), dtype=torch.float32, device=self.device
+            )
         self._capacity = new_cap
 
     def ensure_logits_buffer(self) -> None:
-        """Allocate ``host_logits`` lazily on first batch that requests logits."""
         if self.host_logits is not None:
             return
         pin = self.device.type == "cuda"
@@ -187,61 +189,20 @@ class _BufferSlot:
         )
 
 
-@dataclass
-class _PendingBatch:
-    """Ingress → GPU: a filled input buffer ready for compute."""
-    slot: _BufferSlot
-    batch_size: int
-    model_id: str
-    # Per-request slice metadata so egress can rebuild InferenceResponses.
-    # ``return_logits`` lets egress decide whether to attach a logits view to
-    # the response for that slice.
-    slices: list[tuple[int, int, int, int, bool]]  # (worker_id, request_id, start, end, return_logits)
-
-
-@dataclass
-class _CompletedBatch:
-    """GPU → Egress: outputs copied into pinned host buffers, event to sync on."""
-    slot: _BufferSlot
-    batch_size: int
-    slices: list[tuple[int, int, int, int, bool]]
-    done_event: torch.cuda.Event | None  # None when running on CPU
-    # CUDA events bracketing forward+sample on compute_stream; used by egress
-    # to attribute GPU compute time. None on the CPU path.
-    compute_start: torch.cuda.Event | None = None
-    compute_end: torch.cuda.Event | None = None
-
-
 class InferenceServer:
-    """Batched multi-model GPU inference server with a 3-stage pipeline.
+    """Single-thread batched inference server hosting one or more PPO models.
 
     Hosts an arbitrary set of :class:`PPOActorCritic` instances keyed by a
-    string ``model_id``. Workers pick the model for each inference request
-    by tagging the request with ``model_id``. Models can be added or
+    string ``model_id``. Workers tag each :class:`InferenceRequest` with
+    the model they want; unknown ``model_id`` produces an error response
+    rather than being silently routed elsewhere. Models can be added or
     removed at runtime via :meth:`register_model` / :meth:`unregister_model`
-    without tearing down the server.
+    without tearing down the server; both calls block until the server
+    thread has applied the change so all CUDA ops stay on one thread.
 
-    Public API: ``start()`` / ``stop()`` and the ``request_queue`` +
-    ``response_queues`` used by workers. Control-plane mutations
-    (:meth:`register_model` / :meth:`unregister_model`) are synchronous —
-    they block the caller until the GPU thread has applied the change.
-
-    Internally, three threads cooperate:
-
-    * **Ingress**: drains ``request_queue`` (one blocking get, then non-blocking
-      drain to coalesce concurrent workers), groups requests by ``model_id``,
-      and stages their states/masks into a pooled pinned host buffer.
-    * **GPU**: the sole CUDA caller. Instantiates and owns all registered
-      models, processes control-plane messages (register/unregister) between
-      batches, and issues async H2D on ``copy_in_stream``, forward + masked
-      sampling on ``compute_stream``, and async D2H on ``copy_out_stream``,
-      chained via ``wait_stream`` + ``record_stream``.
-    * **Egress**: syncs the copy-out event, slices the pinned output buffer
-      per request, and puts ``InferenceResponse`` onto each worker's queue.
-
-    A request with an unknown ``model_id`` is not silently routed to
-    another model — the server responds with an :class:`InferenceResponse`
-    whose ``error`` field is set, and it is up to the worker to raise.
+    Public API: ``start()`` / ``stop()``, ``request_queue`` +
+    ``response_queues`` for worker IPC, and ``register_model`` /
+    ``unregister_model`` for the model registry.
     """
 
     def __init__(
@@ -251,22 +212,6 @@ class InferenceServer:
         num_workers: int,
         ctx: mp.context.BaseContext | None = None,
     ):
-        """Create a multi-model inference server.
-
-        Args:
-            models: Initial model registry, ``{model_id: PPOActorCritic}``.
-                All models must share the same encoded-state / action-space
-                dimensions (the server sizes its buffers from the first
-                observed request and assumes that size holds for every
-                model). Models may be on any device; the GPU thread moves
-                them to ``device`` and switches them to eval mode on
-                startup.
-            device: Torch device for inference (``cuda`` or ``cpu``).
-            num_workers: Number of worker processes that will consume the
-                response queues.
-            ctx: Optional ``multiprocessing`` context (defaults to the
-                module-level ``multiprocessing``). Windows needs ``spawn``.
-        """
         if not models:
             raise ValueError("InferenceServer requires at least one model at startup")
 
@@ -278,128 +223,57 @@ class InferenceServer:
         self.response_queues: list[mp.Queue] = [_mp.Queue() for _ in range(num_workers)]
 
         self._shutdown = threading.Event()
-        self._threads: list[threading.Thread] = []
-        self._requests_served = 0
-        # _requests_served is written only by the egress thread and read from
-        # the main thread via the property after stop(); no lock needed.
+        self._thread: threading.Thread | None = None
+        self._fatal_error: BaseException | None = None
+        self._requests_served = 0  # written only by the server thread
 
-        # Inter-stage queues and the pool free-list.
-        self._q_in: queue.Queue[_PendingBatch | None] = queue.Queue(maxsize=_QUEUE_CAPACITY)
-        self._q_out: queue.Queue[_CompletedBatch | None] = queue.Queue(maxsize=_QUEUE_CAPACITY)
-        self._free_slots: queue.Queue[_BufferSlot] = queue.Queue()
-
-        # Control plane for register/unregister. Writers block on the ack
-        # event until the GPU thread has applied the change; that keeps
-        # all CUDA work on a single thread and gives callers a clean
-        # synchronous contract.
+        # Control plane: writers block on ack until the server thread
+        # applies the change, giving callers a synchronous contract.
         self._control_q: queue.Queue[_ControlMsg] = queue.Queue()
-        # Names currently known to the control plane (registered minus
-        # unregistered). Used only to reject double-register / missing
-        # unregister cheaply from the calling thread — the GPU thread is
-        # still the source of truth for the live weights.
         self._known_model_ids: set[str] = set(models.keys())
         self._known_lock = threading.Lock()
 
+        # Lazy-init from the first observed request shape.
         self._state_size: int | None = None
         self._action_dim: int | None = None
 
-    def start(self):
-        """Spin up ingress/gpu/egress threads."""
-        self._shutdown.clear()
-        self._requests_served = 0
-        self._fatal_error: BaseException | None = None
-        # Per-run instrumentation, written only by the GPU/egress threads and
-        # read from the main thread after stop(). Plain dict is fine: the GIL
-        # makes individual dict ops atomic and stop() joins before we read.
         self._stats = {
             "batches": 0,
             "total_batch_size": 0,
             "max_batch_size": 0,
-            "q_in_wait_s": 0.0,    # GPU thread idle waiting for ingress
-            "q_out_wait_s": 0.0,   # GPU thread blocked by egress backpressure
-            "compute_s": 0.0,      # GPU-side forward + sample (from CUDA events)
-            "wall_s": 0.0,         # GPU loop total elapsed
+            "compute_s": 0.0,   # GPU-side forward + sample time (CUDA events)
+            "wall_s": 0.0,      # server loop total elapsed
         }
 
-        ingress = threading.Thread(
-            target=self._stage_wrapper, args=(self._ingress_loop, "ingress"),
-            name="infer-ingress", daemon=True,
+    # ------------------------------------------------------------------
+    # Lifecycle
+    # ------------------------------------------------------------------
+    def start(self):
+        """Spin up the server thread."""
+        self._shutdown.clear()
+        self._fatal_error = None
+        self._requests_served = 0
+        for k in self._stats:
+            self._stats[k] = 0 if isinstance(self._stats[k], int) else 0.0
+        self._thread = threading.Thread(
+            target=self._run, name="infer-server", daemon=True,
         )
-        gpu = threading.Thread(
-            target=self._stage_wrapper, args=(self._gpu_loop, "gpu"),
-            name="infer-gpu", daemon=True,
-        )
-        egress = threading.Thread(
-            target=self._stage_wrapper, args=(self._egress_loop, "egress"),
-            name="infer-egress", daemon=True,
-        )
-        self._threads = [ingress, gpu, egress]
-        for t in self._threads:
-            t.start()
-
-    def _stage_wrapper(self, target, name: str):
-        """Run a stage loop, logging any exception and triggering shutdown so
-        the other stages (and the workers blocked on response queues) don't hang.
-        """
-        try:
-            target()
-        except BaseException as e:
-            import traceback
-            self._fatal_error = e
-            print(
-                f"[InferenceServer] {name} thread crashed: {type(e).__name__}: {e}\n"
-                f"{traceback.format_exc()}",
-                flush=True,
-            )
-            self._shutdown.set()
-            # Unblock any workers currently waiting on response_queue.get() by
-            # draining pending requests and sending empty InferenceResponses.
-            # Without this, workers hang forever and _collect_results in the
-            # main process only times out after its (multi-minute) deadline.
-            self._drain_and_fail_pending()
-
-    def _drain_and_fail_pending(self):
-        import time as _time
-        deadline = _time.monotonic() + 2.0
-        while _time.monotonic() < deadline:
-            try:
-                req = self.request_queue.get(timeout=0.1)
-            except queue.Empty:
-                continue
-            if req is None:
-                continue
-            try:
-                n = int(req.states.shape[0])
-                resp = InferenceResponse(
-                    request_id=req.request_id,
-                    action_indices=np.full((n,), END_TURN_INDEX, dtype=np.int64),
-                    log_probs=np.zeros((n,), dtype=np.float32),
-                    values=np.zeros((n,), dtype=np.float32),
-                )
-                self.response_queues[req.worker_id].put(resp)
-            except Exception:
-                pass
+        self._thread.start()
 
     def stop(self):
-        """Signal shutdown, wait for internal stages to drain, and release the
-        cross-process queues so interpreter exit can't hang on their feeder
-        threads. See RCA 2026-04-17: mp.Queue feeder threads will block the
-        atexit phase if left open when workers are terminate()'d, because
+        """Signal shutdown, join the server thread, and release queues.
+
+        See RCA 2026-04-17: ``mp.Queue`` feeder threads will block the
+        atexit phase if left open while workers are terminated, because
         partial writes can remain buffered on the parent side.
         """
         self._shutdown.set()
-        for t in self._threads:
-            t.join(timeout=10.0)
-        self._threads = []
-        # Release any control-plane callers still waiting on an ack. The
-        # GPU thread handles this in its finally-block, but if start()
-        # was never called or the thread crashed before reaching it we
-        # still need to unblock register/unregister callers.
+        if self._thread is not None:
+            self._thread.join(timeout=10.0)
+            self._thread = None
+        # Release any control-plane callers still waiting on an ack.
         self._abort_pending_controls()
         self._log_stats()
-        # Explicitly close the request/response queues and drop their feeder
-        # threads' join-at-exit behavior. Nobody reads from these after stop(),
-        # so any pending bytes are discardable.
         for q in [self.request_queue, *self.response_queues]:
             try:
                 q.close()
@@ -410,50 +284,34 @@ class InferenceServer:
             except Exception:
                 pass
 
-    def _log_stats(self):
-        s = self._stats
-        if s["batches"] == 0:
-            return
-        compute = s["compute_s"]
-        wait_in = s["q_in_wait_s"]
-        wait_out = s["q_out_wait_s"]
-        wall = s["wall_s"]
-        # GPU-thread utilization: fraction of the loop spent actually computing
-        # vs blocked on either inter-stage queue. Compute is measured via CUDA
-        # events so it reflects kernel time, not CPU dispatch time.
-        denom = max(1e-9, compute + wait_in + wait_out)
-        util = compute / denom
-        avg_bs = s["total_batch_size"] / s["batches"]
-        _log.info(
-            "[InferenceServer] batches=%d avg_bs=%.1f max_bs=%d "
-            "compute=%.2fs q_in_wait=%.2fs q_out_wait=%.2fs wall=%.2fs "
-            "gpu_thread_util=%.1f%%",
-            s["batches"], avg_bs, s["max_batch_size"],
-            compute, wait_in, wait_out, wall, util * 100.0,
-        )
-
     @property
     def requests_served(self) -> int:
         return self._requests_served
 
     # ------------------------------------------------------------------
-    # Control plane — synchronous register / unregister.
+    # Control plane — synchronous register / unregister
     # ------------------------------------------------------------------
     def register_model(self, model_id: str, model: PPOActorCritic) -> None:
-        """Add a model to the server. Blocks until the GPU thread has
-        moved it to device and made it queryable. Raises if ``model_id``
-        is already registered or if the server is not running.
+        """Add a model to the server. Blocks until the server thread has
+        moved it to device and made it queryable.
         """
         with self._known_lock:
             if model_id in self._known_model_ids:
                 raise ValueError(f"model_id already registered: {model_id!r}")
             self._known_model_ids.add(model_id)
-        self._submit_control("register", model_id, model)
+        try:
+            self._submit_control("register", model_id, model)
+        except Exception:
+            # GPU-thread side failed (e.g. OOM during model.to(device), or
+            # server shutdown mid-registration). Roll back the bookkeeping
+            # so a retry with the same model_id is not falsely rejected.
+            with self._known_lock:
+                self._known_model_ids.discard(model_id)
+            raise
 
     def unregister_model(self, model_id: str) -> None:
-        """Remove a model from the server. Blocks until the GPU thread
-        has dropped its reference. Raises if ``model_id`` is not currently
-        registered.
+        """Remove a model from the server. Blocks until the server thread
+        has dropped its reference.
         """
         with self._known_lock:
             if model_id not in self._known_model_ids:
@@ -462,12 +320,12 @@ class InferenceServer:
         self._submit_control("unregister", model_id, None)
 
     def _submit_control(self, op: str, model_id: str, model: PPOActorCritic | None) -> None:
-        if not self._threads:
+        if self._thread is None:
             raise RuntimeError("InferenceServer is not running; call start() first")
         msg = _ControlMsg(op=op, model_id=model_id, model=model,
                           ack=threading.Event(), error=[])
         self._control_q.put(msg)
-        # Wait with periodic wakeups so a crashed GPU thread doesn't hang us.
+        # Periodic wakeups so a crashed server thread doesn't hang us.
         while not msg.ack.wait(timeout=1.0):
             if self._shutdown.is_set():
                 raise RuntimeError(
@@ -476,187 +334,7 @@ class InferenceServer:
         if msg.error:
             raise msg.error[0]
 
-    # ------------------------------------------------------------------
-    # Stage 1: ingress — unpickle, group, stage into pinned host buffers
-    # ------------------------------------------------------------------
-    def _ingress_loop(self):
-        try:
-            while not self._shutdown.is_set():
-                try:
-                    first_req = self.request_queue.get(timeout=0.1)
-                except queue.Empty:
-                    continue
-                if first_req is None:
-                    break
-
-                # Opportunistic drain to coalesce across workers.
-                requests = [first_req]
-                while True:
-                    try:
-                        req = self.request_queue.get_nowait()
-                        if req is None:
-                            break
-                        requests.append(req)
-                    except queue.Empty:
-                        break
-
-                # Lazy-init shape metadata from the first observed request.
-                if self._state_size is None:
-                    self._state_size = int(requests[0].states.shape[1])
-                    self._action_dim = int(requests[0].masks.shape[1])
-                    self._populate_pool()
-
-                # Group requests by model_id; each group becomes one batch.
-                by_model: dict[str, list[InferenceRequest]] = {}
-                for req in requests:
-                    by_model.setdefault(req.model_id, []).append(req)
-
-                for model_id, model_reqs in by_model.items():
-                    batch = self._stage_group(model_id, model_reqs)
-                    if batch is None:
-                        return
-                    while not self._shutdown.is_set():
-                        try:
-                            self._q_in.put(batch, timeout=_STAGE_TIMEOUT)
-                            break
-                        except queue.Full:
-                            continue
-                    if self._shutdown.is_set():
-                        # Return the staged slot to the pool so other stages
-                        # don't wait on a slot that will never be consumed.
-                        self._free_slots.put(batch.slot)
-                        return
-        finally:
-            # Wake the GPU thread even on abnormal exit.
-            try:
-                self._q_in.put(None, timeout=_STAGE_TIMEOUT)
-            except queue.Full:
-                pass
-
-    def _populate_pool(self):
-        for i in range(_POOL_SIZE):
-            slot = _BufferSlot(i, self._state_size, self._action_dim, self.device)
-            self._free_slots.put(slot)
-
-    def _stage_group(
-        self, model_id: str, model_reqs: list[InferenceRequest]
-    ) -> _PendingBatch | None:
-        """Copy numpy states/masks from each request into a pooled pinned buffer."""
-        total = sum(int(r.states.shape[0]) for r in model_reqs)
-
-        slot: _BufferSlot | None = None
-        while slot is None and not self._shutdown.is_set():
-            try:
-                slot = self._free_slots.get(timeout=_STAGE_TIMEOUT)
-            except queue.Empty:
-                continue
-        if slot is None:
-            return None
-
-        slot.ensure_capacity(total)
-
-        offset = 0
-        slices: list[tuple[int, int, int, int, bool]] = []
-        for req in model_reqs:
-            n = int(req.states.shape[0])
-            # Copy directly into the pinned torch tensor — using the torch
-            # tensor (not a numpy view) preserves the pinned-memory fast path
-            # for the subsequent non_blocking H2D.
-            slot.host_states[offset:offset + n].copy_(torch.from_numpy(req.states))
-            slot.host_masks[offset:offset + n].copy_(
-                torch.from_numpy(req.masks.astype(np.float32, copy=False))
-            )
-            slices.append((req.worker_id, req.request_id, offset, offset + n, req.return_logits))
-            offset += n
-
-        return _PendingBatch(slot=slot, batch_size=total, model_id=model_id, slices=slices)
-
-    # ------------------------------------------------------------------
-    # Stage 2: GPU — async H2D, forward+sample, async D2H on three streams
-    # ------------------------------------------------------------------
-    def _gpu_loop(self):
-        # Load all initial models onto the target device. The GPU thread is
-        # the only thread that ever calls .to(device) / .eval() / drops
-        # refs, so CUDA operations stay single-threaded even as models are
-        # added or removed via the control plane.
-        models: dict[str, PPOActorCritic] = {}
-        for mid, m in self._initial_models.items():
-            m.to(self.device)
-            m.eval()
-            models[mid] = m
-        self._initial_models = {}
-
-        use_cuda = self.device.type == "cuda"
-        copy_in_stream = torch.cuda.Stream(device=self.device) if use_cuda else None
-        compute_stream = torch.cuda.Stream(device=self.device) if use_cuda else None
-        copy_out_stream = torch.cuda.Stream(device=self.device) if use_cuda else None
-
-        import time as _time
-        loop_start = _time.perf_counter()
-        try:
-            while not self._shutdown.is_set():
-                # Drain pending control messages between batches. This is
-                # the only place register/unregister take effect, which
-                # keeps model lifetimes serialized by the compute stream.
-                self._drain_control(models)
-
-                t0 = _time.perf_counter()
-                try:
-                    pending = self._q_in.get(timeout=_STAGE_TIMEOUT)
-                except queue.Empty:
-                    # Exclude idle-polling timeouts from starvation accounting
-                    # — _STAGE_TIMEOUT waits when truly nothing is happening
-                    # would otherwise dominate and mask real starvation signal.
-                    continue
-                self._stats["q_in_wait_s"] += _time.perf_counter() - t0
-                if pending is None:
-                    break
-
-                model = models.get(pending.model_id)
-                if model is None:
-                    # Fail fast with per-request error responses. Returning the
-                    # slot to the pool keeps the pipeline healthy.
-                    self._send_error_batch(
-                        pending,
-                        f"unknown model_id: {pending.model_id!r}",
-                    )
-                    self._free_slots.put(pending.slot)
-                    continue
-
-                completed = self._run_batch(
-                    pending, model, copy_in_stream, compute_stream, copy_out_stream
-                )
-
-                t1 = _time.perf_counter()
-                put_ok = False
-                while not self._shutdown.is_set():
-                    try:
-                        self._q_out.put(completed, timeout=_STAGE_TIMEOUT)
-                        put_ok = True
-                        break
-                    except queue.Full:
-                        continue
-                self._stats["q_out_wait_s"] += _time.perf_counter() - t1
-                if not put_ok and self._shutdown.is_set():
-                    # Synchronously drain and return the slot.
-                    if completed.done_event is not None:
-                        completed.done_event.synchronize()
-                    self._free_slots.put(completed.slot)
-                    return
-        finally:
-            # Release any pending control messages so callers aren't
-            # stuck waiting on their ack events during a crash/shutdown.
-            self._abort_pending_controls()
-            self._stats["wall_s"] = _time.perf_counter() - loop_start
-            try:
-                self._q_out.put(None, timeout=_STAGE_TIMEOUT)
-            except queue.Full:
-                pass
-
     def _drain_control(self, models: dict[str, PPOActorCritic]) -> None:
-        """Apply any pending register/unregister messages. Runs on the GPU
-        thread so all CUDA ops stay single-threaded.
-        """
         while True:
             try:
                 msg = self._control_q.get_nowait()
@@ -670,7 +348,6 @@ class InferenceServer:
                     msg.model.eval()
                     models[msg.model_id] = msg.model
                 elif msg.op == "unregister":
-                    # Drop reference; CUDA allocator reclaims memory on GC.
                     models.pop(msg.model_id, None)
                 else:
                     raise ValueError(f"unknown control op: {msg.op!r}")
@@ -690,190 +367,247 @@ class InferenceServer:
             )
             msg.ack.set()
 
-    def _send_error_batch(self, pending: "_PendingBatch", err: str) -> None:
-        """Emit zero-filled error responses to every worker in the batch."""
-        # Group slices by worker_id so each worker gets one response per
-        # original request_id. Order inside the original request list is
-        # preserved via the slice structure.
-        n_action = self._action_dim or 1
-        for worker_id, request_id, start, end, return_logits in pending.slices:
-            size = end - start
+    # ------------------------------------------------------------------
+    # Server thread
+    # ------------------------------------------------------------------
+    def _run(self):
+        try:
+            # Move all initial models to device on the server thread so
+            # CUDA initialization happens here, not in the calling thread.
+            models: dict[str, PPOActorCritic] = {}
+            for mid, m in self._initial_models.items():
+                m.to(self.device)
+                m.eval()
+                models[mid] = m
+            self._initial_models = {}
+
+            buffers: _Buffers | None = None
+            use_cuda = self.device.type == "cuda"
+            # Reusable timing events; recreated only if the device changes
+            # (it doesn't, in practice).
+            compute_start = torch.cuda.Event(enable_timing=True) if use_cuda else None
+            compute_end = torch.cuda.Event(enable_timing=True) if use_cuda else None
+
+            loop_start = time.perf_counter()
+            while not self._shutdown.is_set():
+                self._drain_control(models)
+
+                # Block on the first request so an idle server doesn't busy-loop.
+                try:
+                    first_req = self.request_queue.get(timeout=_LOOP_TIMEOUT)
+                except queue.Empty:
+                    continue
+                if first_req is None:
+                    break
+
+                # Opportunistically drain to coalesce across workers.
+                requests = [first_req]
+                while True:
+                    try:
+                        req = self.request_queue.get_nowait()
+                        if req is None:
+                            continue
+                        requests.append(req)
+                    except queue.Empty:
+                        break
+
+                # Lazy-init buffer shapes from the first observed request.
+                if buffers is None:
+                    self._state_size = int(requests[0].states.shape[1])
+                    self._action_dim = int(requests[0].masks.shape[1])
+                    buffers = _Buffers(self._state_size, self._action_dim, self.device)
+
+                # Group requests by model_id; each group becomes one batched
+                # forward pass.
+                by_model: dict[str, list[InferenceRequest]] = {}
+                for req in requests:
+                    by_model.setdefault(req.model_id, []).append(req)
+
+                for model_id, model_reqs in by_model.items():
+                    model = models.get(model_id)
+                    if model is None:
+                        self._send_error_batch(
+                            model_reqs, f"unknown model_id: {model_id!r}",
+                        )
+                        continue
+                    self._serve_group(
+                        model, model_reqs, buffers,
+                        compute_start, compute_end,
+                    )
+
+            self._stats["wall_s"] = time.perf_counter() - loop_start
+        except BaseException as e:
+            import traceback
+            self._fatal_error = e
+            print(
+                f"[InferenceServer] server thread crashed: {type(e).__name__}: {e}\n"
+                f"{traceback.format_exc()}",
+                flush=True,
+            )
+            self._shutdown.set()
+            # Unblock any workers currently waiting on response_queue.get().
+            self._drain_and_fail_pending()
+        finally:
+            self._abort_pending_controls()
+
+    def _serve_group(
+        self,
+        model: PPOActorCritic,
+        model_reqs: list[InferenceRequest],
+        buffers: _Buffers,
+        compute_start,
+        compute_end,
+    ) -> None:
+        """Stage one model's requests into ``buffers``, run forward+sample,
+        and dispatch a response per request.
+        """
+        total = sum(int(r.states.shape[0]) for r in model_reqs)
+        buffers.ensure_capacity(total)
+
+        any_logits = any(r.return_logits for r in model_reqs)
+        if any_logits:
+            buffers.ensure_logits_buffer()
+
+        # Stage host buffers and remember per-request slice offsets.
+        offset = 0
+        slices: list[tuple[int, int, int, int, bool]] = []  # (worker_id, request_id, start, end, return_logits)
+        for req in model_reqs:
+            n = int(req.states.shape[0])
+            buffers.host_states[offset:offset + n].copy_(torch.from_numpy(req.states))
+            buffers.host_masks[offset:offset + n].copy_(
+                torch.from_numpy(req.masks.astype(np.float32, copy=False))
+            )
+            slices.append((req.worker_id, req.request_id, offset, offset + n, req.return_logits))
+            offset += n
+
+        # Run on the default stream. Synchronous H2D + compute + D2H
+        # eliminates the cross-stream-sync class of bugs that bit us on
+        # ROCm 7.2 with the previous 3-stream pipeline.
+        n = total
+        with torch.no_grad():
+            if self.device.type == "cuda":
+                buffers.dev_states[:n].copy_(buffers.host_states[:n])
+                buffers.dev_masks[:n].copy_(buffers.host_masks[:n])
+                compute_start.record()
+                actions, log_probs, values, masked_logits = _forward_and_sample(
+                    model, buffers.dev_states[:n], buffers.dev_masks[:n],
+                )
+                compute_end.record()
+                buffers.host_actions[:n].copy_(actions)
+                buffers.host_logprobs[:n].copy_(log_probs)
+                buffers.host_values[:n].copy_(values)
+                if any_logits:
+                    buffers.host_logits[:n].copy_(masked_logits)
+                # Single sync flushes H2D + compute + D2H. The default
+                # stream serializes all three, so this is the only sync we
+                # need before reading host buffers.
+                torch.cuda.synchronize(self.device)
+                self._stats["compute_s"] += compute_start.elapsed_time(compute_end) / 1000.0
+            else:
+                t0 = time.perf_counter()
+                actions, log_probs, values, masked_logits = _forward_and_sample(
+                    model, buffers.host_states[:n], buffers.host_masks[:n],
+                )
+                buffers.host_actions[:n].copy_(actions)
+                buffers.host_logprobs[:n].copy_(log_probs)
+                buffers.host_values[:n].copy_(values)
+                if any_logits:
+                    buffers.host_logits[:n].copy_(masked_logits)
+                self._stats["compute_s"] += time.perf_counter() - t0
+
+        self._stats["batches"] += 1
+        self._stats["total_batch_size"] += n
+        if n > self._stats["max_batch_size"]:
+            self._stats["max_batch_size"] = n
+
+        # numpy() on a pinned host tensor shares memory; copy defensively
+        # so the buffer is safe to reuse before the worker unpickles.
+        actions_np = buffers.host_actions[:n].numpy().copy()
+        logprobs_np = buffers.host_logprobs[:n].numpy().copy()
+        values_np = buffers.host_values[:n].numpy().copy()
+        logits_np = buffers.host_logits[:n].numpy().copy() if any_logits else None
+
+        for worker_id, request_id, start, end, return_logits in slices:
             resp = InferenceResponse(
                 request_id=request_id,
-                action_indices=np.full((size,), END_TURN_INDEX, dtype=np.int64),
-                log_probs=np.zeros((size,), dtype=np.float32),
-                values=np.zeros((size,), dtype=np.float32),
-                error=err,
-                logits=(
-                    np.zeros((size, n_action), dtype=np.float32)
-                    if return_logits else None
-                ),
+                action_indices=actions_np[start:end],
+                log_probs=logprobs_np[start:end],
+                values=values_np[start:end],
+                logits=(logits_np[start:end].copy() if return_logits else None),
             )
             self.response_queues[worker_id].put(resp)
             self._requests_served += 1
-        _ = n_action  # silence linter; action_dim only needed for shape inference
 
-    def _run_batch(
-        self,
-        pending: _PendingBatch,
-        model: PPOActorCritic,
-        copy_in_stream,
-        compute_stream,
-        copy_out_stream,
-    ) -> _CompletedBatch:
-        slot = pending.slot
-        n = pending.batch_size
-        # If any slice in this batch needs logits, we copy the full
-        # [n, action_dim] masked-logits tensor to a pinned host buffer and let
-        # egress slice it per-request. Allocating once per slot the first time
-        # logits are requested keeps the regular path's memory footprint flat.
-        any_logits = any(s[4] for s in pending.slices)
-        if any_logits:
-            slot.ensure_logits_buffer()
-
-        if copy_in_stream is None:
-            # CPU path — no streams, no pinned transfers, just run inline.
-            with torch.no_grad():
-                states_t = slot.host_states[:n]
-                masks_t = slot.host_masks[:n]
-                actions, log_probs, values, masked_logits = _forward_and_sample(
-                    model, states_t, masks_t,
-                )
-                slot.host_actions[:n].copy_(actions)
-                slot.host_logprobs[:n].copy_(log_probs)
-                slot.host_values[:n].copy_(values)
-                if any_logits:
-                    slot.host_logits[:n].copy_(masked_logits)
-            return _CompletedBatch(
-                slot=slot, batch_size=n, slices=pending.slices, done_event=None,
+    def _send_error_batch(self, model_reqs: list[InferenceRequest], err: str) -> None:
+        """Emit zero-filled error responses for every request in the group."""
+        n_action = self._action_dim or 1
+        for req in model_reqs:
+            n = int(req.states.shape[0])
+            resp = InferenceResponse(
+                request_id=req.request_id,
+                action_indices=np.full((n,), END_TURN_INDEX, dtype=np.int64),
+                log_probs=np.zeros((n,), dtype=np.float32),
+                values=np.zeros((n,), dtype=np.float32),
+                error=err,
+                logits=(
+                    np.zeros((n, n_action), dtype=np.float32)
+                    if req.return_logits else None
+                ),
             )
+            self.response_queues[req.worker_id].put(resp)
+            self._requests_served += 1
 
-        # GPU path — three streams, event-chained, using record_stream to keep
-        # producer tensors alive until copy_out_stream has finished reading.
-        with torch.no_grad():
-            with torch.cuda.stream(copy_in_stream):
-                slot.dev_states[:n].copy_(slot.host_states[:n], non_blocking=True)
-                slot.dev_masks[:n].copy_(slot.host_masks[:n], non_blocking=True)
-
-            compute_stream.wait_stream(copy_in_stream)
-            # Bracket forward+sample with timing events on compute_stream so we
-            # can attribute kernel time (not CPU dispatch time) per batch.
-            compute_start = torch.cuda.Event(enable_timing=True)
-            compute_end = torch.cuda.Event(enable_timing=True)
-            compute_start.record(compute_stream)
-            with torch.cuda.stream(compute_stream):
-                dev_states = slot.dev_states[:n]
-                dev_masks = slot.dev_masks[:n]
-                logits, values = model(dev_states)
-
-                logits = logits.masked_fill(dev_masks == 0, float('-inf'))
-
-                # Safety: rows with zero valid actions would produce all-(-inf)
-                # logits and break Categorical. Force END_TURN to 0 for those
-                # rows using a data-parallel mask so no CPU↔GPU sync is needed
-                # (nonzero()/len() would serialize the pipeline).
-                no_valid = (dev_masks > 0).sum(dim=-1) == 0  # [N]
-                end_col = logits[:, END_TURN_INDEX]
-                logits[:, END_TURN_INDEX] = torch.where(
-                    no_valid, torch.zeros_like(end_col), end_col
-                )
-
-                dist = torch.distributions.Categorical(
-                    logits=logits, validate_args=False
-                )
-                actions = dist.sample()
-                log_probs = dist.log_prob(actions)
-                values = values.reshape(-1)
-            compute_end.record(compute_stream)
-
-            # Tell the allocator these tensors are also read on copy_out_stream,
-            # so their storage is not reclaimed until that stream catches up.
-            actions.record_stream(copy_out_stream)
-            log_probs.record_stream(copy_out_stream)
-            values.record_stream(copy_out_stream)
-            if any_logits:
-                logits.record_stream(copy_out_stream)
-
-            copy_out_stream.wait_stream(compute_stream)
-            with torch.cuda.stream(copy_out_stream):
-                slot.host_actions[:n].copy_(actions, non_blocking=True)
-                slot.host_logprobs[:n].copy_(log_probs, non_blocking=True)
-                slot.host_values[:n].copy_(values, non_blocking=True)
-                if any_logits:
-                    slot.host_logits[:n].copy_(logits, non_blocking=True)
-                done_event = torch.cuda.Event()
-                done_event.record(copy_out_stream)
-
-        return _CompletedBatch(
-            slot=slot, batch_size=n, slices=pending.slices, done_event=done_event,
-            compute_start=compute_start, compute_end=compute_end,
-        )
-
-    # ------------------------------------------------------------------
-    # Stage 3: egress — wait on D2H event, slice pinned output, dispatch
-    # ------------------------------------------------------------------
-    def _egress_loop(self):
-        while not self._shutdown.is_set():
+    def _drain_and_fail_pending(self):
+        """After a crash, send error responses for any queued requests so
+        workers blocked on ``response_queue.get()`` don't hang until their
+        own deadlines fire (which can be many minutes).
+        """
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
             try:
-                completed = self._q_out.get(timeout=_STAGE_TIMEOUT)
+                req = self.request_queue.get(timeout=0.1)
             except queue.Empty:
                 continue
-            if completed is None:
-                break
-
-            if completed.done_event is not None:
-                completed.done_event.synchronize()
-
-            # After sync, compute_start/compute_end are guaranteed complete
-            # (compute runs strictly before copy_out). Safe to read elapsed.
-            if completed.compute_start is not None and completed.compute_end is not None:
-                compute_ms = completed.compute_start.elapsed_time(completed.compute_end)
-                self._stats["compute_s"] += compute_ms / 1000.0
-            self._stats["batches"] += 1
-            self._stats["total_batch_size"] += completed.batch_size
-            if completed.batch_size > self._stats["max_batch_size"]:
-                self._stats["max_batch_size"] = completed.batch_size
-
-            slot = completed.slot
-            n = completed.batch_size
-
-            # numpy() on a pinned host tensor shares memory; copy defensively
-            # so the buffer slot is safe to recycle before the worker unpickles.
-            actions_np = slot.host_actions[:n].numpy().copy()
-            logprobs_np = slot.host_logprobs[:n].numpy().copy()
-            values_np = slot.host_values[:n].numpy().copy()
-            # Snapshot logits once if any slice in this batch needs them; per-
-            # slice views are sliced out of this copy below.
-            any_logits = any(s[4] for s in completed.slices)
-            logits_np = (
-                slot.host_logits[:n].numpy().copy() if any_logits else None
-            )
-
-            for worker_id, request_id, start, end, return_logits in completed.slices:
+            if req is None:
+                continue
+            try:
+                n = int(req.states.shape[0])
                 resp = InferenceResponse(
-                    request_id=request_id,
-                    action_indices=actions_np[start:end],
-                    log_probs=logprobs_np[start:end],
-                    values=values_np[start:end],
-                    logits=(
-                        logits_np[start:end].copy() if return_logits else None
-                    ),
+                    request_id=req.request_id,
+                    action_indices=np.full((n,), END_TURN_INDEX, dtype=np.int64),
+                    log_probs=np.zeros((n,), dtype=np.float32),
+                    values=np.zeros((n,), dtype=np.float32),
+                    error=f"InferenceServer crashed: {self._fatal_error!r}",
                 )
-                self.response_queues[worker_id].put(resp)
-                self._requests_served += 1
+                self.response_queues[req.worker_id].put(resp)
+            except Exception:
+                pass
 
-            self._free_slots.put(slot)
+    def _log_stats(self):
+        s = self._stats
+        if s["batches"] == 0:
+            return
+        avg_bs = s["total_batch_size"] / s["batches"]
+        _log.info(
+            "[InferenceServer] batches=%d avg_bs=%.1f max_bs=%d "
+            "compute=%.2fs wall=%.2fs",
+            s["batches"], avg_bs, s["max_batch_size"],
+            s["compute_s"], s["wall_s"],
+        )
 
 
 def _forward_and_sample(model: PPOActorCritic, states: torch.Tensor, masks: torch.Tensor):
-    """CPU fallback path: run forward + masked categorical sample inline.
+    """Run forward + masked categorical sample.
 
     Returns ``(actions, log_probs, values, masked_logits)``. ``masked_logits``
     is the post-mask, post-no-valid-row-fix logits tensor used for sampling;
-    callers that don't need it can ignore it (the cost is negligible on CPU).
+    callers that don't need it can ignore it.
     """
     logits, values = model(states)
     logits = logits.masked_fill(masks == 0, float('-inf'))
+    # Safety: rows with zero valid actions would produce all-(-inf) logits
+    # and break Categorical. Force END_TURN to 0 for those rows using a
+    # data-parallel mask so no CPU↔GPU sync is needed.
     no_valid = (masks > 0).sum(dim=-1) == 0
     end_col = logits[:, END_TURN_INDEX]
     logits[:, END_TURN_INDEX] = torch.where(no_valid, torch.zeros_like(end_col), end_col)

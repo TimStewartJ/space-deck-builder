@@ -1,0 +1,8 @@
+Model: models/ppo_agent_0422_1842_upd200_wins3192.pth
+Device: cuda
+Seed: 0
+Evaluating ù 15000 games ╫ 3 opponent types
+  vs random: 4992/5000 wins (100%), avg 89 steps/game
+  vs heuristic: 3331/5000 wins (67%), avg 105 steps/game
+  vs simple: 4743/5000 wins (95%), avg 95 steps/game
+  Overall: 13066/15000 wins (87%) in 25.6s

@@ -14,20 +14,7 @@ class TestPPOConfigLRFields:
 
     def test_default_is_cosine(self):
         cfg = PPOConfig()
-        assert cfg.lr_schedule == "cosine"
         assert cfg.lr_end == 1e-5
-
-    def test_constant_schedule_accepted(self):
-        cfg = PPOConfig(lr_schedule="constant")
-        assert cfg.lr_schedule == "constant"
-
-    def test_cosine_schedule_accepted(self):
-        cfg = PPOConfig(lr_schedule="cosine")
-        assert cfg.lr_schedule == "cosine"
-
-    def test_invalid_schedule_rejected(self):
-        with pytest.raises(ValueError, match="Unknown lr_schedule"):
-            PPOConfig(lr_schedule="exponential")
 
     def test_lr_end_greater_than_lr_rejected(self):
         with pytest.raises(ValueError, match="lr_end.*must be <= lr"):
@@ -38,34 +25,29 @@ class TestPPOConfigLRFields:
             PPOConfig(lr_end=-1e-5)
 
     def test_lr_end_equals_lr_accepted(self):
-        """When lr_end == lr, cosine schedule behaves as constant."""
-        cfg = PPOConfig(lr=3e-4, lr_end=3e-4, lr_schedule="cosine")
+        """When lr_end == lr, cosine schedule produces a constant LR."""
+        cfg = PPOConfig(lr=3e-4, lr_end=3e-4)
         assert cfg.lr_end == cfg.lr
 
     def test_serialization_roundtrip(self):
-        """New LR fields survive to_dict -> from_dict."""
-        cfg = PPOConfig(lr=1e-3, lr_end=1e-6, lr_schedule="cosine")
+        """LR fields survive to_dict -> from_dict."""
+        cfg = PPOConfig(lr=1e-3, lr_end=1e-6)
         d = cfg.to_dict()
         cfg2 = PPOConfig.from_dict(d)
         assert cfg2.lr == 1e-3
         assert cfg2.lr_end == 1e-6
-        assert cfg2.lr_schedule == "cosine"
 
-    def test_from_dict_missing_lr_fields_uses_defaults(self):
-        """Old checkpoints without lr_end/lr_schedule load with defaults."""
+    def test_from_dict_ignores_unknown_keys(self):
+        """Old checkpoints with retired fields (lr_schedule, adv_norm,
+        snapshot_eviction) load cleanly — unknown keys are dropped."""
         old_dict = {"lr": 3e-4, "gamma": 0.99, "lam": 0.95,
                     "clip_eps": 0.2, "epochs": 4, "batch_size": 8192,
                     "entropy_coef": 0.025, "grad_clip": 0.5,
-                    "critic_loss_coef": 0.5, "adv_norm": "global"}
+                    "critic_loss_coef": 0.5,
+                    "adv_norm": "global", "lr_schedule": "cosine"}
         cfg = PPOConfig.from_dict(old_dict)
-        assert cfg.lr_schedule == "cosine"
+        assert cfg.lr == 3e-4
         assert cfg.lr_end == 1e-5
-
-    def test_from_dict_ignores_unknown_keys(self):
-        d = PPOConfig().to_dict()
-        d["future_field"] = 42
-        cfg = PPOConfig.from_dict(d)
-        assert cfg.lr_schedule == "cosine"
 
 
 class TestRunConfigDefaultChange:
@@ -146,7 +128,8 @@ class TestCosineSchedulerBehavior:
         assert self._get_lr(opt) == pytest.approx(lr_end, rel=1e-5)
 
     def test_constant_schedule_keeps_lr_unchanged(self):
-        """When no scheduler is created (constant mode), LR stays fixed."""
+        """Sanity: with no scheduler stepping, LR stays fixed (the
+        baseline-against-which cosine annealing is measured)."""
         model = nn.Linear(4, 2)
         optimizer = optim.Adam(model.parameters(), lr=3e-4)
         # No scheduler — simulate 100 updates
