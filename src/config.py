@@ -119,6 +119,14 @@ class ModelConfig:
                 f"Unknown pool_type {self.pool_type!r}. "
                 f"Valid: {', '.join(sorted(self._VALID_POOL_TYPES))}"
             )
+        for name in ("trunk_hidden_sizes", "actor_head_sizes", "critic_head_sizes"):
+            sizes = getattr(self, name)
+            if not isinstance(sizes, list) or len(sizes) == 0:
+                raise ValueError(f"{name} must be a non-empty list of ints, got {sizes!r}")
+            if any((not isinstance(n, int)) or n <= 0 for n in sizes):
+                raise ValueError(f"{name} entries must be positive ints, got {sizes!r}")
+        if not isinstance(self.card_emb_dim, int) or self.card_emb_dim <= 0:
+            raise ValueError(f"card_emb_dim must be a positive int, got {self.card_emb_dim!r}")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

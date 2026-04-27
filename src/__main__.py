@@ -43,6 +43,18 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--pool-type",   type=str, default=_mdl.pool_type,
                    choices=["sum", "attention"],
                    help="Zone feature pooling: sum (presence-weighted) or attention (learned per-zone query)")
+    p.add_argument("--trunk-hidden-sizes", type=int, nargs="+", default=None,
+                   metavar="N",
+                   help=f"Shared trunk hidden layer sizes, e.g. '--trunk-hidden-sizes 512 512' "
+                        f"(default: {_mdl.trunk_hidden_sizes})")
+    p.add_argument("--actor-head-sizes", type=int, nargs="+", default=None,
+                   metavar="N",
+                   help=f"Actor head hidden layer sizes (default: {_mdl.actor_head_sizes})")
+    p.add_argument("--critic-head-sizes", type=int, nargs="+", default=None,
+                   metavar="N",
+                   help=f"Critic head hidden layer sizes (default: {_mdl.critic_head_sizes})")
+    p.add_argument("--card-emb-dim", type=int, default=_mdl.card_emb_dim,
+                   help=f"Per-card embedding dimension (default: {_mdl.card_emb_dim})")
     # Run topology (defaults sourced from RunConfig dataclass)
     p.add_argument("--episodes",    type=int,   default=_run.episodes)
     p.add_argument("--updates",     type=int,   default=_run.updates)
@@ -262,7 +274,18 @@ def _run_train(args):
         batch_size=args.batch_size, entropy_coef=args.entropy,
         lr_end=args.lr_end,
     )
-    model_cfg = ModelConfig(actor_type=args.actor_type, pool_type=args.pool_type)
+    model_cfg_kwargs = dict(
+        actor_type=args.actor_type,
+        pool_type=args.pool_type,
+        card_emb_dim=args.card_emb_dim,
+    )
+    if args.trunk_hidden_sizes is not None:
+        model_cfg_kwargs["trunk_hidden_sizes"] = list(args.trunk_hidden_sizes)
+    if args.actor_head_sizes is not None:
+        model_cfg_kwargs["actor_head_sizes"] = list(args.actor_head_sizes)
+    if args.critic_head_sizes is not None:
+        model_cfg_kwargs["critic_head_sizes"] = list(args.critic_head_sizes)
+    model_cfg = ModelConfig(**model_cfg_kwargs)
     run_cfg = RunConfig(
         episodes=args.episodes, updates=args.updates,
         eval_every=args.eval_every, eval_games=args.eval_games,
