@@ -25,7 +25,7 @@ The planned width probe required a new `--trunk-hidden-sizes` CLI flag. Adding o
 | Wall time | 12121 s (3h22m) | 6475 s | 6345 s |
 | Checkpoint | `ppo_agent_0423_0628_upd400_wins3195.pth` | `ppo_agent_0422_1102_upd200_wins3199.pth` | `ppo_agent_0421_1915_upd200_wins3193.pth` |
 
-All other hyperparameters identical.
+All other hyperparameters identical to the actual random-only v0.1/attention-ablation setup.
 
 ## Gauntlet (5000 games × 3 opponents, seed 0)
 
@@ -89,6 +89,8 @@ The training-time probe above ruled out *training-time-bound*. The remaining liv
 | Params | 0.79M | 0.79M | 0.26M | 0.26M |
 | Updates | **175** ⚠ | 200 | 200 | 200 |
 | Seed | 0 | 0 | 0 | 0 |
+| Training opponents | random | random | random | random |
+| Self-play | disabled | disabled | disabled | disabled |
 | Wall time | ~105 min (crashed at upd177) | 128 min | 6345 s | 6475 s |
 | Checkpoint | `ppo_agent_0423_1930_upd175_wins3196.pth` | `ppo_agent_0423_2139_upd200_wins3196.pth` | `ppo_agent_0421_1915_upd200_wins3193.pth` | `ppo_agent_0422_1102_upd200_wins3199.pth` |
 

@@ -43,7 +43,7 @@ python -m src train
 python -m src train --self-play
 ```
 
-Self-play trains against randomly selected past checkpoints. RandomAgent stays in the opponent pool to prevent catastrophic forgetting. Without `--self-play`, the agent trains only against RandomAgent.
+Self-play trains against randomly selected past checkpoints while keeping the fixed opponent pool available to prevent catastrophic forgetting. Without `--self-play`, the agent trains only against the fixed opponent pool configured in `RunConfig.opponents`.
 
 ### Mixed-Opponent Training
 ```bash

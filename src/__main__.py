@@ -61,9 +61,11 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--eval-every",  type=int,   default=_run.eval_every,
                    help="Evaluate every N updates (always on last)")
     p.add_argument("--eval-games",  type=int,   default=_run.eval_games)
-    p.add_argument("--self-play",   action="store_true")
+    p.add_argument("--self-play",   action="store_true", default=_run.self_play,
+                   help="Enable self-play snapshots in addition to the fixed opponent pool")
     p.add_argument("--opponents",   type=str, default=_run.opponents,
-                   help="Opponent mix: 'random,heuristic' or 'random:0.6,heuristic:0.4'")
+                   help=f"Fixed opponent mix (default: {_run.opponents}). "
+                        "Examples: 'random,heuristic' or 'random:0.6,heuristic:0.4'")
     p.add_argument("--self-play-ratio", type=float, default=_run.self_play_ratio,
                    help="Final self-play ratio (or constant when schedule=constant)")
     p.add_argument("--self-play-ratio-start", type=float, default=_run.self_play_ratio_start,

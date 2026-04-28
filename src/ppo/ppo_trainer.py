@@ -183,6 +183,11 @@ def train(
         self_play_ratio=run_cfg.self_play_ratio,
         pfsp_mode=run_cfg.pfsp_mode,
     )
+    if resume_ckpt is not None and not run_cfg.self_play and resume_ckpt.get("pool_manifest"):
+        logger.warning(
+            "Checkpoint includes a self-play snapshot pool, but self-play is disabled "
+            "for this run. Pass --self-play to resume the snapshot curriculum."
+        )
     if resume_ckpt is not None and run_cfg.self_play:
         manifest = resume_ckpt.get("pool_manifest")
         if manifest:

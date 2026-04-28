@@ -178,8 +178,8 @@ class RunConfig:
     num_concurrent: int | None = None
     eval_every: int = 5
     eval_games: int = 3200
-    self_play: bool = True
-    opponents: str = "random"
+    self_play: bool = False
+    opponents: str = "random,heuristic,simple"
     self_play_ratio: float = 0.5
     self_play_ratio_start: float = 0.0
     self_play_schedule: str = "linear"
