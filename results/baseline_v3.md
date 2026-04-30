@@ -5,9 +5,10 @@
 **Protocol:** [`docs/eval_protocol.md`](../docs/eval_protocol.md)
 
 This is the reference baseline that every later post and ablation
-compares against. It is intentionally the simplest possible thing:
-default config, three seeds, trained from scratch, gauntleted with the
-fixed inference server.
+compares against. It is intentionally the simplest possible thing for
+the v0.1 codepath: three seeds, trained from scratch against the CLI's
+then-default random-only opponent pool, gauntleted with the fixed
+inference server.
 
 ## Configuration
 
@@ -24,7 +25,7 @@ relevant knobs:
 | PPO | `clip_eps`, `entropy_coef` | 0.2, 0.025 |
 | PPO | `epochs`, `batch_size` | 4, 8192 |
 | Run | `updates`, `episodes` | 200, 16000 |
-| Run | `self_play`, `self_play_ratio` | true, 0.5 (linear ramp from 0.0) |
+| Run | `self_play`, `self_play_ratio` | false, 0.5 unused |
 | Run | `opponents` (training pool) | `random` |
 
 Each seed was launched with `python -m src train --seed N`, fully
@@ -80,8 +81,8 @@ For reference, three pre-`v0.1-baseline` upd200 checkpoints exist in
 the repo. All three were saved during runs that used `--resume` on
 top of an upd175 parent (which was itself trained in a separate run).
 Total compute is still 200 PPO updates, but the resumed runs inherited
-a mature self-play snapshot pool, optimizer state, and partially-
-trained weights from their parent.
+their parent run's curriculum state, optimizer state, and partially
+trained weights.
 
 | Checkpoint | Architecture | vs heuristic |
 |---|---|---|
@@ -93,9 +94,11 @@ trained weights from their parent.
 The gap between "200 updates from scratch" and "200 updates via
 resume from a mature parent" — same total compute, ~12pp difference —
 is large enough to flag as a real curriculum effect rather than noise.
-The most likely cause is snapshot-pool warm-start: a from-scratch run
-spends its early updates training against weak past selves before the
-pool matures, while a resumed run starts with already-strong opponents.
+The fresh v0.1 runs were random-only, so the gap is not evidence that
+their early self-play pool was weak; they had no self-play pool. The
+likely cause is that the older resumed runs inherited a different
+curriculum state: partially trained weights, optimizer state, and/or a
+snapshot/mixed-opponent setup from their parent runs.
 
 This is a research thread for a future post, not a defect in the
 baseline. The v0.1 baseline is deliberately the cleanest, most

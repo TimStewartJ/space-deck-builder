@@ -38,10 +38,10 @@ Symptoms:
     `wait_stream(...)` did **not** help — both forms of cross-stream
     sync are unreliable on this combination.
 
-The bug was masked during training because rollouts and self-play
-opponents both went through the broken path, so PPO was learning
-against and being scored against an equally-broken version of itself.
-Only when we ran the standalone `eval` CLI against a fixed
+The bug was masked during training because rollout collection used the
+same broken PPO inference path that the policy update was optimizing
+against. In self-play runs, PPO opponents would share that same path as
+well. Only when we ran the standalone `eval` CLI against a fixed
 non-PPO opponent did the floor drop out.
 
 ## Decision

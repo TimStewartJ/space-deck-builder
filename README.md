@@ -43,7 +43,7 @@ Run `python -m src <command> --help` for full option details.
 ### Training Examples
 
 ```bash
-# Basic training (all hyperparameters from src/config.py)
+# Basic training (fixed opponents from src/config.py)
 uv run --extra rocm python -m src train
 
 # Self-play training
@@ -55,14 +55,27 @@ uv run --extra rocm python -m src train --self-play --pfsp hard
 # Mixed opponents with custom weights
 uv run --extra rocm python -m src train --opponents random:0.6,heuristic:0.4
 
+# Controlled legacy-style random-only training
+uv run --extra rocm python -m src train --opponents random
+
+# Experimental token-feature model path (not the default baseline)
+uv run --extra rocm python -m src train --token-features
+
 # Resume from the latest checkpoint
 uv run --extra rocm python -m src train --load-latest-model
+
+# Resume a checkpoint's self-play snapshot curriculum
+uv run --extra rocm python -m src train --load-latest-model --self-play
 ```
 
 ### Key Training Options
 
 Defaults are defined in `src/config.py` — see the **Configuration System** section below.
 Run `python -m src train --help` for the full, authoritative flag list.
+
+`--token-features` is experimental and disabled by default. It enables static
+card metadata features in the model input path, but `mlp` / `sum` without token
+features remains the baseline architecture.
 
 ## Configuration System
 

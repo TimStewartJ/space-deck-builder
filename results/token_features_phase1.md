@@ -43,8 +43,11 @@ All deltas within ±2% → **TIED** per decision tree.
 
 ## Recommendation
 - **Keep `--token-features` behind a flag**, do NOT make it the default.
-- Branch worth keeping for potential follow-ups; the encoding pipeline is now fast enough to be a reasonable choice.
+- The code path is safe to merge as an experimental option because the default
+  architecture remains the non-token `mlp` / `sum` path and parity/performance
+  tests cover the fused token implementation.
 - If we want to know whether tokens scale better, the next experiment should be:
   - **Multi-seed (3 seeds)** at the same budget to confirm the tie holds.
   - **Higher-capacity / longer training** (e.g. 1000 updates, mixed opponents) where the extra params might actually be utilized.
-- Negative-result document; do not merge to master without one of the above experiments.
+- Treat this as a negative/neutral result: merged for availability and future
+  experiments, not because it improves the baseline.

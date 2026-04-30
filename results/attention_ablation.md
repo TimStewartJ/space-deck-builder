@@ -15,7 +15,7 @@ Two architectural toggles, four cells, three seeds each:
 | C | attention | sum | swap actor only |
 | D | attention | attention | swap both (full attention) |
 
-All other hyperparameters identical to v0.1: 200 updates × 16k episodes, cosine LR 3e-4 → 1e-5, self-play ratio 0.5 (cosine), opponents `random,heuristic,simple`, trunk `[256,256]`, actor/critic heads `[128]`, card embedding 32-d. Seeds 0/1/2.
+All other hyperparameters identical to the actual v0.1 runs: 200 updates × 16k episodes, cosine LR 3e-4 → 1e-5, training opponents `random`, self-play disabled, trunk `[256,256]`, actor/critic heads `[128]`, card embedding 32-d. Seeds 0/1/2. The gauntlet still evaluates every checkpoint against `random`, `heuristic`, and `simple`.
 
 **Compute:** 9 new training runs × ~108 min on AMD RX 9070 + ROCm 7.2 (single-stream InferenceServer). Cell A reused v0.1 checkpoints (3 runs, ~5h saved).
 
