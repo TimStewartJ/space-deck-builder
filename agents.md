@@ -110,27 +110,54 @@ python -m src train --load-latest-model
 
 ## Architecture & Performance
 
-### BatchRunner
-Training uses `BatchRunner`, which runs N games concurrently with batched GPU inference instead of per-step forward passes. This provides a **~14x speedup** over the original sequential architecture.
+### Rollout
+Training runs `num_workers` simulation processes against a single batched inference server that owns the GPU.
 
 **How it works:**
-1. `num_concurrent` games run simultaneously **per worker**. It defaults to
-   `episodes // num_workers` (800 at the shipped defaults), and with
-   `num_workers=20` that puts all 16,000 episodes of an update in flight at once
-2. Each loop iteration advances all games past opponent moves
-3. All pending PPO decisions are collected and batch-encoded
-4. Single GPU forward pass for the entire batch
-5. Actions distributed back to each game
+1. `num_concurrent` games run simultaneously **per worker** — it defaults to
+   `episodes // num_workers` (800 at the shipped defaults), so with
+   `num_workers=20` all 16,000 episodes of an update are in flight at once
+2. Each worker splits its slots into pipeline groups and keeps one request per
+   group in flight, so it encodes one group while the other is on the GPU
+3. Encoded states go straight into a shared-memory block; only coordinates
+   travel over the queues
+4. The server coalesces requests across workers into one forward pass per
+   model, then writes results back into shared memory in place
+5. Workers read results in place and apply the sampled actions
+
+Shipping arrays through `mp.Queue` instead cost a pickle, pipe write, unpickle
+and staging copy per decision — roughly 4.7 GB per update, all serialised
+through the single server thread.
+
+### Diagnosing a slow rollout
+`scripts/bench_rollout.py` reports decisions/sec plus a per-phase breakdown of
+the server (`idle drain stage h2d kernel sync dispatch`) and the workers
+(`advance encode wait apply`, with busy/blocked percentages). Start there
+rather than guessing:
+
+```bash
+python scripts/bench_rollout.py --updates 3
+```
+
+Read it this way:
+- **workers `blocked` high** → the server is the bottleneck; look at its phases
+- **server `idle` high** → workers are the bottleneck; look at `encode`
+- **`stage` or `drain` high** → transport regression
+- **`kernel` a small fraction of server wall** → the GPU is not the limit
 
 ### Key Files
 - `src/ppo/ppo_trainer.py` — Main training loop
-- `src/ppo/batch_runner.py` — BatchRunner (concurrent games + batched inference)
-- `src/ppo/mp_batch_runner.py` — Multi-process runner used when `num_workers > 1`
+- `src/ppo/batch_runner.py` — Single-process runner (`num_workers <= 1`)
+- `src/ppo/mp_batch_runner.py` — Multi-process runner, owns the worker fleet
+- `src/ppo/mp_sim_worker.py` — Worker game loop, pipelined submit/collect
+- `src/ppo/mp_inference_server.py` — Batched GPU inference server
+- `src/ppo/shared_io.py` — Shared-memory transport for the inference round trip
 - `src/ppo/opponent_pool.py` — Fixed opponents, self-play snapshots, PFSP weighting
 - `src/ppo/elo_tournament.py` — Cross-play Elo tournaments
 - `src/ppo/ppo_actor_critic.py` — Actor-Critic neural network
 - `src/ai/ppo_agent.py` — PPO agent (rollout buffers, GAE, PPO update)
 - `src/encoding/state_encoder.py` — Game state → tensor encoding
+- `src/encoding/state_utils.py` — Zone layout (`ZONE_NAMES`) and state unpacking
 - `src/encoding/action_encoder.py` — Action ↔ index mapping
 
 ## Benchmarking
