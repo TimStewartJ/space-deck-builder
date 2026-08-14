@@ -23,3 +23,12 @@ logs/OVERNIGHT_ABORT.flag
 # Worker cProfile output (SDB_PROFILE_WORKER)
 logs/worker_profile_*.prof
 logs/worker_profile_*.txt
+
+# Orchestrator run artifacts: sentinels, launchers and progress reports
+# written next to training logs. Machine-specific, not source.
+logs/*.DONE
+logs/*.FAILED
+logs/*.cmd
+logs/launcher_*.ps1
+logs/latest_*.txt
+logs/overnight_*.md
