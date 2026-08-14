@@ -30,6 +30,7 @@ NUM_CARDS = len(CARD_NAMES)
 
 def _make_player(
     hand_names=None, deck_names=None, discard_names=None, base_names=None,
+    played_names=None,
     trade=0, combat=0, health=50,
 ):
     """Build a mock Player with the specified card zones."""
@@ -41,29 +42,31 @@ def _make_player(
     p.deck = [_make_card(n, CARD_INDEX_MAP[n]) for n in (deck_names or [])]
     p.discard_pile = [_make_card(n, CARD_INDEX_MAP[n]) for n in (discard_names or [])]
     p.bases = [_make_card(n, CARD_INDEX_MAP[n]) for n in (base_names or [])]
+    p.played_cards = [_make_card(n, CARD_INDEX_MAP[n]) for n in (played_names or [])]
     return p
 
 
 class TestGetStateSize:
     def test_asymmetric_size(self):
-        """Opponent encoding is smaller (3 zones + 6 scalars vs 4 zones + 5 scalars)."""
+        """Opponent encoding is smaller (4 zones + 6 scalars vs 5 zones + 5 scalars)."""
         size = get_state_size(CARD_NAMES)
         n = NUM_CARDS
         expected = (
             4                   # flags
             + n                 # trade row
-            + (5 + n * 4)       # training player: 5 scalars + 4 zones
-            + (6 + n * 3)       # opponent: 6 scalars + 3 zones
+            + (5 + n * 5)       # training player: 5 scalars + 5 zones
+            + (6 + n * 4)       # opponent: 6 scalars + 4 zones
         )
         assert size == expected
 
-    def test_smaller_than_symmetric(self):
-        """New encoding should be smaller than the old symmetric one."""
+    def test_opponent_smaller_than_training_player(self):
+        """Hidden information means the opponent gets one fewer zone."""
         n = NUM_CARDS
-        old_symmetric = 4 + n + (5 + n * 4) * 2
-        new_size = get_state_size(CARD_NAMES)
-        assert new_size < old_symmetric
-        assert new_size == old_symmetric - n + 1  # lost 1 zone, gained 1 scalar
+        training_player = 5 + n * 5
+        opponent = 6 + n * 4
+        assert opponent < training_player
+        # one fewer zone, one extra scalar (hand_size)
+        assert opponent == training_player - n + 1
 
 
 class TestEncodeOpponentInto:
@@ -73,7 +76,7 @@ class TestEncodeOpponentInto:
             hand_names=["Scout"],
             deck_names=["Viper"],
         )
-        out = np.zeros(6 + NUM_CARDS * 3, dtype=np.float32)
+        out = np.zeros(6 + NUM_CARDS * 4, dtype=np.float32)
         encode_opponent_into(player, NUM_CARDS, CARD_INDEX_MAP, out, 0)
 
         unseen_start = 6
@@ -91,7 +94,7 @@ class TestEncodeOpponentInto:
         player_a = _make_player(hand_names=["Scout", "Viper"], deck_names=["Explorer"])
         player_b = _make_player(hand_names=["Explorer"], deck_names=["Scout", "Viper"])
 
-        size = 6 + NUM_CARDS * 3
+        size = 6 + NUM_CARDS * 4
         out_a = np.zeros(size, dtype=np.float32)
         out_b = np.zeros(size, dtype=np.float32)
 
@@ -110,7 +113,7 @@ class TestEncodeOpponentInto:
         player_a = _make_player(hand_names=["Scout", "Viper"], deck_names=["Explorer"])
         player_b = _make_player(hand_names=["Explorer"], deck_names=["Scout", "Viper"])
 
-        size = 6 + NUM_CARDS * 3
+        size = 6 + NUM_CARDS * 4
         out_a = np.zeros(size, dtype=np.float32)
         out_b = np.zeros(size, dtype=np.float32)
 
@@ -129,7 +132,7 @@ class TestEncodeOpponentInto:
             deck_names=["Explorer"],
             discard_names=["Blob Fighter"],
         )
-        out = np.zeros(6 + NUM_CARDS * 3, dtype=np.float32)
+        out = np.zeros(6 + NUM_CARDS * 4, dtype=np.float32)
         encode_opponent_into(player, NUM_CARDS, CARD_INDEX_MAP, out, 0)
 
         assert out[0] == pytest.approx(10 / 100.0)   # trade
@@ -174,11 +177,17 @@ class TestEncodeDecode:
         unpack_state(x, NUM_CARDS, get_action_space_size(CARD_NAMES))
 
     def test_unpack_rejects_wrong_size(self):
-        """unpack_state should fail on a vector with the old (larger) size."""
-        old_size = 4 + NUM_CARDS + (5 + NUM_CARDS * 4) * 2
-        x = torch.zeros(old_size)
+        """unpack_state should fail on a vector sized for a different layout."""
+        wrong_size = get_state_size(CARD_NAMES) - NUM_CARDS
+        x = torch.zeros(wrong_size)
         with pytest.raises(AssertionError, match="State layout mismatch"):
             unpack_state(x, NUM_CARDS, get_action_space_size(CARD_NAMES))
+
+    def test_both_players_have_played_zone(self):
+        """Cards played this turn must be observable for both players."""
+        keys = self._unpack_keys()
+        assert 'train_played' in keys
+        assert 'opp_played' in keys
 
     def _unpack_keys(self):
         state_size = get_state_size(CARD_NAMES)
@@ -191,6 +200,62 @@ class TestEncodeDecode:
         x = torch.zeros(state_size)
         pieces, _ = unpack_state(x, NUM_CARDS, get_action_space_size(CARD_NAMES))
         return pieces
+
+
+class TestPlayedCardsVisibility:
+    """Cards played this turn must be observable.
+
+    Ally abilities and the set of legal actions are derived from
+    ``played_cards + bases``. A ship played this turn leaves ``hand`` and
+    lives only in ``played_cards`` until end of turn, so omitting that zone
+    makes the policy blind to the state its own action mask depends on.
+    """
+
+    def test_training_player_played_zone_is_populated(self):
+        player = _make_player(hand_names=["Scout"], played_names=["Blob Fighter"])
+        out = np.zeros(5 + NUM_CARDS * 5, dtype=np.float32)
+        encode_player_into(player, NUM_CARDS, CARD_INDEX_MAP, out, 0)
+
+        played = out[5 + NUM_CARDS: 5 + NUM_CARDS * 2]
+        assert played[CARD_INDEX_MAP["Blob Fighter"]] > 0
+        assert played[CARD_INDEX_MAP["Scout"]] == 0
+
+    def test_opponent_played_zone_is_populated(self):
+        player = _make_player(hand_names=["Scout"], played_names=["Trade Pod"])
+        out = np.zeros(6 + NUM_CARDS * 4, dtype=np.float32)
+        encode_opponent_into(player, NUM_CARDS, CARD_INDEX_MAP, out, 0)
+
+        played = out[6 + NUM_CARDS: 6 + NUM_CARDS * 2]
+        assert played[CARD_INDEX_MAP["Trade Pod"]] > 0
+
+    def test_states_differing_only_by_played_cards_are_distinguishable(self):
+        """The regression this zone exists to prevent."""
+        size = 5 + NUM_CARDS * 5
+        empty = _make_player(hand_names=["Scout"])
+        with_played = _make_player(hand_names=["Scout"], played_names=["Blob Fighter"])
+
+        out_a = np.zeros(size, dtype=np.float32)
+        out_b = np.zeros(size, dtype=np.float32)
+        encode_player_into(empty, NUM_CARDS, CARD_INDEX_MAP, out_a, 0)
+        encode_player_into(with_played, NUM_CARDS, CARD_INDEX_MAP, out_b, 0)
+
+        assert not np.array_equal(out_a, out_b)
+
+    def test_played_base_appears_in_both_played_and_bases(self):
+        """A base played this turn is distinguishable from an established one."""
+        base = _make_card("Trade Pod", CARD_INDEX_MAP["Trade Pod"])
+        player = _make_player()
+        player.played_cards = [base]
+        player.bases = [base]
+
+        out = np.zeros(5 + NUM_CARDS * 5, dtype=np.float32)
+        encode_player_into(player, NUM_CARDS, CARD_INDEX_MAP, out, 0)
+
+        played = out[5 + NUM_CARDS: 5 + NUM_CARDS * 2]
+        bases = out[5 + NUM_CARDS * 4: 5 + NUM_CARDS * 5]
+        idx = CARD_INDEX_MAP["Trade Pod"]
+        assert played[idx] > 0
+        assert bases[idx] > 0
 
 
 class TestPPOActorCriticSmoke:

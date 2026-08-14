@@ -23,15 +23,22 @@ def get_state_size(cards: list[str]) -> int:
     Training player and opponent have asymmetric encodings because
     the opponent's hand and deck are hidden information — they are
     merged into a single 'unseen' zone.
+
+    Both players expose a ``played`` zone. Cards played this turn leave
+    ``hand`` and live in ``played_cards`` until end of turn, so without
+    this zone they would be unobservable exactly while they matter most:
+    ally abilities and available actions are derived from
+    ``played_cards + bases``. Played cards are face-up for both players,
+    so encoding the opponent's is not a hidden-information leak.
     """
     n = len(cards)
     training_player_size = (
         5 +     # Scalars: trade, combat, health, deck_size, discard_size
-        n * 4   # Zones: hand, discard, deck, bases
+        n * 5   # Zones: hand, played, discard, deck, bases
     )
     opponent_size = (
         6 +     # Scalars: trade, combat, health, deck_size, hand_size, discard_size
-        n * 3   # Zones: unseen (hand+deck), discard, bases
+        n * 4   # Zones: unseen (hand+deck), played, discard, bases
     )
     return (
         4 +     # Flags: is_training_player, is_first_player, can_buy, has_actions
@@ -74,8 +81,13 @@ def encode_player_into(player: 'Player', num_cards: int, card_index_map: dict[st
     out[offset + 4] = len(player.discard_pile) / 40.0
     offset += 5
 
-    # Hand, discard, deck, bases — each is num_cards wide
+    # Hand, played, discard, deck, bases — each is num_cards wide.
+    # ``played`` holds cards played this turn; a base played this turn appears
+    # in both ``played`` and ``bases``, which distinguishes it from a base
+    # established on an earlier turn.
     encode_card_presence(player.hand, num_cards, out=out, offset=offset)
+    offset += num_cards
+    encode_card_presence(player.played_cards, num_cards, out=out, offset=offset)
     offset += num_cards
     encode_card_presence(player.discard_pile, num_cards, out=out, offset=offset)
     offset += num_cards
@@ -93,6 +105,10 @@ def encode_opponent_into(player: 'Player', num_cards: int, card_index_map: dict[
     into a single 'unseen' zone since the active player cannot observe
     which cards the opponent drew vs. which remain in their deck.
     Hand size is encoded as an explicit scalar since it is observable.
+
+    The opponent's ``played`` zone is encoded separately because played
+    cards are face-up. It is non-empty whenever the training player is
+    resolving a pending decision during the opponent's turn.
     """
     # Opponent resources (6 scalars)
     out[offset] = player.trade / 100.0
@@ -107,6 +123,8 @@ def encode_opponent_into(player: 'Player', num_cards: int, card_index_map: dict[
     # region to avoid creating a concatenated list
     encode_card_presence(player.hand, num_cards, out=out, offset=offset)
     encode_card_presence(player.deck, num_cards, out=out, offset=offset)
+    offset += num_cards
+    encode_card_presence(player.played_cards, num_cards, out=out, offset=offset)
     offset += num_cards
     encode_card_presence(player.discard_pile, num_cards, out=out, offset=offset)
     offset += num_cards

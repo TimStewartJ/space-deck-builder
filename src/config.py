@@ -148,7 +148,14 @@ class ModelConfig:
 class PPOConfig:
     """PPO algorithm hyperparameters."""
     lr: float = 3e-4
-    gamma: float = 0.99
+    # Episodes are finite (turn-capped) and reward is a single terminal +/-1,
+    # so returns stay bounded in [-1, 1] at any gamma. Undiscounted credit
+    # assignment is the correct choice here: at gamma=0.99 a ~100-decision
+    # episode discounts the win signal to ~0.37 at episode start, which
+    # systematically biases the policy toward immediate tempo over the
+    # deck-building investments that decide games. GAE (lam) still does the
+    # variance reduction.
+    gamma: float = 1.0
     lam: float = 0.95
     clip_eps: float = 0.2
     epochs: int = 4

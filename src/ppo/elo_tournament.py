@@ -228,21 +228,47 @@ def _extract_label(path: str) -> str:
 def _validate_checkpoints(
     participants: list[CheckpointParticipant],
 ) -> None:
-    """Placeholder for cross-checkpoint compatibility validation.
+    """Reject participants whose state encoding differs from the current one.
 
     Participants may have different model architectures (e.g. sum vs attention
     pooling, mlp vs attention actor, different hidden sizes or card_emb_dims).
     Every ``ModelConfig`` field is purely internal to a single model's forward
-    pass — runtime compatibility across participants is determined by the
-    shared card set (which fixes state_dim, action_dim, and num_cards), not by
-    ModelConfig. Each participant's model is instantiated from its own
-    ``model_config`` in ``_make_opponent_factory``, so heterogeneous
-    architectures play correctly. Comparing them is the whole point of ELO.
+    pass, so heterogeneous architectures play correctly against each other —
+    comparing them is the whole point of Elo.
 
-    Kept as an extension point for future checks that are genuinely required
-    for play (e.g. divergent card sets / state encodings).
+    The **state encoding** is different: every participant is fed the same
+    encoded state vector produced by ``encode_state``, and each model is built
+    with a single shared ``state_dim``. A checkpoint trained against a
+    different zone layout would silently receive a vector it cannot interpret,
+    so it is rejected here with an actionable message instead of failing deep
+    in a worker's forward pass.
+
+    A checkpoint's zone count is recoverable from its ``zone_emb`` table, whose
+    first dimension is the number of zones the model was trained with.
     """
-    return
+    from src.ppo.ppo_actor_critic import NUM_ZONES
+
+    mismatched: list[tuple[str, int]] = []
+    for p in participants:
+        emb = p.state_dict.get("zone_emb.weight")
+        if emb is None:
+            continue  # pre-zone-embedding checkpoint; nothing to compare
+        zones = emb.shape[0]
+        if zones != NUM_ZONES:
+            mismatched.append((p.label, zones))
+
+    if mismatched:
+        detail = ", ".join(f"{label} (zones={z})" for label, z in mismatched)
+        raise ValueError(
+            f"Cannot run a tournament across different state encodings. "
+            f"The current encoder produces {NUM_ZONES} zones, but these "
+            f"checkpoints were trained with a different layout: {detail}. "
+            f"These checkpoints cannot be re-scored under the current code at "
+            f"all — `eval` loads weights strictly and will fail the same way. "
+            f"Use the gauntlet numbers already recorded alongside them in "
+            f"results/, which are encoding-independent, or re-train them under "
+            f"the current encoder to bring them into a live tournament."
+        )
 
 
 def _play_builtin_games(
