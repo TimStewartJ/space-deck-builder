@@ -263,9 +263,11 @@ def _validate_checkpoints(
             f"Cannot run a tournament across different state encodings. "
             f"The current encoder produces {NUM_ZONES} zones, but these "
             f"checkpoints were trained with a different layout: {detail}. "
-            f"Compare them via the fixed-opponent gauntlet (`python -m src "
-            f"eval`), which is encoding-independent, or re-train the older "
-            f"checkpoints under the current encoder."
+            f"These checkpoints cannot be re-scored under the current code at "
+            f"all — `eval` loads weights strictly and will fail the same way. "
+            f"Use the gauntlet numbers already recorded alongside them in "
+            f"results/, which are encoding-independent, or re-train them under "
+            f"the current encoder to bring them into a live tournament."
         )
 
 

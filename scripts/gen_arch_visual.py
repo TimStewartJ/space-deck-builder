@@ -5,9 +5,28 @@ Covers:
   2. Proposed attention-based actor head
   3. Architecture patterns in other game AIs
   4. How attention works in LLMs and how it maps to our use case
+
+Zone counts are derived from ``src.encoding.state_utils.ZONE_NAMES`` and
+substituted into the templates at render time, so the diagram cannot drift
+out of sync with the encoder the way it did when zones were hardcoded.
 """
 
 import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+
+from src.encoding.state_utils import ZONE_NAMES  # noqa: E402
+
+NUM_ZONES = len(ZONE_NAMES)
+TRAIN_ZONES = len([z for z in ZONE_NAMES if z.startswith("train_")])
+OPP_ZONES = len([z for z in ZONE_NAMES if z.startswith("opp_")])
+# Every zone is either the trade row, a training-player zone, or an
+# opponent zone. If that stops holding, the diagram's state-size formula
+# below is wrong and must be revisited rather than silently mislabeled.
+assert NUM_ZONES == 1 + TRAIN_ZONES + OPP_ZONES, (
+    f"Unexpected zone grouping in ZONE_NAMES: {ZONE_NAMES}"
+)
 
 CSS = """
 :root { --bg: #0d1117; --surface: #161b22; --border: #30363d; --text: #e6edf3;
@@ -85,7 +104,7 @@ TAB1 = """
   <div class="arrow-down">&darr; unpack_state()</div>
 
   <div class="layer">
-    <div class="box input" style="min-width:140px">8 Zone Vectors<br><small>[B, C] each</small></div>
+    <div class="box input" style="min-width:140px">__NUM_ZONES__ Zone Vectors<br><small>[B, C] each</small></div>
     <div class="box input">4 Flags<br><small>[B, 4]</small></div>
     <div class="box input">5 Train Res<br><small>[B, 5]</small></div>
     <div class="box input">6 Opp Res<br><small>[B, 6]</small></div>
@@ -95,16 +114,16 @@ TAB1 = """
   <div class="layer">
     <div class="box embed">card_emb<br><small>[C, E]</small></div>
     <div class="arrow">+</div>
-    <div class="box embed">zone_emb<br><small>[8, E]</small></div>
+    <div class="box embed">zone_emb<br><small>[__NUM_ZONES__, E]</small></div>
   </div>
   <div class="arrow-down">&darr; presence &times; (card + zone) &rarr; sum</div>
 
   <div class="layer">
-    <div class="box embed">8 Pooled Zones<br><small>[B, 8&middot;E]</small></div>
+    <div class="box embed">__NUM_ZONES__ Pooled Zones<br><small>[B, __NUM_ZONES__&middot;E]</small></div>
     <div class="arrow">&Vert;</div>
     <div class="box input">Numeric<br><small>[B, 15]</small></div>
   </div>
-  <div class="arrow-down">&darr; concat &rarr; [B, 8&middot;E + 15]</div>
+  <div class="arrow-down">&darr; concat &rarr; [B, __NUM_ZONES__&middot;E + 15]</div>
 
   <div class="layer">
     <div class="box trunk">Trunk: Linear(271&rarr;256) &rarr; ReLU<br>&rarr; Linear(256&rarr;256) &rarr; ReLU</div>
@@ -377,10 +396,10 @@ function updateDims() {
   const E = parseInt(document.getElementById('embDim').value);
   document.getElementById('numCardsVal').textContent = C;
 
-  const zones = 8;
+  const zones = __NUM_ZONES__;
   const numeric = 15;
   const combined = zones * E + numeric;
-  const stateSize = 4 + C + (5 + C*4) + (6 + C*3);
+  const stateSize = 4 + C + (5 + C*__TRAIN_ZONES__) + (6 + C*__OPP_ZONES__);
   const actionSize = 1 + 1 + 1 + C + C + 1 + C + C + 2*C + 3*C + C;
 
   const cardParams = C * E;
@@ -431,7 +450,13 @@ def build_html() -> str:
 {panels_html}
 <script>{JS}</script>
 </body>
-</html>"""
+</html>""".replace(
+        "__NUM_ZONES__", str(NUM_ZONES),
+    ).replace(
+        "__TRAIN_ZONES__", str(TRAIN_ZONES),
+    ).replace(
+        "__OPP_ZONES__", str(OPP_ZONES),
+    )
 
 
 if __name__ == "__main__":
