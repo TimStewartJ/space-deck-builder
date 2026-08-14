@@ -7,11 +7,14 @@ via multiprocessing Queues.
 """
 import random
 import time
+import logging
 import multiprocessing as mp
 from typing import Callable, Optional
 
 import torch
 import numpy as np
+
+_log = logging.getLogger("training")
 
 from src.config import DataConfig, PPOConfig, RunConfig
 from src.ai.agent import Agent
@@ -121,6 +124,23 @@ class MultiProcessBatchRunner:
         """
         actual_workers = len(items_per_worker)
 
+        # Shared-memory transport for the inference round trip. Sized to the
+        # widest batch any worker can submit in one iteration, which is one
+        # row per concurrent game slot.
+        shared_io = None
+        if actual_workers > 0:
+            from src.ppo.shared_io import SharedInferenceBuffers
+            from src.ppo.mp_sim_worker import _PIPELINE_GROUPS
+            max_rows = max(1, min(self.num_concurrent, max(items_per_worker)))
+            shared_io = SharedInferenceBuffers.create(
+                workers=actual_workers,
+                slots=_PIPELINE_GROUPS,
+                max_rows=max_rows,
+                state_size=self._state_size,
+                action_dim=self.action_dim,
+            )
+        self._shared_io = shared_io
+
         # Build multi-model registry: the training model under the label
         # "training" (the id the training worker tags its requests with),
         # plus one PPOActorCritic per snapshot. When a snapshot carries its
@@ -151,6 +171,7 @@ class MultiProcessBatchRunner:
             device=self.device,
             num_workers=actual_workers,
             ctx=self._mp_ctx,
+            shared_io=shared_io,
         )
         server.start()
 
@@ -169,6 +190,8 @@ class MultiProcessBatchRunner:
             "self_play_ratio": self.self_play_ratio,
             "pfsp_weights": self.pfsp_weights,
         }
+        if shared_io is not None:
+            snapshot_kwargs["shared_io_spec"] = shared_io.spec
         if extra_kwargs_fn:
             snapshot_kwargs.update(extra_kwargs_fn(snapshot_names))
 
@@ -244,6 +267,7 @@ class MultiProcessBatchRunner:
         finally:
             server.stop()
             self._reap_processes(processes, result_queue)
+            self._release_shared_io()
 
         # Merge results from all workers
         all_states = []
@@ -279,6 +303,8 @@ class MultiProcessBatchRunner:
         if not all_states:
             raise RuntimeError("No completed rollouts from any worker")
 
+        self._log_worker_timings(results)
+
         states = torch.cat(all_states).to(self.device)
         actions = torch.cat(all_actions).to(self.device)
         log_probs = torch.cat(all_log_probs).to(self.device)
@@ -289,6 +315,40 @@ class MultiProcessBatchRunner:
         masks = torch.cat(all_masks).to(self.device) if has_masks and all_masks else None
 
         return states, actions, log_probs, returns, advs, masks
+
+    def _log_worker_timings(self, results) -> None:
+        """Log where worker wall time went, averaged across workers.
+
+        ``wait`` is the number that matters: time a worker spent blocked on
+        the inference server doing no simulation. In a synchronous loop that
+        time is pure lost throughput, because the worker's CPU and the GPU
+        are idle in alternation rather than overlapping.
+        """
+        timings = [r.timings for r in results if getattr(r, "timings", None)]
+        if not timings:
+            return
+        n = len(timings)
+        keys = ("advance", "finish", "encode", "send", "wait", "apply")
+        avg = {k: sum(t.get(k, 0.0) for t in timings) / n for k in keys}
+        total = sum(t.get("total", 0.0) for t in timings) / n or 1e-9
+        busy = sum(avg[k] for k in keys if k != "wait")
+        _log.info(
+            "[Workers] avg/worker: advance=%.1fs finish=%.1fs encode=%.1fs "
+            "(ctx=%.1fs enc=%.1fs) send=%.1fs wait=%.1fs apply=%.1fs "
+            "| total=%.1fs busy=%.0f%% blocked=%.0f%%",
+            avg["advance"], avg["finish"], avg["encode"],
+            sum(t.get("ctx", 0.0) for t in timings) / n,
+            sum(t.get("enc", 0.0) for t in timings) / n,
+            avg["send"], avg["wait"], avg["apply"], total,
+            busy / total * 100, avg["wait"] / total * 100,
+        )
+        iters = sum(t.get("iters", 0.0) for t in timings) / n
+        if iters > 0:
+            pending = sum(t.get("pending_sum", 0.0) for t in timings) / n / iters
+            _log.info(
+                "[Workers] batch shape: submits=%.0f avg_rows=%.0f slots=%d",
+                iters, pending, self.num_concurrent,
+            )
 
     def run_eval(self, num_games: int) -> tuple[int, int, int]:
         """Run evaluation games across workers. Returns (wins, losses, total_steps).
@@ -348,6 +408,7 @@ class MultiProcessBatchRunner:
         finally:
             server.stop()
             self._reap_processes(processes, result_queue)
+            self._release_shared_io()
 
         if errors:
             actual_games = total_wins + total_losses
@@ -355,6 +416,18 @@ class MultiProcessBatchRunner:
                   f"Errors: {'; '.join(errors)}")
 
         return total_wins, total_losses, total_steps
+
+    def _release_shared_io(self) -> None:
+        """Unlink the shared block for this run.
+
+        Every rollout and eval builds a fresh worker fleet and a fresh block,
+        so failing to unlink here would leak a few tens of MB of shared memory
+        per training update.
+        """
+        shared_io = getattr(self, "_shared_io", None)
+        if shared_io is not None:
+            shared_io.close()
+            self._shared_io = None
 
     @staticmethod
     def _reap_processes(processes, result_queue):
@@ -425,3 +498,4 @@ class MultiProcessBatchRunner:
             deadline = time.monotonic() + timeout_per_result
 
         return results
+
