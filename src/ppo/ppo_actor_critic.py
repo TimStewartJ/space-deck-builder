@@ -4,19 +4,15 @@ import torch
 import torch.nn as nn
 
 from src.config import ModelConfig
-from src.encoding.state_utils import unpack_state, unpack_state_tokens
+from src.encoding.state_utils import ZONE_NAMES, unpack_state, unpack_state_tokens
 from src.encoding.action_encoder import get_action_space_layout
 from src.cards.factions import Faction
 from src.cards.card import CardType
 from src.cards.registry import CardRegistry
 
 
-# Zone names used by unpack_state, in a fixed order for embedding indexing.
-ZONE_NAMES = [
-    'trade_row',
-    'train_hand', 'train_disc', 'train_deck', 'train_bases',
-    'opp_unseen', 'opp_disc', 'opp_bases',
-]
+# Zone identity and ordering are owned by ``state_utils.ZONE_NAMES`` so the
+# model's zone embeddings cannot drift out of sync with the encoder layout.
 NUM_ZONES = len(ZONE_NAMES)
 
 # 4 flags + 5 training resources + 6 opponent resources

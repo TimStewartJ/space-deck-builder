@@ -1,12 +1,16 @@
 import torch
 
-# Zone names in fixed order — matches ZONE_NAMES in ppo_actor_critic.py.
-# Exposed here so encoder helpers can build [B, Z, C] presence stacks
-# without importing the model module.
+# Zone names in fixed order. This is the single source of truth for zone
+# identity and ordering — ``ppo_actor_critic`` imports it rather than
+# redeclaring it, so the model's zone embeddings can never drift out of
+# sync with the encoder layout.
+#
+# The order here must match the order ``encode_state`` writes zones in
+# ``state_encoder.py``.
 ZONE_NAMES = [
     'trade_row',
-    'train_hand', 'train_disc', 'train_deck', 'train_bases',
-    'opp_unseen', 'opp_disc', 'opp_bases',
+    'train_hand', 'train_played', 'train_disc', 'train_deck', 'train_bases',
+    'opp_unseen', 'opp_played', 'opp_disc', 'opp_bases',
 ]
 
 
@@ -14,9 +18,13 @@ def unpack_state(x: torch.Tensor, num_cards: int, action_dim: int):
     """
     Splits a state-vector into named pieces.
 
-    Training player has 4 card zones (hand, discard, deck, bases).
-    Opponent has 3 card zones (unseen=hand+deck, discard, bases) and
+    Training player has 5 card zones (hand, played, discard, deck, bases).
+    Opponent has 4 card zones (unseen=hand+deck, played, discard, bases) and
     6 resource scalars (includes hand_size) to respect hidden information.
+
+    ``played`` holds cards played this turn. It is encoded for both players
+    because ally abilities and legal actions derive from
+    ``played_cards + bases``, and played cards are face-up for both sides.
     """
     single = False
     if x.dim() == 1:
@@ -35,16 +43,18 @@ def unpack_state(x: torch.Tensor, num_cards: int, action_dim: int):
     # 2) trade row
     out['trade_row'] = x[:, idx:idx+num_cards]; idx += num_cards
 
-    # 3) training player: 5 resources + 4 zones
-    out['train_res']   = x[:, idx:idx+5]; idx += 5
-    out['train_hand']  = x[:, idx:idx+num_cards]; idx += num_cards
-    out['train_disc']  = x[:, idx:idx+num_cards]; idx += num_cards
-    out['train_deck']  = x[:, idx:idx+num_cards]; idx += num_cards
-    out['train_bases'] = x[:, idx:idx+num_cards]; idx += num_cards
+    # 3) training player: 5 resources + 5 zones
+    out['train_res']    = x[:, idx:idx+5]; idx += 5
+    out['train_hand']   = x[:, idx:idx+num_cards]; idx += num_cards
+    out['train_played'] = x[:, idx:idx+num_cards]; idx += num_cards
+    out['train_disc']   = x[:, idx:idx+num_cards]; idx += num_cards
+    out['train_deck']   = x[:, idx:idx+num_cards]; idx += num_cards
+    out['train_bases']  = x[:, idx:idx+num_cards]; idx += num_cards
 
-    # 4) opponent: 6 resources + 3 zones (hand+deck merged into unseen)
+    # 4) opponent: 6 resources + 4 zones (hand+deck merged into unseen)
     out['opp_res']    = x[:, idx:idx+6]; idx += 6
     out['opp_unseen'] = x[:, idx:idx+num_cards]; idx += num_cards
+    out['opp_played'] = x[:, idx:idx+num_cards]; idx += num_cards
     out['opp_disc']   = x[:, idx:idx+num_cards]; idx += num_cards
     out['opp_bases']  = x[:, idx:idx+num_cards]; idx += num_cards
 
