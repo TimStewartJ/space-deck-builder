@@ -20,7 +20,7 @@ pwsh -File scripts\<name>.ps1
 
 | Script | Purpose |
 |---|---|
-| `setup_gpu.py` | Install the right PyTorch wheel for your hardware (rocm / cuda / cpu / detect). Run after every `uv sync` because uv prunes torch when extras change. |
+| `setup_gpu.py` | Wrapper around `uv sync --extra <backend>` (rocm / cuda / cpu / detect) plus an install verification step. Because `torch` lives only in extras, a bare `uv sync` uninstalls it — always go through this script or pass `--extra` yourself. |
 
 ## Inspection
 
@@ -34,6 +34,7 @@ pwsh -File scripts\<name>.ps1
 | Script | Purpose |
 |---|---|
 | `compare_metrics.py` | Side-by-side diff of two or more `metrics_*.jsonl` files at key update milestones. Reports rollout win rate, entropy, losses, KL, clip fraction, grad norm, throughput. |
+| `analyze_plateau.py` | Concatenates every `logs/metrics_*.jsonl` into one timeline, splits it into runs by timestamp gap, and prints LR / entropy / KL / clip / losses / explained variance / grad norm / win rate at representative updates. Use it to see whether a run has actually stopped improving. |
 
 ## Benchmarks
 
@@ -41,6 +42,7 @@ pwsh -File scripts\<name>.ps1
 |---|---|
 | `benchmark.py` | End-to-end episode/throughput benchmark for the BatchRunner. Compares sequential vs batched modes. |
 | `device_benchmark.py` | Lower-level per-device timing for the inference path. |
+| `bench_token_path.py` | Training-shaped step benchmark (forward + backward + optimizer, real batch size) comparing `token_features=False` vs `True`. Written after a forward-only microbenchmark badly understated the tokenized path's real cost. |
 
 ## Profiling
 
@@ -59,8 +61,11 @@ resources are released before the next launch.
 | Script | Purpose |
 |---|---|
 | `overnight_sweep.ps1` | Cross-architecture sweep (sum_mlp / attn_attn / etc.) — used to build the original architecture comparison. |
+| `overnight_master.ps1` | Manifest-driven multi-phase orchestrator (baseline wait → checkpoint safeguard → tournament → chained resumes). Idempotent: completed phases are skipped on restart. |
 | `hp_sweep_attn.ps1` | Hyperparameter sweep for attention pool+actor (lr / epochs / clip-eps variants). |
+| `hp3_full_resume.ps1` | Two-phase fresh-then-`--resume` run, written to validate `--resume` under real conditions. |
 | `run_pool_comparison.ps1` | Quick A/B pool-type comparison (smaller scale than `overnight_sweep.ps1`). |
+| `chunked_resume.ps1` | Resumes training in fixed-size chunks, one fresh process per chunk. Works around a ROCm/HIP crash seen when a single long-lived training process accumulates ~25-30 updates of InferenceServer and worker spawn/teardown cycles. Reach for this if a long run dies mid-rollout inside `torch_hip.dll`. |
 
 Each orchestrator is **resumable**: it reads its own manifest JSON in
 `logs/` and skips entries already marked `completed` so you can rerun safely

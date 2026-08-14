@@ -1,7 +1,7 @@
 # 0001 — Drop the multi-stream InferenceServer pipeline
 
 **Status:** Accepted (2026-04-21)
-**Context branch:** `main` (pre-`v0.1-baseline`)
+**Context branch:** `master` (pre-`baseline/2026-04-22`)
 
 ## Context
 

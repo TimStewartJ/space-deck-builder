@@ -5,6 +5,10 @@ This is a simulator for a space-based deck building card game. The game has the 
 ## Project Details
 
 - This project uses the uv package manager.
+- `torch` is declared **only** in optional-dependency extras, so a bare
+  `uv sync` uninstalls it. Always use `uv sync --extra rocm` (or `cuda` / `cpu`).
+- Defaults for training, model, and runtime live in `src/config.py` — treat
+  that file as the single source of truth rather than duplicating values.
 - Card details are available in the data\cards.csv file with the following columns:
   - Set,Qty,Name,Text,Type,Faction,Cost,Defense,Role,Notes
 

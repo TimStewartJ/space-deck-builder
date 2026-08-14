@@ -1,10 +1,20 @@
 # Token Features Phase 1 — A vs A_tok
 
+> **Correction (2026-08-13).** The parameter counts below were wrong. Loading
+> the two preserved checkpoints gives **A = 266,895 params (0.267M)** and
+> **A_tok = 269,423 params (0.269M)** — a **+0.95%** difference, not 2.7x.
+> The token path adds exactly one `78 → 32` projection (2,528 params); it does
+> not enlarge the embedding table. The measured outcome (a tie) is unchanged,
+> but the conclusion should read "a ~1% parameter increase changed nothing,"
+> which is far less surprising than the original framing. Any claim that this
+> experiment tested a meaningful capacity increase is unsupported — that
+> question is still open.
+
 ## Setup
 - Branch: `feature/token-features-phase1` @ `8664e4f` (cube-free fast-path fix).
 - Two PPO runs, `--seed 0 --updates 200`, default config, opponents = random:
-  - **A baseline** — no token features. ckpt: `models/ppo_agent_0424_1351_upd200_wins3196.pth` (~0.10M params).
-  - **A_tok** — `--token-features`. ckpt: `models/ppo_agent_0424_1911_upd200_wins3197.pth` (~0.27M params).
+  - **A baseline** — no token features. ckpt: `models/ppo_agent_0424_1351_upd200_wins3196.pth` (0.267M params).
+  - **A_tok** — `--token-features`. ckpt: `models/ppo_agent_0424_1911_upd200_wins3197.pth` (0.269M params).
 - A_tok wall time: 7673s (2h08m) vs A baseline ~1h50m → **1.16x slowdown** (predicted ~1.28x from GPU bench).
 
 ## Backstory: cube-free fast-path fix
@@ -39,7 +49,7 @@ All deltas within ±2% → **TIED** per decision tree.
 - Per-opponent in Elo run: A_tok beats heuristic 70.1% vs A's 65.3% (+4.8pp). The 15k gauntlet showed only +0.84pp on heuristic, so the +4.8pp here is likely sample variance from the smaller (1k) Elo subgame.
 
 ## Verdict
-**Tied.** Token features neither help nor hurt at this capacity/training budget. The 2.7x parameter increase (0.10M → 0.27M) does not produce a measurable win rate edge after 200 updates against a random-only opponent pool.
+**Tied.** Token features neither help nor hurt at this capacity/training budget. Adding static card metadata to the token path (a ~1% parameter increase — see the correction at the top) does not produce a measurable win rate edge after 200 updates against a random-only opponent pool.
 
 ## Recommendation
 - **Keep `--token-features` behind a flag**, do NOT make it the default.
@@ -48,6 +58,6 @@ All deltas within ±2% → **TIED** per decision tree.
   tests cover the fused token implementation.
 - If we want to know whether tokens scale better, the next experiment should be:
   - **Multi-seed (3 seeds)** at the same budget to confirm the tie holds.
-  - **Higher-capacity / longer training** (e.g. 1000 updates, mixed opponents) where the extra params might actually be utilized.
+  - **Higher-capacity / longer training** (e.g. 1000 updates, mixed opponents) where extra params might actually be utilized. Note this experiment did **not** test a capacity increase; `results/capacity_probe.md` covers width separately.
 - Treat this as a negative/neutral result: merged for availability and future
   experiments, not because it improves the baseline.

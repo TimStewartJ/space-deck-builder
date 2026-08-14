@@ -1,7 +1,7 @@
 # Baseline v3 — fresh-from-scratch, mlp/sum, 200 updates × 3 seeds
 
 **Date:** 2026-04-22
-**Code at:** `26ea81a` (will be re-tagged `v0.1-baseline`)
+**Code at:** `26ea81a`, released under git tag `baseline/2026-04-22`
 **Protocol:** [`docs/eval_protocol.md`](../docs/eval_protocol.md)
 
 This is the reference baseline that every later post and ablation
@@ -77,7 +77,7 @@ foreach ($pair in @(@(0,'<seed-0-checkpoint>'),
 
 ## Context — historic upd200 checkpoints (resumed)
 
-For reference, three pre-`v0.1-baseline` upd200 checkpoints exist in
+For reference, three pre-baseline upd200 checkpoints exist in
 the repo. All three were saved during runs that used `--resume` on
 top of an upd175 parent (which was itself trained in a separate run).
 Total compute is still 200 PPO updates, but the resumed runs inherited
@@ -102,7 +102,7 @@ snapshot/mixed-opponent setup from their parent runs.
 
 This is a research thread for a future post, not a defect in the
 baseline. The v0.1 baseline is deliberately the cleanest, most
-reproducible thing — `git checkout v0.1-baseline`, `python -m src
+reproducible thing — `git checkout baseline/2026-04-22`, `python -m src
 train --seed N`, exact numbers.
 
 ## Cross-play Elo (secondary metric)
