@@ -683,9 +683,17 @@ class InferenceServer:
             if req is None:
                 continue
             try:
-                n = int(req.states.shape[0])
+                # ``batch_size`` handles both transports; dereferencing
+                # ``req.states`` directly would raise for shared-memory
+                # requests, and the except below would swallow it — leaving
+                # the worker blocked on ``response_queue.get()`` forever,
+                # which is exactly what this method exists to prevent.
+                n = req.batch_size
                 resp = InferenceResponse(
                     request_id=req.request_id,
+                    slot=req.slot,
+                    row_offset=req.row_offset,
+                    n_rows=n,
                     action_indices=np.full((n,), END_TURN_INDEX, dtype=np.int64),
                     log_probs=np.zeros((n,), dtype=np.float32),
                     values=np.zeros((n,), dtype=np.float32),

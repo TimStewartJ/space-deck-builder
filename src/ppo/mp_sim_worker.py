@@ -422,7 +422,7 @@ def _sim_worker_inner(
          # pending decision each iteration. A large gap between this and
          # num_concurrent means the slots are draining out (episode tail),
          # which shrinks GPU batches and multiplies round trips.
-         "iters": 0.0, "pending_sum": 0.0, "active_sum": 0.0,
+         "iters": 0.0, "pending_sum": 0.0,
          # Sub-phases of encode, to separate real work from loop overhead.
          "ctx": 0.0, "enc": 0.0}
     _loop_start = _time.perf_counter()
@@ -476,11 +476,6 @@ def _sim_worker_inner(
                         training_agent_name,
                     )
                     episodes_completed += 1
-                    games[i] = None
-                    buffers[i] = None
-            else:
-                games[i] = None
-                buffers[i] = None
 
     def _submit(slot_ids, shm_slot):
         """Advance, retire, encode and submit one group.
