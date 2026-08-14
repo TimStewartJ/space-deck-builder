@@ -47,6 +47,43 @@ _AGENT_FACTORIES = {
 # the GPU; one reproduces the old strictly-alternating behaviour.
 _PIPELINE_GROUPS = 2
 
+# Env var selecting one worker id to run under cProfile, e.g.
+# ``SDB_PROFILE_WORKER=0``. Rollout workers are spawned children, so an
+# in-process profiler is the only way to see where their CPU actually goes;
+# external timers can only bound a phase, not attribute it. Off unless set.
+_PROFILE_WORKER_ENV = "SDB_PROFILE_WORKER"
+
+
+def _maybe_start_profile(worker_id: int):
+    """Return a running cProfile.Profile if this worker is the selected one."""
+    import os
+    want = os.environ.get(_PROFILE_WORKER_ENV)
+    if want is None or str(worker_id) != want.strip():
+        return None
+    import cProfile
+    pr = cProfile.Profile()
+    pr.enable()
+    return pr
+
+
+def _maybe_finish_profile(profiler, worker_id: int) -> None:
+    """Write per-function stats for the profiled worker to ``logs/``."""
+    if profiler is None:
+        return
+    try:
+        import pstats
+        import pathlib
+        profiler.disable()
+        out_dir = pathlib.Path("logs")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        stem = out_dir / f"worker_profile_w{worker_id}"
+        profiler.dump_stats(str(stem.with_suffix(".prof")))
+        with open(stem.with_suffix(".txt"), "w", encoding="utf-8") as fh:
+            st = pstats.Stats(profiler, stream=fh)
+            st.sort_stats("tottime").print_stats(40)
+    except Exception:
+        pass
+
 
 class _DummyAgent(Agent):
     """Placeholder agent for the PPO player slot."""
@@ -324,6 +361,7 @@ def sim_worker_main(
     arrays inline on the queue.
     """
     shared_io = None
+    profiler = _maybe_start_profile(worker_id)
     try:
         if shared_io_spec is not None:
             from src.ppo.shared_io import SharedInferenceBuffers
@@ -344,6 +382,7 @@ def sim_worker_main(
             error=traceback.format_exc(),
         ))
     finally:
+        _maybe_finish_profile(profiler, worker_id)
         if shared_io is not None:
             shared_io.close()
 

@@ -14,6 +14,12 @@ Usage:
     python scripts/bench_rollout.py                    # default config
     python scripts/bench_rollout.py --updates 3
     python scripts/bench_rollout.py --episodes 8000 --json out.json
+
+Caveat: repeat runs of identical code have measured ±10% apart on the
+reference machine, and it drifts slower across a long session. A single
+before/after pair is not evidence; interleave the two configurations and
+repeat them. A ~13% "improvement" from hoisting a clamp out of the encoder
+turned out to be a ~13% regression once measured that way.
 """
 import argparse
 import json
@@ -200,6 +206,9 @@ def report(d: dict) -> dict:
         print(f"\n  PPO update (mean)     : {mean(d['ppo_s']):8.1f} s")
 
     print("=" * 68)
+    print(f"  Repeat runs of identical code have measured ±10% on the reference")
+    print(f"  machine, and it drifts slower over a long session. Judge a change")
+    print(f"  with interleaved A/B repetitions, not a single before/after pair.")
     return {
         "decisions_per_sec": sps,
         "pct_of_historical": sps / HISTORICAL_STEPS_PER_SEC * 100,
