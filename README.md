@@ -100,19 +100,43 @@ CLI arguments map directly to these config objects. Checkpoints save config meta
 
 ## Architecture
 
-### BatchRunner
+### Rollout architecture
 
-Training uses `BatchRunner` for concurrent game simulation with batched GPU inference:
+Training runs `num_workers` simulation processes against a single batched
+inference server that owns the GPU:
 
 1. `num_concurrent` games run simultaneously **per worker** — it defaults to
    `episodes // num_workers` (800 at the shipped defaults), so with 20 workers
    all 16,000 episodes of an update are in flight at once
-2. Opponent moves are advanced in bulk
-3. All pending PPO decisions are batch-encoded
-4. Single GPU forward pass for the entire batch
-5. Actions distributed back to each game
+2. Each worker splits its game slots into pipeline groups and keeps one
+   inference request per group in flight, so it encodes one group while the
+   other's batch is on the GPU
+3. Encoded states are written directly into a shared-memory block
+   (`src/ppo/shared_io.py`); only coordinates travel over the queues
+4. The server coalesces requests across workers into one forward pass per
+   model, then writes actions, log-probs and values back into shared memory
+5. Workers read their results in place and apply the sampled actions
 
-This provides ~14x speedup over sequential per-game inference.
+Shared memory replaced sending numpy arrays through `mp.Queue`, which cost a
+pickle, a pipe write, an unpickle and a staging copy per decision — about
+4.7 GB per update, all funnelled through the single server thread. Masks stay
+`uint8` end to end because the sampling path only compares them.
+
+### Measuring rollout performance
+
+`scripts/bench_rollout.py` runs a short training and prints decisions/sec
+alongside a full per-phase breakdown of both the server (idle, drain, stage,
+h2d, kernel, sync, dispatch) and the workers (advance, encode, wait, apply,
+and how much of their time was spent blocked):
+
+```bash
+uv run --extra rocm python scripts/bench_rollout.py --updates 3
+```
+
+Judge changes against the "vs April code, today" figure it reports. The
+absolute April 2026 number is not currently reachable on the reference
+machine — re-running that exact commit measures roughly 3x slower than it did
+then, for reasons outside this codebase — so the script prints both.
 
 ### Project Structure
 
@@ -125,7 +149,7 @@ src/
 ├── cards/               # Card loading, effects, and parsing
 ├── encoding/            # State and action tensor encoding
 ├── engine/              # Game engine (Game, Player, actions)
-├── ppo/                 # PPO training (trainer, BatchRunner, opponent pool, Elo)
+├── ppo/                 # PPO training (trainer, runners, shared-memory IO, opponent pool, Elo)
 ├── ui/                  # CLI and pygame interfaces
 └── utils/               # Logging utilities
 docs/

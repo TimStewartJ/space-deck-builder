@@ -40,6 +40,7 @@ pwsh -File scripts\<name>.ps1
 
 | Script | Purpose |
 |---|---|
+| `bench_rollout.py` | Runs a short training and reports rollout decisions/sec plus a full per-phase breakdown of the inference server and the workers. The first place to look when a rollout is slow, and the yardstick any rollout change should be measured against. |
 | `benchmark.py` | End-to-end episode/throughput benchmark for the BatchRunner. Compares sequential vs batched modes. |
 | `device_benchmark.py` | Lower-level per-device timing for the inference path. |
 | `bench_token_path.py` | Training-shaped step benchmark (forward + backward + optimizer, real batch size) comparing `token_features=False` vs `True`. Written after a forward-only microbenchmark badly understated the tokenized path's real cost. |
