@@ -6,6 +6,7 @@ multiprocessing Queues. Workers merge their own rollout data locally
 and return a single pre-merged result to the main process.
 """
 import random
+import time as _time
 import traceback
 from typing import Optional
 
@@ -39,6 +40,12 @@ _AGENT_FACTORIES = {
     "heuristic": lambda name: HeuristicAgent(name),
     "simple":    lambda name: SimpleAgent(name),
 }
+
+
+# Number of independent inference batches a worker keeps in flight. Two lets
+# the worker encode one group of games while the other group's batch is on
+# the GPU; one reproduces the old strictly-alternating behaviour.
+_PIPELINE_GROUPS = 2
 
 
 class _DummyAgent(Agent):
@@ -297,6 +304,7 @@ def sim_worker_main(
     snapshot_names: list[str] | None = None,
     self_play_ratio: float = 0.5,
     pfsp_weights: list[float] | None = None,
+    shared_io_spec=None,
 ):
     """Entry point for a simulation worker process.
 
@@ -310,8 +318,16 @@ def sim_worker_main(
     For self-play, snapshot_names lists the opponent models available on
     the InferenceServer. Workers create _ServerPPOAgent opponents that
     route decisions through the server for GPU inference.
+
+    ``shared_io_spec`` describes the shared-memory block used to exchange
+    batches with the server. When omitted the worker falls back to sending
+    arrays inline on the queue.
     """
+    shared_io = None
     try:
+        if shared_io_spec is not None:
+            from src.ppo.shared_io import SharedInferenceBuffers
+            shared_io = SharedInferenceBuffers.attach(shared_io_spec)
         _sim_worker_inner(
             worker_id, num_episodes, num_concurrent, data_config_dict,
             card_names, card_index_map, action_dim, state_size,
@@ -320,12 +336,16 @@ def sim_worker_main(
             snapshot_names=snapshot_names,
             self_play_ratio=self_play_ratio,
             pfsp_weights=pfsp_weights,
+            shared_io=shared_io,
         )
     except Exception:
         result_queue.put(WorkerError(
             worker_id=worker_id,
             error=traceback.format_exc(),
         ))
+    finally:
+        if shared_io is not None:
+            shared_io.close()
 
 
 def _sim_worker_inner(
@@ -334,6 +354,7 @@ def _sim_worker_inner(
     ppo_config_dict, opponent_spec, seed,
     request_queue, response_queue, result_queue,
     snapshot_names=None, self_play_ratio=0.5, pfsp_weights=None,
+    shared_io=None,
 ):
     """Core worker logic, separated for clean error wrapping."""
     # Worker initialization
@@ -392,27 +413,54 @@ def _sim_worker_inner(
     episodes_completed = 0
     request_id = 0
 
-    # Fill initial game slots
-    active_count = min(num_concurrent, num_episodes)
-    for i in range(active_count):
-        games[i], buffers[i], game_opponents[i] = _start_game(
-            cards, card_index_map, opponent_factory, training_agent_name,
-        )
-        episodes_started += 1
+    # Per-phase wall time. ``wait`` is the diagnostic that matters: it is
+    # time the worker spends blocked on the inference server doing no
+    # simulation, which is pure lost throughput in a synchronous loop.
+    T = {"advance": 0.0, "finish": 0.0, "encode": 0.0,
+         "send": 0.0, "wait": 0.0, "apply": 0.0,
+         # Batch-shape diagnostics: how many game slots actually had a
+         # pending decision each iteration. A large gap between this and
+         # num_concurrent means the slots are draining out (episode tail),
+         # which shrinks GPU batches and multiplies round trips.
+         "iters": 0.0, "pending_sum": 0.0, "active_sum": 0.0,
+         # Sub-phases of encode, to separate real work from loop overhead.
+         "ctx": 0.0, "enc": 0.0}
+    _loop_start = _time.perf_counter()
 
-    while episodes_completed < num_episodes:
-        # Step 1: Advance all active games past non-neural-net decisions
-        for i in range(num_concurrent):
-            if games[i] is not None and not games[i].is_game_over:
-                _advance_non_ppo(games[i], training_agent_name)
+    # Split game slots into pipeline groups. Each group submits its own
+    # inference request, so while one group's batch is on the GPU the worker
+    # is advancing and encoding the other. Without this the worker's CPU time
+    # and the server's GPU time add up instead of overlapping, which
+    # profiling measured as ~40% of worker wall spent blocked.
+    n_groups = (
+        _PIPELINE_GROUPS
+        if shared_io is not None and num_concurrent >= 2 * _PIPELINE_GROUPS
+        else 1
+    )
+    # Contiguous blocks, not a stride. Groups index into per-slot row buffers
+    # (``states_rows_buf`` is [slots, state_size]), so an interleaved
+    # partition would touch every other row and destroy cache locality on the
+    # hottest loop in the worker.
+    _bounds = [
+        (num_concurrent * g // n_groups, num_concurrent * (g + 1) // n_groups)
+        for g in range(n_groups)
+    ]
+    groups = [list(range(lo, hi)) for lo, hi in _bounds]
 
-        # Step 2: Handle completed games
-        for i in range(num_concurrent):
+    # Responses for a group that arrive while another group is being
+    # collected, keyed by request_id.
+    response_stash: dict[int, "InferenceResponse"] = {}
+
+    def _retire_and_refill(slot_ids):
+        """Retire finished games in these slots and start replacements."""
+        nonlocal episodes_started, episodes_completed
+        for i in slot_ids:
             if games[i] is None or not games[i].is_game_over:
                 continue
             _finish_game(
                 i, games, buffers, game_opponents,
-                completed_rollouts, opponent_results, ppo_cfg, training_agent_name,
+                completed_rollouts, opponent_results, ppo_cfg,
+                training_agent_name,
             )
             episodes_completed += 1
             if episodes_started < num_episodes:
@@ -430,19 +478,38 @@ def _sim_worker_inner(
                     episodes_completed += 1
                     games[i] = None
                     buffers[i] = None
+            else:
+                games[i] = None
+                buffers[i] = None
 
-        # Step 3: Collect ALL pending neural-net decisions — both training
-        # agent and opponent PPO. Each game slot owns a row in
-        # ``states_rows_buf`` / ``masks_rows_buf`` so encode_state and
-        # build_action_context can fill them in place with no intermediate
-        # copies. Only resolver dicts (for decoding the sampled action)
-        # and per-slot flags are carried across to Step 5.
+    def _submit(slot_ids, shm_slot):
+        """Advance, retire, encode and submit one group.
+
+        Returns the metadata needed to apply the responses later, or None
+        when the group has no games needing a decision.
+        """
+        nonlocal request_id
+
+        _t = _time.perf_counter()
+        for i in slot_ids:
+            if games[i] is not None and not games[i].is_game_over:
+                _advance_non_ppo(games[i], training_agent_name)
+        T["advance"] += _time.perf_counter() - _t
+
+        _t = _time.perf_counter()
+        _retire_and_refill(slot_ids)
+        T["finish"] += _time.perf_counter() - _t
+
+        # Each game slot owns a row in ``states_rows_buf`` / ``masks_rows_buf``
+        # so encode_state and build_action_context fill them in place with no
+        # intermediate copies.
         pending_indices: list[int] = []
         pending_resolvers: list[dict] = []
         pending_is_training: list[bool] = []
         pending_model_ids: list[str] = []
 
-        for i in range(num_concurrent):
+        _t = _time.perf_counter()
+        for i in slot_ids:
             if games[i] is None or games[i].is_game_over:
                 continue
             player = games[i].current_player
@@ -451,10 +518,13 @@ def _sim_worker_inner(
             if not is_training and not is_server_opp:
                 continue
 
+            _t1 = _time.perf_counter()
             ctx = build_action_context(
                 games[i], player, card_index_map,
                 action_dim, mask_buf=masks_rows_buf[i],
             )
+            _t2 = _time.perf_counter()
+            T["ctx"] += _t2 - _t1
             encode_state(
                 games[i], is_current_player_training=is_training,
                 cards=card_names,
@@ -464,6 +534,7 @@ def _sim_worker_inner(
                 has_actions=ctx.has_meaningful,
                 return_numpy=True,
             )
+            T["enc"] += _time.perf_counter() - _t2
             # Suppress END_TURN inline so we don't touch the mask again later.
             if ctx.has_meaningful:
                 masks_rows_buf[i, END_TURN_INDEX] = False
@@ -474,55 +545,108 @@ def _sim_worker_inner(
             pending_model_ids.append(
                 "training" if is_training else player.agent.model_id
             )
+        T["encode"] += _time.perf_counter() - _t
+        T["iters"] += 1
+        T["pending_sum"] += len(pending_indices)
 
         if not pending_indices:
-            continue
+            return None
 
-        # Step 4: Build batch (single fancy-indexed copy per tensor),
-        # group by model_id, send to GPU.
-        states_np = states_rows_buf[pending_indices]
-        masks_np = masks_rows_buf[pending_indices].view(np.uint8)
-
+        _t = _time.perf_counter()
         model_groups: dict[str, list[int]] = {}
         for j, mid in enumerate(pending_model_ids):
             model_groups.setdefault(mid, []).append(j)
 
-        all_responses: dict[int, tuple] = {}
-        # Send all requests first (non-blocking), then collect responses.
-        # This allows the inference server to see requests from all workers
-        # and all model types in a single drain cycle for better GPU batching.
         request_ids_by_mid: dict[str, tuple[int, list[int]]] = {}
-        for mid, indices in model_groups.items():
-            request_queue.put(InferenceRequest(
-                worker_id=worker_id,
-                request_id=request_id,
-                states=states_np[indices],
-                masks=masks_np[indices],
-                model_id=mid,
-            ))
-            request_ids_by_mid[mid] = (request_id, indices)
-            request_id += 1
+        if shared_io is not None:
+            shm_states = shared_io.states[worker_id, shm_slot]
+            shm_masks = shared_io.masks[worker_id, shm_slot]
+            row_off = 0
+            for mid, indices in model_groups.items():
+                rows = [pending_indices[j] for j in indices]
+                n = len(rows)
+                shm_states[row_off:row_off + n] = states_rows_buf[rows]
+                shm_masks[row_off:row_off + n] = masks_rows_buf[rows].view(np.uint8)
+                request_queue.put(InferenceRequest(
+                    worker_id=worker_id,
+                    request_id=request_id,
+                    model_id=mid,
+                    slot=shm_slot,
+                    row_offset=row_off,
+                    n_rows=n,
+                ))
+                request_ids_by_mid[mid] = (request_id, indices)
+                request_id += 1
+                row_off += n
+        else:
+            states_np = states_rows_buf[pending_indices]
+            masks_np = masks_rows_buf[pending_indices].view(np.uint8)
+            for mid, indices in model_groups.items():
+                request_queue.put(InferenceRequest(
+                    worker_id=worker_id,
+                    request_id=request_id,
+                    model_id=mid,
+                    states=states_np[indices],
+                    masks=masks_np[indices],
+                ))
+                request_ids_by_mid[mid] = (request_id, indices)
+                request_id += 1
+        T["send"] += _time.perf_counter() - _t
 
-        for _ in range(len(model_groups)):
+        return (pending_indices, pending_resolvers, pending_is_training,
+                request_ids_by_mid)
+
+    def _collect(meta):
+        """Wait for one group's responses and apply the sampled actions.
+
+        With several groups in flight the response queue interleaves them, so
+        responses belonging to another group are stashed rather than dropped.
+        """
+        pending_indices, pending_resolvers, pending_is_training, by_mid = meta
+        wanted = {req_id: indices for _, (req_id, indices) in by_mid.items()}
+
+        all_responses: dict[int, tuple] = {}
+
+        def _record(resp, indices):
+            if resp.action_indices is not None:
+                acts, lps, vals = (
+                    resp.action_indices, resp.log_probs, resp.values,
+                )
+            else:
+                lo = resp.row_offset
+                hi = lo + resp.n_rows
+                w, s = worker_id, resp.slot
+                acts = shared_io.actions[w, s, lo:hi]
+                lps = shared_io.log_probs[w, s, lo:hi]
+                vals = shared_io.values[w, s, lo:hi]
+            for k, j in enumerate(indices):
+                all_responses[j] = (int(acts[k]), float(lps[k]), float(vals[k]))
+
+        _t = _time.perf_counter()
+        # Anything stashed by a previous _collect for this group.
+        for req_id in list(wanted):
+            resp = response_stash.pop(req_id, None)
+            if resp is not None:
+                _record(resp, wanted.pop(req_id))
+
+        while wanted:
             response: InferenceResponse = response_queue.get()
             if response.error is not None:
                 raise RuntimeError(
                     f"InferenceServer error (worker={worker_id}): {response.error}"
                 )
-            # Match response to its model group by request_id
-            for mid, (req_id, indices) in request_ids_by_mid.items():
-                if response.request_id == req_id:
-                    for k, j in enumerate(indices):
-                        all_responses[j] = (
-                            int(response.action_indices[k]),
-                            float(response.log_probs[k]),
-                            float(response.values[k]),
-                        )
-                    break
+            indices = wanted.pop(response.request_id, None)
+            if indices is None:
+                # Belongs to another in-flight group; keep it for that caller.
+                response_stash[response.request_id] = response
+                continue
+            _record(response, indices)
+        T["wait"] += _time.perf_counter() - _t
 
-        # Step 5: Distribute actions — record in buffer only for training.
-        # The rollout buffer now accepts numpy + Python primitives directly,
-        # so we copy the per-slot row once and skip all torch wrapping.
+        # Record in the rollout buffer only for the training agent. The buffer
+        # accepts numpy + Python primitives directly, so we copy the per-slot
+        # row once and skip all torch wrapping.
+        _t = _time.perf_counter()
         for j, i in enumerate(pending_indices):
             act_idx, log_prob, value = all_responses[j]
             action = pending_resolvers[j][act_idx]
@@ -539,6 +663,37 @@ def _sim_worker_inner(
                 )
 
             games[i].apply_decision(action)
+        T["apply"] += _time.perf_counter() - _t
+
+    # Fill initial game slots
+    active_count = min(num_concurrent, num_episodes)
+    for i in range(active_count):
+        games[i], buffers[i], game_opponents[i] = _start_game(
+            cards, card_index_map, opponent_factory, training_agent_name,
+        )
+        episodes_started += 1
+
+    # Prime every group so there is always a request in flight, then service
+    # them round-robin: collecting group g happens while the other groups'
+    # batches are already queued on the server.
+    inflight: list[object] = [None] * n_groups
+    for g in range(n_groups):
+        if episodes_completed >= num_episodes:
+            break
+        inflight[g] = _submit(groups[g], g)
+
+    while episodes_completed < num_episodes and any(
+        m is not None for m in inflight
+    ):
+        for g in range(n_groups):
+            if inflight[g] is None:
+                continue
+            _collect(inflight[g])
+            inflight[g] = None
+            if episodes_completed < num_episodes:
+                inflight[g] = _submit(groups[g], g)
+
+    T["total"] = _time.perf_counter() - _loop_start
 
     # Merge rollouts locally before sending (reduces IPC overhead)
     if completed_rollouts:
@@ -554,6 +709,7 @@ def _sim_worker_inner(
             masks=torch.cat(M) if has_masks else None,
             opponent_results=opponent_results,
             episodes_completed=episodes_completed,
+            timings=T,
         ))
     else:
         # Edge case: all games ended without PPO decisions
@@ -567,6 +723,7 @@ def _sim_worker_inner(
             masks=None,
             opponent_results=opponent_results,
             episodes_completed=episodes_completed,
+            timings=T,
         ))
 
 
@@ -588,6 +745,7 @@ def sim_worker_eval(
     snapshot_names: list[str] | None = None,
     self_play_ratio: float = 0.5,
     pfsp_weights: list[float] | None = None,
+    shared_io_spec=None,
 ):
     """Entry point for an evaluation worker process.
 
@@ -595,7 +753,11 @@ def sim_worker_eval(
     Returns win/loss/step counts. Supports PPO snapshot opponents when
     snapshot_names are provided (routed through InferenceServer).
     """
+    shared_io = None
     try:
+        if shared_io_spec is not None:
+            from src.ppo.shared_io import SharedInferenceBuffers
+            shared_io = SharedInferenceBuffers.attach(shared_io_spec)
         _sim_worker_eval_inner(
             worker_id, num_games, num_concurrent, data_config_dict,
             card_names, card_index_map, action_dim, state_size,
@@ -603,12 +765,16 @@ def sim_worker_eval(
             snapshot_names=snapshot_names,
             self_play_ratio=self_play_ratio,
             pfsp_weights=pfsp_weights,
+            shared_io=shared_io,
         )
     except Exception:
         result_queue.put(WorkerError(
             worker_id=worker_id,
             error=traceback.format_exc(),
         ))
+    finally:
+        if shared_io is not None:
+            shared_io.close()
 
 
 def _sim_worker_eval_inner(
@@ -616,6 +782,7 @@ def _sim_worker_eval_inner(
     card_names, card_index_map, action_dim, state_size,
     opponent_spec, seed, request_queue, response_queue, result_queue,
     snapshot_names=None, self_play_ratio=0.5, pfsp_weights=None,
+    shared_io=None,
 ):
     """Core eval worker logic.
 
@@ -759,28 +926,49 @@ def _sim_worker_eval_inner(
         if not pending_indices:
             continue
 
-        # Build batch and group by model_id for server inference
-        states_np = states_rows_buf[pending_indices]
-        masks_np = masks_rows_buf[pending_indices].view(np.uint8)
-
+        # Publish the batch and request inference. Mirrors the training
+        # worker: with a shared block the payload never touches the queue.
         model_groups: dict[str, list[int]] = {}
         for j, mid in enumerate(pending_model_ids):
             model_groups.setdefault(mid, []).append(j)
 
         all_responses: dict[int, int] = {}
-        # Send all requests first, then collect responses (same batching
-        # optimization as the training worker).
         request_ids_by_mid: dict[str, tuple[int, list[int]]] = {}
-        for mid, indices in model_groups.items():
-            request_queue.put(InferenceRequest(
-                worker_id=worker_id,
-                request_id=request_id,
-                states=states_np[indices],
-                masks=masks_np[indices],
-                model_id=mid,
-            ))
-            request_ids_by_mid[mid] = (request_id, indices)
-            request_id += 1
+
+        if shared_io is not None:
+            slot = 0
+            shm_states = shared_io.states[worker_id, slot]
+            shm_masks = shared_io.masks[worker_id, slot]
+            row_off = 0
+            for mid, indices in model_groups.items():
+                rows = [pending_indices[j] for j in indices]
+                n = len(rows)
+                shm_states[row_off:row_off + n] = states_rows_buf[rows]
+                shm_masks[row_off:row_off + n] = masks_rows_buf[rows].view(np.uint8)
+                request_queue.put(InferenceRequest(
+                    worker_id=worker_id,
+                    request_id=request_id,
+                    model_id=mid,
+                    slot=slot,
+                    row_offset=row_off,
+                    n_rows=n,
+                ))
+                request_ids_by_mid[mid] = (request_id, indices)
+                request_id += 1
+                row_off += n
+        else:
+            states_np = states_rows_buf[pending_indices]
+            masks_np = masks_rows_buf[pending_indices].view(np.uint8)
+            for mid, indices in model_groups.items():
+                request_queue.put(InferenceRequest(
+                    worker_id=worker_id,
+                    request_id=request_id,
+                    model_id=mid,
+                    states=states_np[indices],
+                    masks=masks_np[indices],
+                ))
+                request_ids_by_mid[mid] = (request_id, indices)
+                request_id += 1
 
         for _ in range(len(model_groups)):
             response: InferenceResponse = response_queue.get()
@@ -789,10 +977,17 @@ def _sim_worker_eval_inner(
                     f"InferenceServer error (worker={worker_id}): {response.error}"
                 )
             for mid, (req_id, indices) in request_ids_by_mid.items():
-                if response.request_id == req_id:
-                    for k, j in enumerate(indices):
-                        all_responses[j] = int(response.action_indices[k])
-                    break
+                if response.request_id != req_id:
+                    continue
+                if response.action_indices is not None:
+                    acts = response.action_indices
+                else:
+                    lo = response.row_offset
+                    hi = lo + response.n_rows
+                    acts = shared_io.actions[worker_id, response.slot, lo:hi]
+                for k, j in enumerate(indices):
+                    all_responses[j] = int(acts[k])
+                break
 
         for k, i in enumerate(pending_indices):
             act_idx = all_responses[k]
@@ -1182,5 +1377,9 @@ def tournament_worker_main(
             ))
         except Exception:
             pass
+
+
+
+
 
 

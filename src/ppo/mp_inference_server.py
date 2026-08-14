@@ -31,8 +31,12 @@ import queue
 import threading
 import time
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from src.ppo.shared_io import SharedInferenceBuffers
 import torch
 import multiprocessing as mp
 
@@ -45,22 +49,45 @@ _log = logging.getLogger("training")
 
 @dataclass
 class InferenceRequest:
-    """Worker → InferenceServer: batch of encoded states for GPU inference."""
+    """Worker → InferenceServer: a batch of encoded states awaiting inference.
+
+    The payload normally lives in shared memory: the worker has already
+    written rows ``[row_offset, row_offset + n_rows)`` of its ``(worker_id,
+    slot)`` region, and this message only carries the coordinates. Shipping
+    the arrays through the queue instead cost more in pickle and staging than
+    the inference itself.
+
+    ``states``/``masks`` are the inline fallback for callers without a shared
+    block (single-process paths and tests). When they are set the server uses
+    them directly and ignores the shared region.
+    """
     worker_id: int
     request_id: int
-    states: np.ndarray      # [batch, state_size] float32
-    masks: np.ndarray        # [batch, action_dim] uint8 (1=valid, 0=invalid)
-    model_id: str = "training"  # which model to use ("training" or snapshot name)
+    model_id: str = "training"
+    slot: int = 0
+    row_offset: int = 0
+    n_rows: int = 0
     # When True, the response carries the masked pre-sample logits for every
     # row so the worker can compute top-k probabilities and policy entropy
     # for replay-style analysis. Off by default to keep the regular eval /
     # rollout path's wire size unchanged.
     return_logits: bool = False
+    states: np.ndarray | None = None     # [batch, state_size] float32, inline fallback
+    masks: np.ndarray | None = None      # [batch, action_dim] uint8, inline fallback
+
+    @property
+    def batch_size(self) -> int:
+        return int(self.states.shape[0]) if self.states is not None else self.n_rows
 
 
 @dataclass
 class InferenceResponse:
     """InferenceServer → Worker: sampled actions with log-probs and values.
+
+    Results are normally written straight into the worker's shared-memory
+    slot; this message just says which rows are ready. ``action_indices`` /
+    ``log_probs`` / ``values`` are populated only on the inline fallback path
+    (no shared block) or when reporting an error.
 
     If ``error`` is set, the server could not serve the request (typically
     because ``model_id`` was never registered or was unregistered before the
@@ -70,12 +97,16 @@ class InferenceResponse:
     ``logits`` is populated only when the originating request set
     ``return_logits=True``. Shape is ``[batch, action_dim]`` float32, with
     invalid actions already filled with ``-inf`` (i.e. the same masked logits
-    used to sample the action).
+    used to sample the action). Logits stay inline because only the replay
+    analysis path asks for them.
     """
     request_id: int
-    action_indices: np.ndarray   # [batch] int64
-    log_probs: np.ndarray        # [batch] float32
-    values: np.ndarray           # [batch] float32
+    slot: int = 0
+    row_offset: int = 0
+    n_rows: int = 0
+    action_indices: np.ndarray | None = None   # [batch] int64, inline fallback
+    log_probs: np.ndarray | None = None        # [batch] float32, inline fallback
+    values: np.ndarray | None = None           # [batch] float32, inline fallback
     error: str | None = None
     logits: np.ndarray | None = None  # [batch, action_dim] float32, masked
 
@@ -92,6 +123,10 @@ class WorkerResult:
     masks: torch.Tensor | None
     opponent_results: dict       # {opponent_name: [wins, total]}
     episodes_completed: int
+    # Per-phase wall time for this worker's rollout loop, in seconds.
+    # Aggregated by the runner to show whether workers are simulating or
+    # blocked on the inference server. Empty when timing is disabled.
+    timings: dict | None = None
 
 
 @dataclass
@@ -134,6 +169,12 @@ class _Buffers:
     at a time end-to-end — there is no pipelining that would require
     multiple slots. Buffers double in size on growth and never shrink, so
     after a short warm-up every batch is a no-op allocation-wise.
+
+    Masks are kept as ``uint8`` end to end. ``_forward_and_sample`` only
+    ever compares them (``masks == 0`` / ``masks > 0``), so widening them to
+    float32 on the host bought nothing and cost a full array allocation plus
+    conversion per request — which profiling showed was ~46% of server time
+    — as well as 4x the host-to-device bytes.
     """
 
     def __init__(self, state_size: int, action_dim: int, device: torch.device):
@@ -143,7 +184,7 @@ class _Buffers:
         self._capacity = 0
 
         self.host_states: torch.Tensor | None = None    # pinned [cap, state_size] float32
-        self.host_masks: torch.Tensor | None = None     # pinned [cap, action_dim] float32
+        self.host_masks: torch.Tensor | None = None     # pinned [cap, action_dim] uint8
         self.host_actions: torch.Tensor | None = None   # pinned [cap] int64
         self.host_logprobs: torch.Tensor | None = None  # pinned [cap] float32
         self.host_values: torch.Tensor | None = None    # pinned [cap] float32
@@ -151,7 +192,7 @@ class _Buffers:
         self.host_logits: torch.Tensor | None = None    # pinned [cap, action_dim] float32
 
         self.dev_states: torch.Tensor | None = None     # [cap, state_size] float32
-        self.dev_masks: torch.Tensor | None = None      # [cap, action_dim] float32
+        self.dev_masks: torch.Tensor | None = None      # [cap, action_dim] uint8
 
     def ensure_capacity(self, needed: int) -> None:
         if needed <= self._capacity:
@@ -162,7 +203,7 @@ class _Buffers:
             (new_cap, self.state_size), dtype=torch.float32, pin_memory=pin
         )
         self.host_masks = torch.empty(
-            (new_cap, self.action_dim), dtype=torch.float32, pin_memory=pin
+            (new_cap, self.action_dim), dtype=torch.uint8, pin_memory=pin
         )
         self.host_actions = torch.empty((new_cap,), dtype=torch.int64, pin_memory=pin)
         self.host_logprobs = torch.empty((new_cap,), dtype=torch.float32, pin_memory=pin)
@@ -176,7 +217,7 @@ class _Buffers:
                 (new_cap, self.state_size), dtype=torch.float32, device=self.device
             )
             self.dev_masks = torch.empty(
-                (new_cap, self.action_dim), dtype=torch.float32, device=self.device
+                (new_cap, self.action_dim), dtype=torch.uint8, device=self.device
             )
         self._capacity = new_cap
 
@@ -211,12 +252,17 @@ class InferenceServer:
         device: torch.device,
         num_workers: int,
         ctx: mp.context.BaseContext | None = None,
+        shared_io: "SharedInferenceBuffers | None" = None,
     ):
         if not models:
             raise ValueError("InferenceServer requires at least one model at startup")
 
         self._initial_models = dict(models)
         self.device = device
+        # When present, requests carry shared-memory coordinates instead of
+        # arrays and results are written back in place. Falls back to inline
+        # arrays when absent (single-process paths and tests).
+        self.shared_io = shared_io
 
         _mp = ctx or mp
         self.request_queue: mp.Queue = _mp.Queue()
@@ -243,6 +289,19 @@ class InferenceServer:
             "max_batch_size": 0,
             "compute_s": 0.0,   # GPU-side forward + sample time (CUDA events)
             "wall_s": 0.0,      # server loop total elapsed
+            # Phase breakdown. ``compute_s`` measures only the CUDA-event
+            # window around forward+sample, which historically left ~95% of
+            # wall time unattributed. These cover the rest of the loop so a
+            # slow server can be diagnosed without guessing.
+            "blocked_get_s": 0.0,   # waiting for the first request (server starved)
+            "drain_s": 0.0,         # opportunistically draining more requests
+            "stage_s": 0.0,         # copying request arrays into pinned buffers
+            "h2d_s": 0.0,           # host->device copies
+            "sync_s": 0.0,          # torch.cuda.synchronize() wait
+            "dispatch_s": 0.0,      # building + queueing responses
+            "alloc_s": 0.0,         # pinned/device buffer growth
+            "staged_rows": 0,       # rows copied into pinned buffers
+            "requests": 0,          # individual worker requests served
         }
 
     # ------------------------------------------------------------------
@@ -393,14 +452,18 @@ class InferenceServer:
                 self._drain_control(models)
 
                 # Block on the first request so an idle server doesn't busy-loop.
+                _t = time.perf_counter()
                 try:
                     first_req = self.request_queue.get(timeout=_LOOP_TIMEOUT)
                 except queue.Empty:
+                    self._stats["blocked_get_s"] += time.perf_counter() - _t
                     continue
+                self._stats["blocked_get_s"] += time.perf_counter() - _t
                 if first_req is None:
                     break
 
                 # Opportunistically drain to coalesce across workers.
+                _t = time.perf_counter()
                 requests = [first_req]
                 while True:
                     try:
@@ -410,11 +473,19 @@ class InferenceServer:
                         requests.append(req)
                     except queue.Empty:
                         break
+                self._stats["drain_s"] += time.perf_counter() - _t
+                self._stats["requests"] += len(requests)
 
-                # Lazy-init buffer shapes from the first observed request.
+                # Lazy-init buffer shapes. With a shared block the geometry is
+                # known up front; otherwise take it from the first request's
+                # inline arrays.
                 if buffers is None:
-                    self._state_size = int(requests[0].states.shape[1])
-                    self._action_dim = int(requests[0].masks.shape[1])
+                    if self.shared_io is not None:
+                        self._state_size = self.shared_io.spec.state_size
+                        self._action_dim = self.shared_io.spec.action_dim
+                    else:
+                        self._state_size = int(requests[0].states.shape[1])
+                        self._action_dim = int(requests[0].masks.shape[1])
                     buffers = _Buffers(self._state_size, self._action_dim, self.device)
 
                 # Group requests by model_id; each group becomes one batched
@@ -459,26 +530,42 @@ class InferenceServer:
         compute_end,
     ) -> None:
         """Stage one model's requests into ``buffers``, run forward+sample,
-        and dispatch a response per request.
+        and write results back for each request.
+
+        When a shared block is attached the payload is already resident and
+        staging is a copy out of it rather than out of freshly-unpickled
+        queue messages, which is where the old server spent most of its time.
         """
-        total = sum(int(r.states.shape[0]) for r in model_reqs)
+        total = sum(r.batch_size for r in model_reqs)
+        _t = time.perf_counter()
         buffers.ensure_capacity(total)
+        self._stats["alloc_s"] += time.perf_counter() - _t
 
         any_logits = any(r.return_logits for r in model_reqs)
         if any_logits:
             buffers.ensure_logits_buffer()
 
+        shm = self.shared_io
+        host_states_np = buffers.host_states.numpy()
+        host_masks_np = buffers.host_masks.numpy()
+
         # Stage host buffers and remember per-request slice offsets.
+        _t = time.perf_counter()
         offset = 0
-        slices: list[tuple[int, int, int, int, bool]] = []  # (worker_id, request_id, start, end, return_logits)
+        slices: list[tuple[InferenceRequest, int, int]] = []
         for req in model_reqs:
-            n = int(req.states.shape[0])
-            buffers.host_states[offset:offset + n].copy_(torch.from_numpy(req.states))
-            buffers.host_masks[offset:offset + n].copy_(
-                torch.from_numpy(req.masks.astype(np.float32, copy=False))
-            )
-            slices.append((req.worker_id, req.request_id, offset, offset + n, req.return_logits))
+            n = req.batch_size
+            if req.states is not None:
+                host_states_np[offset:offset + n] = req.states
+                host_masks_np[offset:offset + n] = req.masks
+            else:
+                lo, hi = req.row_offset, req.row_offset + n
+                host_states_np[offset:offset + n] = shm.states[req.worker_id, req.slot, lo:hi]
+                host_masks_np[offset:offset + n] = shm.masks[req.worker_id, req.slot, lo:hi]
+            slices.append((req, offset, offset + n))
             offset += n
+        self._stats["stage_s"] += time.perf_counter() - _t
+        self._stats["staged_rows"] += total
 
         # Run on the default stream. Synchronous H2D + compute + D2H
         # eliminates the cross-stream-sync class of bugs that bit us on
@@ -486,8 +573,10 @@ class InferenceServer:
         n = total
         with torch.no_grad():
             if self.device.type == "cuda":
+                _t = time.perf_counter()
                 buffers.dev_states[:n].copy_(buffers.host_states[:n])
                 buffers.dev_masks[:n].copy_(buffers.host_masks[:n])
+                self._stats["h2d_s"] += time.perf_counter() - _t
                 compute_start.record()
                 actions, log_probs, values, masked_logits = _forward_and_sample(
                     model, buffers.dev_states[:n], buffers.dev_masks[:n],
@@ -501,7 +590,9 @@ class InferenceServer:
                 # Single sync flushes H2D + compute + D2H. The default
                 # stream serializes all three, so this is the only sync we
                 # need before reading host buffers.
+                _t = time.perf_counter()
                 torch.cuda.synchronize(self.device)
+                self._stats["sync_s"] += time.perf_counter() - _t
                 self._stats["compute_s"] += compute_start.elapsed_time(compute_end) / 1000.0
             else:
                 t0 = time.perf_counter()
@@ -520,31 +611,52 @@ class InferenceServer:
         if n > self._stats["max_batch_size"]:
             self._stats["max_batch_size"] = n
 
-        # numpy() on a pinned host tensor shares memory; copy defensively
-        # so the buffer is safe to reuse before the worker unpickles.
-        actions_np = buffers.host_actions[:n].numpy().copy()
-        logprobs_np = buffers.host_logprobs[:n].numpy().copy()
-        values_np = buffers.host_values[:n].numpy().copy()
-        logits_np = buffers.host_logits[:n].numpy().copy() if any_logits else None
+        # numpy() on a pinned host tensor shares memory, so results are either
+        # written straight into the worker's shared slot (no copy leaves this
+        # thread) or copied defensively before going inline on the queue.
+        _t = time.perf_counter()
+        actions_np = buffers.host_actions[:n].numpy()
+        logprobs_np = buffers.host_logprobs[:n].numpy()
+        values_np = buffers.host_values[:n].numpy()
+        logits_np = buffers.host_logits[:n].numpy() if any_logits else None
 
-        for worker_id, request_id, start, end, return_logits in slices:
-            resp = InferenceResponse(
-                request_id=request_id,
-                action_indices=actions_np[start:end],
-                log_probs=logprobs_np[start:end],
-                values=values_np[start:end],
-                logits=(logits_np[start:end].copy() if return_logits else None),
-            )
-            self.response_queues[worker_id].put(resp)
+        for req, start, end in slices:
+            if req.states is None and shm is not None:
+                lo, hi = req.row_offset, req.row_offset + (end - start)
+                w, s = req.worker_id, req.slot
+                shm.actions[w, s, lo:hi] = actions_np[start:end]
+                shm.log_probs[w, s, lo:hi] = logprobs_np[start:end]
+                shm.values[w, s, lo:hi] = values_np[start:end]
+                resp = InferenceResponse(
+                    request_id=req.request_id,
+                    slot=req.slot,
+                    row_offset=req.row_offset,
+                    n_rows=end - start,
+                    logits=(logits_np[start:end].copy() if req.return_logits else None),
+                )
+            else:
+                resp = InferenceResponse(
+                    request_id=req.request_id,
+                    n_rows=end - start,
+                    action_indices=actions_np[start:end].copy(),
+                    log_probs=logprobs_np[start:end].copy(),
+                    values=values_np[start:end].copy(),
+                    logits=(logits_np[start:end].copy() if req.return_logits else None),
+                )
+            self.response_queues[req.worker_id].put(resp)
             self._requests_served += 1
+        self._stats["dispatch_s"] += time.perf_counter() - _t
 
     def _send_error_batch(self, model_reqs: list[InferenceRequest], err: str) -> None:
         """Emit zero-filled error responses for every request in the group."""
         n_action = self._action_dim or 1
         for req in model_reqs:
-            n = int(req.states.shape[0])
+            n = req.batch_size
             resp = InferenceResponse(
                 request_id=req.request_id,
+                slot=req.slot,
+                row_offset=req.row_offset,
+                n_rows=n,
                 action_indices=np.full((n,), END_TURN_INDEX, dtype=np.int64),
                 log_probs=np.zeros((n,), dtype=np.float32),
                 values=np.zeros((n,), dtype=np.float32),
@@ -593,6 +705,22 @@ class InferenceServer:
             "compute=%.2fs wall=%.2fs",
             s["batches"], avg_bs, s["max_batch_size"],
             s["compute_s"], s["wall_s"],
+        )
+        wall = s["wall_s"] or 1e-9
+        accounted = (
+            s["blocked_get_s"] + s["drain_s"] + s["stage_s"] + s["h2d_s"]
+            + s["compute_s"] + s["sync_s"] + s["dispatch_s"] + s["alloc_s"]
+        )
+        row_bytes = (self._state_size or 0) * 4 + (self._action_dim or 0)
+        stage_mb = s["staged_rows"] * row_bytes / 1e6
+        stage_rate = stage_mb / s["stage_s"] if s["stage_s"] > 0 else 0.0
+        _log.info(
+            "[InferenceServer] phases: idle=%.1fs drain=%.1fs stage=%.1fs "
+            "h2d=%.1fs kernel=%.1fs sync=%.1fs dispatch=%.1fs alloc=%.1fs "
+            "| accounted=%.0f%% reqs=%d stage=%.0fMB@%.0fMB/s",
+            s["blocked_get_s"], s["drain_s"], s["stage_s"], s["h2d_s"],
+            s["compute_s"], s["sync_s"], s["dispatch_s"], s["alloc_s"],
+            accounted / wall * 100.0, s["requests"], stage_mb, stage_rate,
         )
 
 
