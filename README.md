@@ -35,10 +35,17 @@ All commands go through `python -m src <command>`:
 | Command | Description |
 |---------|-------------|
 | `train` | Run PPO training with configurable hyperparameters |
+| `eval` | Evaluate a checkpoint against the fixed opponent gauntlet |
+| `elo` | Cross-play Elo tournament between checkpoints and/or agents |
 | `simulate` | Run a trained model against opponents |
+| `analyze` | Collect replays and analyze agent behavior |
 | `benchmark` | Compare sequential vs batched training throughput |
 
 Run `python -m src <command> --help` for full option details.
+
+`eval` and `elo` are the reporting tools defined by
+[`docs/eval_protocol.md`](docs/eval_protocol.md) — that document is the
+contract every result in `results/` is measured against.
 
 ### Training Examples
 
@@ -97,7 +104,9 @@ CLI arguments map directly to these config objects. Checkpoints save config meta
 
 Training uses `BatchRunner` for concurrent game simulation with batched GPU inference:
 
-1. N games run simultaneously (default: 64 concurrent)
+1. `num_concurrent` games run simultaneously **per worker** — it defaults to
+   `episodes // num_workers` (800 at the shipped defaults), so with 20 workers
+   all 16,000 episodes of an update are in flight at once
 2. Opponent moves are advanced in bulk
 3. All pending PPO decisions are batch-encoded
 4. Single GPU forward pass for the entire batch
@@ -111,13 +120,20 @@ This provides ~14x speedup over sequential per-game inference.
 src/
 ├── __main__.py          # Unified CLI entrypoint
 ├── config.py            # Centralized config dataclasses
-├── ai/                  # Agent implementations (PPO, Random, Heuristic)
+├── ai/                  # Agent implementations (PPO, Random, Heuristic, Simple)
+├── analysis/            # Replay collection and behavioral analysis
 ├── cards/               # Card loading, effects, and parsing
 ├── encoding/            # State and action tensor encoding
 ├── engine/              # Game engine (Game, Player, actions)
-├── ppo/                 # PPO training (trainer, BatchRunner, actor-critic)
+├── ppo/                 # PPO training (trainer, BatchRunner, opponent pool, Elo)
+├── ui/                  # CLI and pygame interfaces
 └── utils/               # Logging utilities
+docs/
+├── eval_protocol.md     # The measurement contract for every result
+└── decisions/           # Architecture decision records
+results/                 # Experiment writeups + their eval/Elo logs
 scripts/                 # Developer tools — see scripts/README.md for the full index
+tests/                   # pytest suite
 data/
 └── cards.csv            # Card definitions (Core Set)
 ```

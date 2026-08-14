@@ -1,6 +1,7 @@
 # Eval Protocol
 
-**Status:** Locked as of `v0.1-baseline`. This document is a contract.
+**Status:** Locked as of the v0.1 baseline (git tag `baseline/2026-04-22`).
+This document is a contract.
 Any change to the protocol invalidates prior results — every result must
 either be re-run under the new protocol or explicitly marked legacy
 with a pointer to the protocol version that produced it.
@@ -67,10 +68,17 @@ For each opponent ∈ {random, heuristic, simple}:
 ### Secondary — cross-play Elo
 - Run the `elo` subcommand pairing all evaluated checkpoints against
   each other and against the three gauntlet opponents.
-- 5000 games per pairing.
-- Anchor: `random` opponent is fixed at **Elo 0** in every report.
+- **1000 games per pairing** (`--games-per-pair 1000`).
+- Anchor: `compute_mle_ratings` pins the **first participant** (index 0,
+  i.e. the first `--checkpoints` entry) at **Elo 1000** to fix the scale.
+  Every other player — including `random` — floats relative to it, so pass
+  the reference checkpoint first and name it when reporting.
 - Use the existing tournament implementation in
   `src/ppo/elo_tournament.py`.
+
+> Elo is the more sensitive metric once the fixed gauntlet saturates.
+> `random` and `simple` no longer separate strong checkpoints, so
+> head-to-head play carries most of the discriminating signal.
 
 ### Tertiary — sample efficiency
 - Number of PPO updates required for a training run to first reach
@@ -111,13 +119,21 @@ side-by-side on the **vs. heuristic** column (the headline number).
 ## 8. Storage layout
 
 ```
-docs/eval_protocol.md            # this file
+docs/eval_protocol.md             # this file
 results/baseline_v3.md            # Step 2 output
 results/<variant_name>.md         # one per future variant
+results/<variant_name>/*.log      # that variant's eval + Elo logs (force-added;
+                                  #   *.log is gitignored by default)
 analysis/elo_<tag>_<timestamp>/   # raw Elo tournament outputs
-models/<variant>_seed{N}.pth      # per-seed checkpoints
-logs/<variant>_seed{N}_<ts>.log   # per-run training logs
+models/ppo_agent_<ts>_upd<N>_wins<W>.pth   # checkpoints, as emitted by the trainer
+logs/<variant>_seed<N>_<ts>.log   # per-run training logs
 ```
+
+> **Preserve the artifacts a result depends on.** Checkpoints and `*.log`
+> are gitignored, so anything a `results/*.md` file cites must be force-added
+> (`git add -f`) or it exists only on the machine that produced it. Width-probe
+> checkpoints referenced by `results/capacity_probe.md` were lost this way when
+> their worktree was deleted.
 
 ## 9. Stability clause
 
@@ -134,4 +150,17 @@ Cosmetic edits (typos, clarification, expanded prose) do not require
 a version bump.
 
 ## 10. Changelog
-- `v0.1` — initial protocol, locked at git tag `v0.1-baseline`.
+- `v0.1` — initial protocol, locked at git tag `baseline/2026-04-22`.
+- `v0.1.1` — documentation corrections only; **no result is invalidated**.
+  - Cross-play Elo corrected from "5000 games per pairing" to **1000**.
+    Every result produced under this protocol
+    (`baseline_v3`, `attention_ablation`, `capacity_probe`,
+    `token_features_phase1`, `curriculum_v02`) used 1000, so this records
+    actual practice rather than changing it.
+  - Elo anchor description corrected. The old text claimed `random` was
+    fixed at Elo 0; in fact `compute_mle_ratings` pins the **first
+    participant** at Elo 1000 and `random` floats (it lands between −41 and
+    +35 across existing reports).
+  - Dangling `v0.1-baseline` tag reference replaced with the tag that
+    actually exists (`baseline/2026-04-22`).
+  - Storage layout updated to the checkpoint naming the trainer emits.
