@@ -19,3 +19,7 @@ logs/*.json
 logs/OVERNIGHT_ABORT.flag
 # SpecStory explanation file
 .specstory/.what-is-this.md
+
+# Worker cProfile output (SDB_PROFILE_WORKER)
+logs/worker_profile_*.prof
+logs/worker_profile_*.txt
