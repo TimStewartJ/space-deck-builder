@@ -1,8 +1,4 @@
-"""End-to-end PPO rollout collection on the full vector engine.
-
-The guarded Gate 3 path currently supports the random fixed opponent. Other
-opponents fail explicitly rather than silently changing their semantics.
-"""
+"""End-to-end PPO rollout collection on the full vector engine."""
 from __future__ import annotations
 
 import random
@@ -19,14 +15,19 @@ from src.encoding.action_encoder import get_action_space_size
 from src.encoding.state_encoder import get_state_size
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.vector_engine.kernels import (
-    ATTACK_PLAYER_INDEX,
     END_TURN_INDEX,
-    NUM_CARDS,
-    PLAY_OFFSET,
     VectorEngine,
-    _advance_rng,
     configure_numba_threads,
 )
+from src.vector_engine.opponents import (
+    OPPONENT_CODE,
+    OPPONENT_LABEL,
+    _select_random_legal,
+    compile_opponent_policy_data,
+    sample_opponent_kinds,
+    select_fixed_actions,
+)
+from src.ppo.opponent_pool import OpponentPool
 from src.vector_engine.policy import (
     VectorPolicyEvaluator,
     suppress_redundant_end_turn,
@@ -40,51 +41,6 @@ from src.vector_engine.state import (
 )
 
 _log = logging.getLogger("training")
-@njit(parallel=True, cache=True)
-def _select_random_legal(
-    weights, rng_state, selected_rows, actions, action_variants
-):
-    for position in prange(selected_rows.shape[0]):
-        game = selected_rows[position]
-        play_count = 0
-        for action in range(PLAY_OFFSET, PLAY_OFFSET + NUM_CARDS):
-            play_count += weights[game, action]
-        if play_count > 0:
-            next_rng = _advance_rng(rng_state[game])
-            rng_state[game] = next_rng
-            wanted = next_rng % play_count
-            seen = 0
-            for action in range(PLAY_OFFSET, PLAY_OFFSET + NUM_CARDS):
-                weight = weights[game, action]
-                if weight > 0:
-                    if seen + weight > wanted:
-                        actions[game] = action
-                        action_variants[game] = wanted - seen
-                        break
-                    seen += weight
-            continue
-        if weights[game, ATTACK_PLAYER_INDEX] > 0:
-            actions[game] = ATTACK_PLAYER_INDEX
-            action_variants[game] = 0
-            continue
-        count = 0
-        for action in range(weights.shape[1]):
-            count += weights[game, action]
-        if count == 0:
-            actions[game] = END_TURN_INDEX
-            continue
-        next_rng = _advance_rng(rng_state[game])
-        rng_state[game] = next_rng
-        wanted = next_rng % count
-        seen = 0
-        for action in range(weights.shape[1]):
-            weight = weights[game, action]
-            if weight > 0:
-                if seen + weight > wanted:
-                    actions[game] = action
-                    action_variants[game] = wanted - seen
-                    break
-                seen += weight
 
 
 @njit(parallel=True, cache=True)
@@ -197,12 +153,9 @@ class VectorBatchRunner:
         num_threads: int = 4,
         num_concurrent: int | None = None,
     ):
-        normalized = opponent_spec.strip().lower()
-        if normalized not in {"random", "random:1", "random:1.0"}:
-            raise ValueError(
-                "vector engine currently supports only --opponents random; "
-                f"got {opponent_spec!r}"
-            )
+        self.opponent_entries = OpponentPool(
+            opponent_spec=opponent_spec
+        ).entries
         self.model = model
         self.cards = cards
         self.registry = registry
@@ -214,6 +167,8 @@ class VectorBatchRunner:
         )
         self.num_concurrent = num_concurrent
         self.opponent_results: dict[str, list[int]] = {}
+        self._batch_index = 0
+        self._last_opponent_kinds = np.empty(0, dtype=np.int8)
 
     def run_episodes(self, num_episodes: int) -> tuple:
         if (
@@ -229,14 +184,23 @@ class VectorBatchRunner:
         # Python launches GPU work; four preserves near-linear CPU scaling
         # without starving the policy thread.
         configure_numba_threads(self.num_threads)
+        batch_seed = self.seed + self._batch_index
+        self._batch_index += 1
         state, rules = initialize_training_state(
             num_episodes,
             self.cards,
             self.registry,
-            seed=self.seed,
+            seed=batch_seed,
         )
         engine = VectorEngine(state, rules)
         policy = VectorPolicyEvaluator(self.model, self.device)
+        policy_data = compile_opponent_policy_data(
+            self.cards, self.registry, rules
+        )
+        opponent_kinds = sample_opponent_kinds(
+            self.opponent_entries, num_episodes, batch_seed
+        )
+        self._last_opponent_kinds = opponent_kinds.copy()
 
         state_chunks = []
         action_chunks = []
@@ -305,11 +269,11 @@ class VectorBatchRunner:
 
             if len(opponent_rows):
                 phase = time.perf_counter()
-                action_weights = engine.build_action_weights()
-                _select_random_legal(
-                    action_weights,
-                    state.rng_state,
-                    opponent_rows.astype(np.int64),
+                select_fixed_actions(
+                    engine,
+                    policy_data,
+                    opponent_kinds,
+                    opponent_rows,
                     actions,
                     action_variants,
                 )
@@ -365,8 +329,15 @@ class VectorBatchRunner:
         ) / (advantages.std() + 1e-8)
         gae_elapsed = time.perf_counter() - gae_started
 
-        wins = int((state.winner == state.training_player).sum())
-        self.opponent_results = {"Random": [wins, num_episodes]}
+        self.opponent_results = {}
+        training_won = state.winner == state.training_player
+        for name, _ in self.opponent_entries:
+            code = OPPONENT_CODE[name]
+            selected = opponent_kinds == code
+            self.opponent_results[OPPONENT_LABEL[code]] = [
+                int((training_won & selected).sum()),
+                int(selected.sum()),
+            ]
         transfer_started = time.perf_counter()
         result = (
             torch.from_numpy(states).to(self.device),

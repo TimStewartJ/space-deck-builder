@@ -233,3 +233,35 @@ the disposable smoke checkpoints were then removed.
 
 - [`rule_ir_v1_vector_training_smoke.log`](vector_engine_gate/rule_ir_v1_vector_training_smoke.log)
 - [`rule_ir_v1_object_training_smoke.log`](vector_engine_gate/rule_ir_v1_object_training_smoke.log)
+
+## Fixed vector opponents
+
+ADR 0006 ports Random, Heuristic, and Simple into one batched Numba selector.
+Weighted opponent specifications assign one stable type per resident game and
+rollout metrics retain independent wins/game totals for every type.
+
+A detached 192-episode ROCm smoke completed vector rollout, PPO, three-way
+scalar evaluation, and checkpoint serialization. Opponent selection took
+0.06s of the 6.26s rollout loop, versus 5.95s in the GPU policy.
+
+The same end-to-end gate at 2,000 episodes, the smallest compute-pilot batch,
+completed without memory pressure:
+
+| phase | wall |
+| --- | ---: |
+| rollout (288,040 policy samples) | 7.2s |
+| PPO | 4.5s |
+| three-way evaluation | 0.8s |
+| total | 12.6s |
+
+The 2,000 games were distributed as 694 Heuristic, 671 Random, and 635 Simple.
+Fixed-opponent selection consumed 0.14s while GPU policy inference consumed
+5.99s, so mixed opponents do not move the rollout bottleneck away from policy
+inference.
+
+Raw artifacts:
+
+- [`fixed_opponents_training_smoke.log`](vector_engine_gate/fixed_opponents_training_smoke.log)
+- [`fixed_opponents_training_smoke.jsonl`](vector_engine_gate/fixed_opponents_training_smoke.jsonl)
+- [`fixed_opponents_2k_training_smoke.log`](vector_engine_gate/fixed_opponents_2k_training_smoke.log)
+- [`fixed_opponents_2k_training_smoke.jsonl`](vector_engine_gate/fixed_opponents_2k_training_smoke.jsonl)

@@ -137,11 +137,14 @@ The scalar engine remains the oracle: tests compare every legal mask and
 afterward. The final detached full-card 16,000-game gate measured 5.88M
 decisions/s for engine + masks + observations and 587k/s with the actual PPO
 policy.
-Use `train --engine vec --opponents random` for the guarded end-to-end path;
-object remains the default and other opponent types fail explicitly. See
+Use `train --engine vec --opponents random,heuristic,simple` for the guarded
+mixed-opponent path. Weighted specifications use the same syntax as the object
+runner. Snapshot self-play remains unsupported by the vector runner and fails
+explicitly. Object remains the default. See
 [`docs/decisions/0003-compiler-backed-numba-vector-engine.md`](docs/decisions/0003-compiler-backed-numba-vector-engine.md)
 and [`docs/decisions/0004-complete-vector-engine-and-training-path.md`](docs/decisions/0004-complete-vector-engine-and-training-path.md)
 and [`docs/decisions/0005-authoritative-rule-ir-and-core-fidelity.md`](docs/decisions/0005-authoritative-rule-ir-and-core-fidelity.md)
+and [`docs/decisions/0006-vector-fixed-opponents.md`](docs/decisions/0006-vector-fixed-opponents.md)
 and [`results/vector_engine_gate.md`](results/vector_engine_gate.md).
 
 ### Measuring rollout performance

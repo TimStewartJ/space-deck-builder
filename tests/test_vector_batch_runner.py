@@ -63,17 +63,21 @@ def test_vector_initialization_preserves_physical_starter_decks(setup):
     assert state.explorer_count.tolist() == [10] * 32
 
 
-def test_vector_runner_rejects_unimplemented_opponent_contract(setup):
+def test_vector_runner_accepts_all_fixed_opponent_types(setup):
     _, cards, registry = setup
-    with pytest.raises(ValueError, match="only --opponents random"):
-        VectorBatchRunner(
-            model=make_model(registry),
-            cards=cards,
-            registry=registry,
-            device=torch.device("cpu"),
-            ppo_config=PPOConfig(),
-            opponent_spec="heuristic",
-        )
+    runner = VectorBatchRunner(
+        model=make_model(registry),
+        cards=cards,
+        registry=registry,
+        device=torch.device("cpu"),
+        ppo_config=PPOConfig(),
+        opponent_spec="random:0.2,heuristic:0.5,simple:0.3",
+    )
+    assert runner.opponent_entries == [
+        ("heuristic", 0.5),
+        ("random", 0.2),
+        ("simple", 0.3),
+    ]
 
 
 def test_vector_runner_caps_threads_to_numba_configuration(setup, monkeypatch):
@@ -210,6 +214,26 @@ def test_vector_runner_collects_complete_ppo_rollouts(setup):
     wins, games = runner.opponent_results["Random"]
     assert 0 <= wins <= games
     assert games == 8
+
+
+def test_vector_runner_collects_weighted_mixed_opponents(setup):
+    _, cards, registry = setup
+    runner = VectorBatchRunner(
+        model=make_model(registry),
+        cards=cards,
+        registry=registry,
+        device=torch.device("cpu"),
+        ppo_config=PPOConfig(),
+        opponent_spec="random,heuristic,simple",
+        seed=17,
+    )
+    states, actions, old_lp, returns, advantages, masks = runner.run_episodes(24)
+    assert len(states) > 0
+    assert actions.shape == old_lp.shape == returns.shape == advantages.shape
+    assert masks.shape[0] == len(states)
+    assert set(runner.opponent_results) == {"Random", "Heuristic", "Simple"}
+    assert sum(result[1] for result in runner.opponent_results.values()) == 24
+    assert all(result[1] > 0 for result in runner.opponent_results.values())
 
 
 def test_trainer_selects_vector_runner(setup):

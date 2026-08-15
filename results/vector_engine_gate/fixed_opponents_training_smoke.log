@@ -1,0 +1,21 @@
+[13:56:05] Metrics file: logs\metrics_20260815_135605_5976.jsonl
+[13:56:05] Master seed set to 0 (random/numpy/torch).
+[13:56:06] Model has 0.28M parameters (actor: mlp, pool: sum). Action dim: 494.
+[13:56:06] Opponent pool: heuristic, random, simple
+[13:56:06] LR schedule: cosine 3.0e-04 -> 1.0e-05 over 1 updates
+[13:56:06] --- Update 1/1 (opponents: heuristic, random, simple) ---
+[13:56:13] [VectorRunner] loop=6.26s mask_obs=0.15s policy=5.95s store=0.02s opponent=0.06s step=0.07s concat=0.01s gae=0.01s transfer=0.01s iterations=611 calls=574 avg_batch=47
+[13:56:13] Rollout: 192 episodes, 27138 steps in 6.5s (29.5 ep/s) (vec 4 threads)  win_rate=23%  avg_decisions/ep=141
+[13:56:15] PPO: actor=0.000  critic=0.072  ent=0.97  kl=0.0010  clip=0.000  gnorm=0.055  ev=-0.01  lr=3.00e-04  2.6s  samples=27138
+[13:56:15] Evaluating (update 1) — 6 games × 3 opponent types
+[13:56:16]   vs heuristic: 0/2 wins (0%), avg 100 steps/game
+[13:56:16]   vs random: 1/2 wins (50%), avg 190 steps/game
+[13:56:16]   vs simple: 0/2 wins (0%), avg 118 steps/game
+[13:56:16]   Overall: 1/6 wins (17%) in 1.1s
+[13:56:16] Checkpoint saved: models/ppo_agent_0815_1356_upd1_wins1.pth
+[13:56:16] Episodes:    6.5s total, 6.5s avg/update
+[13:56:16] PPO updates: 2.6s total, 2.6s avg/update
+[13:56:16] Evaluation:  1.1s total, 1.1s avg/update
+[13:56:16] Avg PPO decision time: 0.000000s/decision
+[13:56:16] Total wall time: 10.2s
+[13:56:16] Training complete.
