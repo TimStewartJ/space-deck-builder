@@ -1,0 +1,120 @@
+# Vector Engine Gate
+
+**Date:** 2026-08-14  
+**Branch:** `perf/vec-engine-spike`  
+**Benchmark implementation:** `1337d21`
+
+## Conclusion
+
+**Gate 1 passes emphatically. Build the rules-correct vertical slice using
+Numba SPMD on CPU, with 16 threads on the i7-12700K.**
+
+The reviewed primitive workload executes the real array shapes and awkward
+operations a struct-of-arrays engine needs, but intentionally implements no
+Star Realms rules. It is a throughput ceiling and architecture gate, not an
+end-to-end training prediction.
+
+## Full gate
+
+Command was launched through `scripts/launch_vec_benchmark.ps1`, outside the
+agent process tree at Normal priority:
+
+- 16,000 concurrent games
+- 200 steps/game = 3.2M decisions/repetition
+- 5 rotated/interleaved repetitions/backend
+- exact NumPy/Numba/torch CPU/torch ROCm verification before timing
+
+The workload maintained:
+
+| branch | decisions | share |
+| --- | ---: | ---: |
+| play | 1,128,302 | 35.26% |
+| draw-card play | 92,920 | 2.90% |
+| buy | 514,209 | 16.07% |
+| attack | 144,203 | 4.51% |
+| end turn | 490,451 | 15.33% |
+| pending mode | 922,835 | 28.84% |
+| terminal resets | 6,233 | - |
+
+Results:
+
+| backend | median decisions/s | coefficient of variation | engine-only ceiling vs current |
+| --- | ---: | ---: | ---: |
+| Numba SPMD (20 threads) | **66.54M** | 3.1% | **700x** |
+| NumPy masked SIMD | 1.714M | 1.6% | 18.0x |
+| eager torch CPU | 1.149M | 2.0% | 12.1x (gate-ineligible) |
+| eager torch ROCm | 0.910M | 2.2% | 9.6x (gate-ineligible) |
+
+All backends produced the same full-state BLAKE2b digest. Verification compared
+every pre-step `[games, 494]` action mask and every final mutable array exactly
+through all modes and terminal resets.
+
+An independent NumPy/Numba reproduction produced 70.72M / 1.465M decisions/s
+with the same digest.
+
+Raw data:
+
+- [`full_gate.json`](vector_engine_gate/full_gate.json)
+- [`reproduction.json`](vector_engine_gate/reproduction.json)
+
+## Numba thread scaling
+
+Fifteen rotated/interleaved repetitions per thread count:
+
+| threads | median decisions/s | speedup | parallel efficiency |
+| ---: | ---: | ---: | ---: |
+| 1 | 13.10M | 1.00x | 100% |
+| 2 | 25.85M | 1.97x | 98.7% |
+| 4 | 51.01M | 3.90x | 97.4% |
+| 8 | 75.93M | 5.80x | 72.5% |
+| 12 | 89.00M | 6.80x | 56.6% |
+| **16** | **95.98M** | **7.33x** | 45.8% |
+| 20 | 73.21M | 5.59x | 28.0% |
+
+Use 16 threads. Twenty is materially slower. Even one Numba thread exceeds
+the 0.95M decisions/s 10x gate by roughly 14x, so the decision does not depend
+on optimistic multicore scaling.
+
+Raw data: [`numba_thread_scaling.json`](vector_engine_gate/numba_thread_scaling.json)
+
+## Exposed bottlenecks
+
+The primitive engine omitted materialization of the current 505-float policy
+observation. A 16-thread Numba prototype measured:
+
+- 22.51M observations/s
+- 0.711ms for all 16,000 observations
+
+Raw data: [`observation_ceiling.json`](vector_engine_gate/observation_ceiling.json)
+
+The current 0.28M-parameter GPU policy, including forward, legal-mask
+application, categorical sample, log-prob, and value, measured:
+
+| batch | full decisions/s | latency |
+| ---: | ---: | ---: |
+| 256 | 0.149M | 1.72ms |
+| 1,024 | 0.429M | 2.39ms |
+| 4,096 | 0.897M | 4.57ms |
+| 16,000 | **1.186M** | **13.49ms** |
+
+Raw data: [`policy_ceiling.json`](vector_engine_gate/policy_ceiling.json)
+
+Therefore engine + observation can be hidden comfortably under policy
+inference. A current ~2.2M-decision rollout has a rough lower bound near two
+seconds instead of ~22 seconds. PPO optimization still costs ~22 seconds per
+update, so unchanged end-to-end training is closer to 24-25 seconds/update
+(~1.8x), not hundreds of times faster.
+
+## Next gate
+
+Build an Effect-to-IR compiler and Numba SPMD vertical slice covering the 27
+cards without choice points plus real play, buy, attack, end turn, draw, ally
+effects, legal masks, and observation generation.
+
+Requirements:
+
+1. Compare full state against the scalar engine after every decision.
+2. Differential-test every supported card.
+3. Sustain at least 5M engine+mask+observation decisions/s at G=16,000.
+4. Demonstrate an integrated rollout that is policy-bound rather than
+   environment-bound.
