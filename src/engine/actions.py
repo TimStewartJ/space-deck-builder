@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional, List, Any
 from enum import Enum
+from src.rules.scalar import is_passive_effect
 
 if TYPE_CHECKING:
     from src.engine.player import Player
@@ -145,6 +146,8 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
             continue
         seen_cards.add(id(card))
         for effect in card.effects:
+            if is_passive_effect(effect):
+                continue
             if not effect.all_child_effects_used():
                 # Ensure faction allies are valid
                 if effect.faction_requirement:

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 from src.engine.actions import Action, ActionType, CardSource, PendingActionSet
 from src.cards.effects import CardEffectType
+from src.rules.scalar import is_passive_effect
 from src.encoding.action_encoder import END_TURN_INDEX, SKIP_INDEX
 
 if TYPE_CHECKING:
@@ -206,6 +207,8 @@ def build_action_context(
             continue
 
         for effect in card.effects:
+            if is_passive_effect(effect):
+                continue
             if effect.all_child_effects_used():
                 continue
             if effect.faction_requirement:

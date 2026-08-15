@@ -1,0 +1,140 @@
+{
+  "games": 16000,
+  "steps": 200,
+  "integrated_steps": 40,
+  "threads": 16,
+  "supported_cards": [
+    "Battle Blob",
+    "Battle Pod",
+    "Blob Carrier",
+    "Blob Destroyer",
+    "Blob Fighter",
+    "Blob Wheel",
+    "Blob World",
+    "Mothership",
+    "Ram",
+    "The Hive",
+    "Trade Pod",
+    "Battle Mech",
+    "Battle Station",
+    "Brain World",
+    "Junkyard",
+    "Machine Base",
+    "Mech World",
+    "Missile Bot",
+    "Missile Mech",
+    "Patrol Mech",
+    "Stealth Needle",
+    "Supply Bot",
+    "Trade Bot",
+    "Battlecruiser",
+    "Corvette",
+    "Dreadnaught",
+    "Fleet HQ",
+    "Imperial Fighter",
+    "Imperial Frigate",
+    "Recycling Station",
+    "Royal Redoubt",
+    "Space Station",
+    "Survey Ship",
+    "War World",
+    "Barter World",
+    "Central Office",
+    "Command Ship",
+    "Cutter",
+    "Defense Center",
+    "Embassy Yacht",
+    "Federation Shuttle",
+    "Flagship",
+    "Freighter",
+    "Port of Call",
+    "Trade Escort",
+    "Trading Post",
+    "Scout",
+    "Viper",
+    "Explorer"
+  ],
+  "supported_count": 49,
+  "action_profile": {
+    "play": 1371026,
+    "effect": 513301,
+    "buy": 174132,
+    "attack_base": 86988,
+    "attack_player": 130486,
+    "scrap": 141635,
+    "scrap_hand": 93729,
+    "scrap_discard": 108153,
+    "scrap_trade": 69586,
+    "destroy_base": 950,
+    "discard": 168994,
+    "skip": 33833,
+    "end": 307187,
+    "pending": 475245
+  },
+  "engine_mask_observation": {
+    "median_decisions_per_sec": 6528615.0216645645,
+    "minimum": 6346613.556080455,
+    "maximum": 6609229.706677253,
+    "repetitions": [
+      6528615.0216645645,
+      6532085.296778685,
+      6609229.706677253,
+      6346613.556080455,
+      6436403.00813119
+    ]
+  },
+  "engine_phase_seconds": {
+    "mask": {
+      "median": 0.18860110001151043,
+      "repetitions": [
+        0.18860110001151043,
+        0.18764630000805482,
+        0.1872183000032237,
+        0.19451030000163883,
+        0.19179260000237264
+      ]
+    },
+    "observation": {
+      "median": 0.12540510001053917,
+      "repetitions": [
+        0.12310040000375011,
+        0.12540510001053917,
+        0.12228560001312871,
+        0.12768139999025152,
+        0.12746970001899172
+      ]
+    },
+    "step": {
+      "median": 0.177357500017024,
+      "repetitions": [
+        0.17790489997969416,
+        0.17626390001896652,
+        0.17414219997954206,
+        0.1814313000140828,
+        0.177357500017024
+      ]
+    }
+  },
+  "integrated_actual_policy": {
+    "median_decisions_per_sec": 588455.0452985876,
+    "minimum": 567943.7799553167,
+    "maximum": 591736.984745028,
+    "repetitions": [
+      591736.984745028,
+      567943.7799553167,
+      578906.7544938765,
+      591550.4231574006,
+      588455.0452985876
+    ]
+  },
+  "integrated_action_profile": {
+    "play": 808831,
+    "effect": 754523,
+    "buy": 535588,
+    "attack_base": 166950,
+    "attack_player": 272378,
+    "scrap": 365162,
+    "pending": 271249,
+    "end": 25319
+  }
+}

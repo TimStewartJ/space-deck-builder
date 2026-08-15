@@ -1,4 +1,4 @@
-"""Gate 2 rules-engine, observation, and integrated-policy benchmark.
+"""Full rules-engine, observation, and integrated-policy benchmark.
 
 Run detached at Normal priority. The engine-only gate includes real compiled
 rules, legal masks, 505-float observations, and state transitions. The
@@ -8,6 +8,7 @@ actions back to the CPU engine.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import statistics
 import time
@@ -45,6 +46,8 @@ from src.vector_engine.state import (
     INSTANCE_PLAYED_THIS_TURN,
     PENDING_DESTROY_BASE,
     PENDING_DISCARD,
+    PENDING_ACQUIRE_SHIP_TOP,
+    PENDING_COPY_SHIP,
     PENDING_SCRAP,
     PENDING_TARGET_BASE,
     PENDING_TARGET_HAND,
@@ -80,6 +83,8 @@ def make_state(games, rules, registry):
     battle_pod = registry.card_index_map["Battle Pod"]
     imperial_fighter = registry.card_index_map["Imperial Fighter"]
     brain_world = registry.card_index_map["Brain World"]
+    fleet_hq = registry.card_index_map["Fleet HQ"]
+    stealth_needle = registry.card_index_map["Stealth Needle"]
     state.zones[:, :, ZONE_HAND, scout] = 2
     state.zones[:, :, ZONE_HAND, viper] = 1
     state.zones[:, :, ZONE_HAND, trade_pod] = 1
@@ -114,17 +119,33 @@ def make_state(games, rules, registry):
     state.effect_state[:, 0, trade_pod, 0] |= (
         INSTANCE_ACTIVE | INSTANCE_PLAYED_THIS_TURN
     )
+    state.instance_rule_card[:, 0, trade_pod, 0] = trade_pod
+    state.instance_faction[:, 0, trade_pod, 0] = rules.faction[trade_pod]
     for bundle in range(int(rules.bundle_count[explorer])):
         if rules.bundle_trigger[explorer, bundle] == int(EffectTrigger.SCRAP):
             state.effect_state[:, 0, explorer, 0] |= np.uint16(1 << bundle)
     state.effect_state[:, 0, explorer, 0] |= (
         INSTANCE_ACTIVE | INSTANCE_PLAYED_THIS_TURN
     )
+    state.instance_rule_card[:, 0, explorer, 0] = explorer
+    state.instance_faction[:, 0, explorer, 0] = rules.faction[explorer]
     ready_bits = int(INSTANCE_ACTIVE)
     for bundle in range(int(rules.bundle_count[blob_wheel])):
         ready_bits |= 1 << bundle
     state.effect_state[:, 0, blob_wheel, :4] = np.uint16(ready_bits)
     state.effect_state[:, 1, blob_wheel, :4] = np.uint16(ready_bits)
+    state.instance_rule_card[:, 0, blob_wheel, :4] = blob_wheel
+    state.instance_rule_card[:, 1, blob_wheel, :4] = blob_wheel
+    state.instance_faction[:, 0, blob_wheel, :4] = rules.faction[
+        blob_wheel
+    ]
+    state.instance_faction[:, 1, blob_wheel, :4] = rules.faction[
+        blob_wheel
+    ]
+    state.zones[:, 0, ZONE_BASES, fleet_hq] = 1
+    state.effect_state[:, 0, fleet_hq, 0] = INSTANCE_ACTIVE
+    state.instance_rule_card[:, 0, fleet_hq, 0] = fleet_hq
+    state.instance_faction[:, 0, fleet_hq, 0] = rules.faction[fleet_hq]
 
     supported = np.flatnonzero(rules.supported)
     game = np.arange(games)[:, None]
@@ -141,6 +162,8 @@ def make_state(games, rules, registry):
     scrap_trade = games_index % 50 == 1
     destroy = games_index % 50 == 2
     discard = games_index % 50 == 3
+    acquire = games_index % 50 == 4
+    copy_ship = games_index % 50 == 5
     for selected, mode, sources in (
         (scrap_hand, PENDING_SCRAP, SOURCE_HAND),
         (scrap_trade, PENDING_SCRAP, SOURCE_TRADE),
@@ -170,7 +193,53 @@ def make_state(games, rules, registry):
             state.pending_targets[
                 selected, 0, 0, PENDING_TARGET_HAND
             ] = state.zones[selected, 0, ZONE_HAND]
+    state.pending_mode[acquire, 0, 0] = PENDING_ACQUIRE_SHIP_TOP
+    state.pending_remaining[acquire, 0, 0] = 1
+    state.pending_mandatory[acquire, 0, 0] = True
+    state.pending_count[acquire, 0] = 1
+    state.pending_targets[
+        acquire, 0, 0, PENDING_TARGET_HAND, explorer
+    ] = 1
+
+    state.zones[copy_ship, 0, ZONE_PLAYED, stealth_needle] = 1
+    state.effect_state[
+        copy_ship, 0, stealth_needle, 0
+    ] = INSTANCE_ACTIVE | INSTANCE_PLAYED_THIS_TURN
+    state.instance_rule_card[
+        copy_ship, 0, stealth_needle, 0
+    ] = stealth_needle
+    state.instance_faction[
+        copy_ship, 0, stealth_needle, 0
+    ] = rules.faction[stealth_needle]
+    state.pending_mode[copy_ship, 0, 0] = PENDING_COPY_SHIP
+    state.pending_remaining[copy_ship, 0, 0] = 1
+    state.pending_mandatory[copy_ship, 0, 0] = True
+    state.pending_count[copy_ship, 0] = 1
+    state.pending_targets[
+        copy_ship, 0, 0, PENDING_TARGET_HAND, trade_pod
+    ] = 1
+    state.pending_source_card[
+        copy_ship, 0, 0
+    ] = stealth_needle
+    state.pending_source_instance[copy_ship, 0, 0] = 0
+
+    top_token = games_index % 50 == 6
+    state.next_ship_to_top[top_token, 0] = 1
+    ordered_top = games_index % 50 == 7
+    state.ordered_top[ordered_top, 0, 0] = scout
+    state.ordered_top_count[ordered_top, 0] = 1
     return state
+
+
+def state_digest(engine):
+    digest = hashlib.blake2b(digest_size=16)
+    for field in engine.state.__dataclass_fields__:
+        value = getattr(engine.state, field)
+        if isinstance(value, np.ndarray):
+            digest.update(value.tobytes())
+    digest.update(engine.observations.tobytes())
+    digest.update(engine.masks.tobytes())
+    return digest.hexdigest()
 
 
 def choose_actions(mask, step, num_cards):
@@ -292,11 +361,7 @@ def benchmark_engine(initial, rules, actions, repetitions):
         elapsed = time.perf_counter() - started
         samples.append(initial.games * len(actions) / elapsed)
         phase_samples.append(phases)
-        checksums.append(
-            int(engine.state.zones.sum())
-            + int(engine.observations.sum())
-            + int(engine.masks.sum())
-        )
+        checksums.append(state_digest(engine))
     if len(set(checksums)) != 1:
         raise RuntimeError(f"engine benchmark diverged: {checksums}")
     return samples, phase_samples

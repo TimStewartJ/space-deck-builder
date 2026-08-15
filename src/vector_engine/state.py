@@ -8,7 +8,7 @@ import numpy as np
 
 from src.engine.game import Game
 from src.engine.actions import ActionType, CardSource
-from src.vector_engine.rules import CompiledRules
+from src.vector_engine.rules import CompiledRules, EffectTrigger
 
 
 ZONE_HAND = 0
@@ -19,6 +19,7 @@ ZONE_BASES = 4
 NUM_ZONES = 5
 NUM_PLAYERS = 2
 MAX_CARD_INSTANCES = 16
+MAX_ORDERED_TOP = 128
 INSTANCE_ACTIVE = np.uint16(1 << 15)
 INSTANCE_PLAYED_THIS_TURN = np.uint16(1 << 14)
 MAX_PENDING_SETS = 4
@@ -26,6 +27,8 @@ PENDING_NONE = 0
 PENDING_SCRAP = 1
 PENDING_DESTROY_BASE = 2
 PENDING_DISCARD = 3
+PENDING_ACQUIRE_SHIP_TOP = 4
+PENDING_COPY_SHIP = 5
 SOURCE_HAND = 1
 SOURCE_DISCARD = 2
 SOURCE_TRADE = 4
@@ -58,6 +61,8 @@ class VectorState:
     done: np.ndarray
     winner: np.ndarray
     effect_state: np.ndarray
+    instance_rule_card: np.ndarray
+    instance_faction: np.ndarray
     pending_mode: np.ndarray
     pending_remaining: np.ndarray
     pending_sources: np.ndarray
@@ -65,9 +70,14 @@ class VectorState:
     pending_draw_on_complete: np.ndarray
     pending_resolved: np.ndarray
     pending_targets: np.ndarray
+    pending_source_card: np.ndarray
+    pending_source_instance: np.ndarray
     pending_count: np.ndarray
     pending_overflow: np.ndarray
     discard_debt: np.ndarray
+    ordered_top: np.ndarray
+    ordered_top_count: np.ndarray
+    next_ship_to_top: np.ndarray
     rng_state: np.ndarray
     hand_size: np.ndarray
     turn_cap: np.ndarray
@@ -106,6 +116,25 @@ class VectorState:
                 ),
                 dtype=np.uint16,
             ),
+            instance_rule_card=np.full(
+                (
+                    games,
+                    NUM_PLAYERS,
+                    num_cards,
+                    MAX_CARD_INSTANCES,
+                ),
+                NO_CARD,
+                dtype=np.int16,
+            ),
+            instance_faction=np.zeros(
+                (
+                    games,
+                    NUM_PLAYERS,
+                    num_cards,
+                    MAX_CARD_INSTANCES,
+                ),
+                dtype=np.int8,
+            ),
             pending_mode=np.zeros(
                 (games, NUM_PLAYERS, MAX_PENDING_SETS), dtype=np.int8
             ),
@@ -134,11 +163,32 @@ class VectorState:
                 ),
                 dtype=np.int8,
             ),
+            pending_source_card=np.full(
+                (games, NUM_PLAYERS, MAX_PENDING_SETS),
+                NO_CARD,
+                dtype=np.int16,
+            ),
+            pending_source_instance=np.full(
+                (games, NUM_PLAYERS, MAX_PENDING_SETS),
+                -1,
+                dtype=np.int8,
+            ),
             pending_count=np.zeros(
                 (games, NUM_PLAYERS), dtype=np.int8
             ),
             pending_overflow=np.zeros(games, dtype=np.bool_),
             discard_debt=np.zeros(
+                (games, NUM_PLAYERS), dtype=np.int8
+            ),
+            ordered_top=np.full(
+                (games, NUM_PLAYERS, MAX_ORDERED_TOP),
+                NO_CARD,
+                dtype=np.int16,
+            ),
+            ordered_top_count=np.zeros(
+                (games, NUM_PLAYERS), dtype=np.int16
+            ),
+            next_ship_to_top=np.zeros(
                 (games, NUM_PLAYERS), dtype=np.int8
             ),
             rng_state=(
@@ -173,14 +223,29 @@ def _player_index(game: Game, player) -> int:
     return game.players.index(player)
 
 
+def _leaf_effects(effect) -> list:
+    if effect.child_effects:
+        leaves = []
+        for child in effect.child_effects:
+            leaves.extend(_leaf_effects(child))
+        return leaves
+    return [effect]
+
+
 def _effect_instance_state(
     game: Game,
     player_index: int,
     rules: CompiledRules,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Encode ordered per-copy activation readiness for cards in play."""
     states = np.zeros(
         (rules.num_cards, MAX_CARD_INSTANCES), dtype=np.uint16
+    )
+    rule_cards = np.full(
+        (rules.num_cards, MAX_CARD_INSTANCES), NO_CARD, dtype=np.int16
+    )
+    factions = np.zeros(
+        (rules.num_cards, MAX_CARD_INSTANCES), dtype=np.int8
     )
     next_slot = np.zeros(rules.num_cards, dtype=np.int8)
     player = game.players[player_index]
@@ -203,35 +268,52 @@ def _effect_instance_state(
         value = int(INSTANCE_ACTIVE)
         if object_id in played_object_ids:
             value |= int(INSTANCE_PLAYED_THIS_TURN)
-        for bundle in range(int(rules.bundle_count[card_index])):
+        rule_card = int(card.effective_rule_card_index)
+        source_offsets: dict[int, int] = {}
+        for bundle in range(int(rules.bundle_count[rule_card])):
             source = int(
-                rules.bundle_source_effect[card_index, bundle]
+                rules.bundle_source_effect[rule_card, bundle]
             )
             if source < 0 or source >= len(card.effects):
                 continue
             effect = card.effects[source]
-            available = not effect.all_child_effects_used()
-            if effect.is_or_effect:
-                stage = int(rules.bundle_stage[card_index, bundle])
-                children = effect.child_effects or ()
-                if stage == 0:
-                    available = bool(
-                        children
-                        and not children[0].all_child_effects_used()
-                    )
-                else:
-                    available = any(
-                        not child.all_child_effects_used()
-                        for child in children[1:]
-                    )
-            if available:
+            leaves = _leaf_effects(effect)
+            offset = source_offsets.get(source, 0)
+            count = int(rules.bundle_op_count[rule_card, bundle])
+            relevant = leaves[offset : offset + count]
+            source_offsets[source] = offset + count
+            available = any(
+                not leaf.all_child_effects_used() for leaf in relevant
+            )
+            if (
+                available
+                and rules.bundle_trigger[rule_card, bundle]
+                != int(EffectTrigger.PASSIVE)
+            ):
                 value |= 1 << bundle
         states[card_index, slot] = value
+        rule_cards[card_index, slot] = rule_card
+        factions[card_index, slot] = int(card.effective_faction)
         next_slot[card_index] += 1
-    return states
+    return states, rule_cards, factions
 
 
-def _pending_state(player):
+def _active_instance_locations(player) -> dict[int, tuple[int, int]]:
+    locations: dict[int, tuple[int, int]] = {}
+    next_slot: dict[int, int] = {}
+    seen: set[int] = set()
+    for card in list(player.played_cards) + list(player.bases):
+        object_id = id(card)
+        if object_id in seen:
+            continue
+        seen.add(object_id)
+        slot = next_slot.get(card.index, 0)
+        locations[object_id] = (card.index, slot)
+        next_slot[card.index] = slot + 1
+    return locations
+
+
+def _pending_state(player, rules: CompiledRules):
     modes = np.zeros(MAX_PENDING_SETS, dtype=np.int8)
     remaining = np.zeros(MAX_PENDING_SETS, dtype=np.int8)
     sources = np.zeros(MAX_PENDING_SETS, dtype=np.int16)
@@ -239,9 +321,12 @@ def _pending_state(player):
     draw_on_complete = np.zeros(MAX_PENDING_SETS, dtype=np.bool_)
     resolved = np.zeros(MAX_PENDING_SETS, dtype=np.int8)
     targets = np.zeros(
-        (MAX_PENDING_SETS, PENDING_TARGET_GROUPS, 49),
+        (MAX_PENDING_SETS, PENDING_TARGET_GROUPS, rules.num_cards),
         dtype=np.int8,
     )
+    source_card = np.full(MAX_PENDING_SETS, NO_CARD, dtype=np.int16)
+    source_instance = np.full(MAX_PENDING_SETS, -1, dtype=np.int8)
+    locations = _active_instance_locations(player)
     if len(player.pending_action_sets) > MAX_PENDING_SETS:
         raise ValueError(
             f"{len(player.pending_action_sets)} pending sets exceed "
@@ -289,6 +374,29 @@ def _pending_state(player):
                 targets[
                     index, PENDING_TARGET_HAND, action.card_id
                 ] += 1
+        elif (
+            action_type == ActionType.BUY_CARD
+            and pending.actions[0].additional_params
+            and pending.actions[0].additional_params.get("free")
+        ):
+            modes[index] = PENDING_ACQUIRE_SHIP_TOP
+            for action in pending.actions:
+                targets[
+                    index, PENDING_TARGET_HAND, action.card_id
+                ] += 1
+        elif (
+            action_type == ActionType.APPLY_EFFECT
+            and pending.actions[0].additional_params
+            and pending.actions[0].additional_params.get("copy_source")
+            is not None
+        ):
+            modes[index] = PENDING_COPY_SHIP
+            source = pending.actions[0].additional_params["copy_source"]
+            source_card[index], source_instance[index] = locations[id(source)]
+            for action in pending.actions:
+                targets[
+                    index, PENDING_TARGET_HAND, action.card_id
+                ] += 1
         else:
             raise ValueError(f"unsupported pending action {action_type}")
     return (
@@ -299,6 +407,8 @@ def _pending_state(player):
         draw_on_complete,
         resolved,
         targets,
+        source_card,
+        source_instance,
     )
 
 
@@ -343,9 +453,11 @@ def from_games(
             state.authority_gained[
                 game_index, player_index
             ] = player.authority_gained
-            state.effect_state[
-                game_index, player_index
-            ] = _effect_instance_state(game, player_index, rules)
+            (
+                state.effect_state[game_index, player_index],
+                state.instance_rule_card[game_index, player_index],
+                state.instance_faction[game_index, player_index],
+            ) = _effect_instance_state(game, player_index, rules)
             (
                 state.pending_mode[game_index, player_index],
                 state.pending_remaining[game_index, player_index],
@@ -354,13 +466,27 @@ def from_games(
                 state.pending_draw_on_complete[game_index, player_index],
                 state.pending_resolved[game_index, player_index],
                 state.pending_targets[game_index, player_index],
-            ) = _pending_state(player)
+                state.pending_source_card[game_index, player_index],
+                state.pending_source_instance[game_index, player_index],
+            ) = _pending_state(player, rules)
             state.pending_count[game_index, player_index] = len(
                 player.pending_action_sets
             )
             state.discard_debt[
                 game_index, player_index
             ] = player.pending_start_of_turn_discards
+            state.next_ship_to_top[
+                game_index, player_index
+            ] = player.next_ship_to_top
+            if len(player.ordered_top) > MAX_ORDERED_TOP:
+                raise ValueError("ordered top-deck segment exceeds capacity")
+            state.ordered_top_count[
+                game_index, player_index
+            ] = len(player.ordered_top)
+            for position, card in enumerate(player.ordered_top):
+                state.ordered_top[
+                    game_index, player_index, position
+                ] = card.index
 
         if len(game.trade_row) > state.trade_row.shape[1]:
             raise ValueError("trade row exceeds configured width")
@@ -414,6 +540,9 @@ def canonical_scalar_snapshot(
     """
     players = []
     for player_index, player in enumerate(game.players):
+        effect_state, rule_cards, factions = _effect_instance_state(
+            game, player_index, rules
+        )
         players.append(
             {
                 "hand": _count_cards(player.hand, rules.num_cards),
@@ -429,12 +558,17 @@ def canonical_scalar_snapshot(
                 "combat": player.combat,
                 "health": player.health,
                 "authority_gained": player.authority_gained,
-                "effect_state": _effect_instance_state(
-                    game, player_index, rules
-                ),
-                "pending": _pending_state(player),
+                "effect_state": effect_state,
+                "instance_rule_card": rule_cards,
+                "instance_faction": factions,
+                "pending": _pending_state(player, rules),
                 "pending_count": len(player.pending_action_sets),
                 "discard_debt": player.pending_start_of_turn_discards,
+                "ordered_top": np.asarray(
+                    [card.index for card in player.ordered_top],
+                    dtype=np.int16,
+                ),
+                "next_ship_to_top": player.next_ship_to_top,
             }
         )
     return {
@@ -499,6 +633,12 @@ def canonical_vector_snapshot(
                 "effect_state": state.effect_state[
                     game_index, player
                 ].copy(),
+                "instance_rule_card": state.instance_rule_card[
+                    game_index, player
+                ].copy(),
+                "instance_faction": state.instance_faction[
+                    game_index, player
+                ].copy(),
                 "pending": (
                     state.pending_mode[game_index, player].copy(),
                     state.pending_remaining[game_index, player].copy(),
@@ -509,12 +649,26 @@ def canonical_vector_snapshot(
                     ].copy(),
                     state.pending_resolved[game_index, player].copy(),
                     state.pending_targets[game_index, player].copy(),
+                    state.pending_source_card[
+                        game_index, player
+                    ].copy(),
+                    state.pending_source_instance[
+                        game_index, player
+                    ].copy(),
                 ),
                 "pending_count": int(
                     state.pending_count[game_index, player]
                 ),
                 "discard_debt": int(
                     state.discard_debt[game_index, player]
+                ),
+                "ordered_top": state.ordered_top[
+                    game_index,
+                    player,
+                    : state.ordered_top_count[game_index, player],
+                ].copy(),
+                "next_ship_to_top": int(
+                    state.next_ship_to_top[game_index, player]
                 ),
             }
         )
@@ -570,9 +724,13 @@ def assert_canonical_equal(
             "health",
             "authority_gained",
             "effect_state",
+            "instance_rule_card",
+            "instance_faction",
             "pending",
             "pending_count",
             "discard_debt",
+            "ordered_top",
+            "next_ship_to_top",
         ):
             left = scalar["players"][player][key]
             right = vector["players"][player][key]

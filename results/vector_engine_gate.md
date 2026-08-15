@@ -195,3 +195,41 @@ Therefore the next performance work is not more simulation optimization. It
 is the compute-budget pilot plus bounded/streamed rollout and PPO storage.
 
 Raw log: [`two_update_smoke.log`](vector_engine_gate/two_update_smoke.log)
+
+## Authoritative Rule IR / physical Core Set gate
+
+ADR 0005 removes the scalar effect-type switch and implements the formerly
+absent physical rules for Blob Carrier, Brain World, Mech World, Stealth
+Needle, Fleet HQ, Central Office, and Freighter in both engines.
+
+The detached 16,000-game benchmark includes free acquisition, copy selection,
+ordered top-deck draws, next-ship-top tokens, and Fleet HQ passives. Five
+repetitions produced:
+
+| path | median decisions/s | range |
+| --- | ---: | ---: |
+| engine + legal mask + observation | **6.53M** | 6.35M-6.61M |
+| integrated actual GPU policy | **588k** | 568k-592k |
+
+The expanded engine remains above the 5M gate and about 11.1x faster than the
+integrated policy path. Every repetition produced the same BLAKE2b digest over
+all mutable SoA arrays, masks, and observations.
+
+Raw artifacts:
+
+- [`rule_ir_v1_gate.json`](vector_engine_gate/rule_ir_v1_gate.json)
+- [`rule_ir_v1_gate.log`](vector_engine_gate/rule_ir_v1_gate.log)
+
+Detached one-update ROCm CLI smokes used the same seed, 64 episodes, and random
+opponent:
+
+| engine | rollout | PPO | decisions |
+| --- | ---: | ---: | ---: |
+| vector | 5.6s | 2.3s | 11,393 |
+| object | 10.1s | 2.1s | 10,829 |
+
+Both paths completed evaluation and checkpoint serialization successfully;
+the disposable smoke checkpoints were then removed.
+
+- [`rule_ir_v1_vector_training_smoke.log`](vector_engine_gate/rule_ir_v1_vector_training_smoke.log)
+- [`rule_ir_v1_object_training_smoke.log`](vector_engine_gate/rule_ir_v1_object_training_smoke.log)

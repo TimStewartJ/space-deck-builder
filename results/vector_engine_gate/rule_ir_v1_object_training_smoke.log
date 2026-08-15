@@ -1,0 +1,18 @@
+[10:38:15] Metrics file: logs\metrics_20260815_103815_28700.jsonl
+[10:38:15] Master seed set to 0 (random/numpy/torch).
+[10:38:16] Model has 0.28M parameters (actor: mlp, pool: sum). Action dim: 494.
+[10:38:16] Opponent pool: random
+[10:38:16] LR schedule: cosine 3.0e-04 -> 1.0e-05 over 1 updates
+[10:38:16] --- Update 1/1 (opponents: random) ---
+[10:38:26] Rollout: 64 episodes, 10829 steps in 10.1s (6.3 ep/s)  win_rate=42%  avg_decisions/ep=169
+[10:38:29] PPO: actor=0.002  critic=0.063  ent=0.96  kl=0.0003  clip=0.000  gnorm=0.041  ev=-0.01  lr=3.00e-04  2.1s  samples=10829
+[10:38:29] Evaluating (update 1) — 2 games × 1 opponent types
+[10:38:29]   vs random: 0/2 wins (0%), avg 158 steps/game
+[10:38:29]   Overall: 0/2 wins (0%) in 0.3s
+[10:38:29] Checkpoint saved: models/ppo_agent_0815_1038_upd1_wins0.pth
+[10:38:29] Episodes:    10.1s total, 10.1s avg/update
+[10:38:29] PPO updates: 2.1s total, 2.1s avg/update
+[10:38:29] Evaluation:  0.3s total, 0.3s avg/update
+[10:38:29] Avg PPO decision time: 0.000000s/decision
+[10:38:29] Total wall time: 12.6s
+[10:38:29] Training complete.

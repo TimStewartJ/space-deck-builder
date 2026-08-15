@@ -17,6 +17,8 @@ class Card:
         self.index: int = index
         self.cost: int = cost
         self.effects: List[Effect] = effects
+        self._printed_effects: List[Effect] = [effect.clone() for effect in effects]
+        self._is_copying: bool = False
         # Accept string for backward compatibility, normalize to CardType enum
         if isinstance(card_type, str):
             card_type = CardType(card_type)
@@ -37,6 +39,8 @@ class Card:
             self.faction = parse_faction(faction)
         else:
             self.faction = Faction(faction)
+        self.effective_faction: Faction = self.faction
+        self.effective_rule_card_index: int = self.index
         self.set: str | None = set  # The set the card comes from (e.g. "Core Set", "Colony Wars", etc.)
         # Override for ally-counting: Faction.NONE=use card faction, Faction.ALL=all factions
         # Accepts list of strings or "*" for backward compat.
@@ -73,7 +77,7 @@ class Card:
             name=self.name,
             index=self.index,
             cost=self.cost,
-            effects=[e.clone() for e in self.effects],
+            effects=[e.clone() for e in self._printed_effects],
             card_type=self.card_type,
             defense=self.defense,
             faction=self.faction,
@@ -83,8 +87,21 @@ class Card:
 
     def reset_effects(self):
         """Reset all effects at end of turn"""
-        for effect in self.effects:
-            effect.reset()
+        if self._is_copying:
+            self.effects = [effect.clone() for effect in self._printed_effects]
+            self.effective_faction = self.faction
+            self.effective_rule_card_index = self.index
+            self._is_copying = False
+        else:
+            for effect in self.effects:
+                effect.reset()
+
+    def copy_ship_rules(self, target: 'Card'):
+        """Adopt another ship's rules and faction for the rest of the turn."""
+        self.effects = [effect.clone() for effect in target.effects]
+        self.effective_faction = self.faction | target.effective_faction
+        self.effective_rule_card_index = target.effective_rule_card_index
+        self._is_copying = True
 
     def __str__(self):
         info = [f"{self.set} {self.name} ({self.cost} cost)"]

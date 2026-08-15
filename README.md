@@ -122,12 +122,15 @@ pickle, a pipe write, an unpickle and a staging copy per decision — about
 4.7 GB per update, all funnelled through the single server thread. Masks stay
 `uint8` end to end because the sampling path only compares them.
 
-### Compiler-backed vector engine (Gate 2)
+### Compiler-backed vector engine
 
 `src/vector_engine/` is a rules-correct experimental replacement for the
 worker/IPC path. It compiles all 49 canonical cards from the existing
 declarative `Effect` trees to fixed-width opcode tables consumed by a Numba
-SPMD engine, including pending target choices and continuation effects.
+SPMD engine, including pending target choices, continuation effects, ordered
+top-deck placement, passive triggers, and per-copy rules for Stealth Needle.
+The same versioned Rule IR drives the scalar interpreter, so the object and
+vector engines no longer maintain separate effect-type implementations.
 
 The scalar engine remains the oracle: tests compare every legal mask and
 505-float observation before each action, then every canonical state field
@@ -138,6 +141,7 @@ Use `train --engine vec --opponents random` for the guarded end-to-end path;
 object remains the default and other opponent types fail explicitly. See
 [`docs/decisions/0003-compiler-backed-numba-vector-engine.md`](docs/decisions/0003-compiler-backed-numba-vector-engine.md)
 and [`docs/decisions/0004-complete-vector-engine-and-training-path.md`](docs/decisions/0004-complete-vector-engine-and-training-path.md)
+and [`docs/decisions/0005-authoritative-rule-ir-and-core-fidelity.md`](docs/decisions/0005-authoritative-rule-ir-and-core-fidelity.md)
 and [`results/vector_engine_gate.md`](results/vector_engine_gate.md).
 
 ### Measuring rollout performance

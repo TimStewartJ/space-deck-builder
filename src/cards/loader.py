@@ -5,7 +5,7 @@ from typing import List
 from .effects_parser import parse_effect_text
 from src.utils.logger import log
 from .card import Card, CardType
-from .effects import Effect
+from .effects import CardEffectType, Effect
 from .factions import Faction, parse_faction
 
 def load_trade_deck_cards(file_path=None, filter_names=None, filter_sets=None, log_cards=True) -> list[Card]:
@@ -93,9 +93,9 @@ def load_trade_deck_cards(file_path=None, filter_names=None, filter_sets=None, l
                 set=row['Set']
             )
 
-            # Detect ally_factions from effect text (e.g. Mech World)
+            # Mech World contributes one wildcard ally without changing faction.
             for effect in effects:
-                if effect.effect_type.name == "COMPLEX" and "counts as an ally for all factions" in effect.text.lower():
+                if effect.effect_type == CardEffectType.WILDCARD_ALLY:
                     card.ally_factions = Faction.ALL
                     break
 

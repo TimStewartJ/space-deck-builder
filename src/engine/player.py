@@ -13,6 +13,7 @@ class Player:
         self.name: str = name
         self.hand: List[Card] = []
         self.deck: List[Card] = []
+        self.ordered_top: List[Card] = []
         self.discard_pile: List[Card] = []
         self.bases: List[Card] = []
         self.played_cards: List[Card] = []
@@ -31,6 +32,7 @@ class Player:
         # actions at the start of this player's next turn so that the
         # player (not the attacker) chooses which cards to discard.
         self.pending_start_of_turn_discards: int = 0
+        self.next_ship_to_top: int = 0
         # Cached faction ally counts — updated incrementally on card play,
         # reset on end_turn. Maps Faction bit → count of cards contributing.
         self._faction_counts: dict[Faction, int] = {}
@@ -49,6 +51,10 @@ class Player:
                 
         if self.deck:
             card = self.deck.pop()
+            if self.ordered_top:
+                expected = self.ordered_top.pop()
+                if expected is not card:
+                    raise RuntimeError("ordered top-deck state is inconsistent")
             self.hand.append(card)
             return card
         return None
@@ -64,6 +70,11 @@ class Player:
             self._update_faction_counts_for_card(card)
             return True
         return False
+
+    def put_on_top(self, card):
+        """Place an acquired card above every card currently in the deck."""
+        self.deck.append(card)
+        self.ordered_top.append(card)
 
     def _update_faction_counts_for_card(self, card):
         """Incrementally update faction counts when a card enters play."""
@@ -81,10 +92,16 @@ class Player:
                 return [Faction.ALL]
             # Return each individual faction bit
             return [f for f in Faction if f in card.ally_factions and f != Faction.NONE and f != Faction.ALL]
-        if not card.faction:
+        if not card.effective_faction:
             return []
         # Return each individual faction bit from the card's faction bitmask
-        return [f for f in Faction if f in card.faction and f != Faction.NONE and f != Faction.ALL]
+        return [
+            f
+            for f in Faction
+            if f in card.effective_faction
+            and f != Faction.NONE
+            and f != Faction.ALL
+        ]
 
     def _rebuild_faction_counts(self):
         """Full rebuild of faction counts from played_cards + bases."""
@@ -130,6 +147,7 @@ class Player:
                 
         self.played_cards = []
         self.reset_pending_actions()
+        self.next_ship_to_top = 0
 
         # Reset base effects so they're available again next turn
         for base in self.bases:
@@ -150,6 +168,7 @@ class Player:
 
     def shuffle_deck(self):
         import random
+        self.ordered_top = []
         random.shuffle(self.deck)
     
     def add_pending_actions(self, actions: List[Action], decisions_left: int, mandatory: bool,
