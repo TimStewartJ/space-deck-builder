@@ -81,6 +81,10 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                    help="Self-play ratio schedule: linear (default), constant, or cosine ramp")
     p.add_argument("--num-workers", type=int, default=_run.num_workers,
                    help=f"Simulation worker processes (1=single-process, >1=multi-process, default: {_run.num_workers})")
+    p.add_argument("--engine", choices=["object", "vec"], default=_run.engine,
+                   help="Rollout engine: object (default) or compiler-backed Numba vec")
+    p.add_argument("--vec-threads", type=int, default=_run.vec_threads,
+                   help=f"Numba threads for --engine vec (default: {_run.vec_threads})")
     p.add_argument("--num-concurrent", type=int, default=None,
                    help="Concurrent games per worker (default: episodes/workers)")
     p.add_argument("--pfsp", type=str, default=_run.pfsp_mode,
@@ -296,6 +300,8 @@ def _run_train(args):
         model_cfg_kwargs["critic_head_sizes"] = list(args.critic_head_sizes)
     model_cfg = ModelConfig(**model_cfg_kwargs)
     run_cfg = RunConfig(
+        engine=args.engine,
+        vec_threads=args.vec_threads,
         episodes=args.episodes, updates=args.updates,
         eval_every=args.eval_every, eval_games=args.eval_games,
         self_play=args.self_play,

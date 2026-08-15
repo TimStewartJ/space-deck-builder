@@ -1,0 +1,56 @@
+{
+  "baseline_decisions_per_sec": 95000,
+  "games": 16000,
+  "repetitions": 5,
+  "results": {
+    "numba": {
+      "ceiling_vs_current": 744.4007974264324,
+      "decisions_per_sec": 70718075.75551108,
+      "digest": "ff0550f10fa14b4987e0f725a9807fbb88e91c155091869122db339636cf2542",
+      "execution_model": "compiled-spmd",
+      "gate_eligible": true,
+      "gate_verdict": "PROCEED",
+      "repetitions": [
+        70718075.75551108,
+        61943836.29511281,
+        51222291.9442303,
+        77986961.55956462,
+        74668657.8308252
+      ],
+      "step_ms": 0.22625050001806812
+    },
+    "numpy": {
+      "ceiling_vs_current": 15.418273921320859,
+      "decisions_per_sec": 1464736.0225254816,
+      "digest": "ff0550f10fa14b4987e0f725a9807fbb88e91c155091869122db339636cf2542",
+      "execution_model": "array-simd",
+      "gate_eligible": true,
+      "gate_verdict": "PROCEED",
+      "repetitions": [
+        1431776.626739183,
+        1391601.0613777284,
+        1464736.0225254816,
+        1521100.3716142012,
+        1549672.1499069922
+      ],
+      "step_ms": 10.923470000016096
+    }
+  },
+  "skipped": {},
+  "steps": 200,
+  "verification_digest": "ad960a8163e242b4884ab7e2b98fb136903146ffe82e7f019911fe71df93feb3",
+  "workload_profile": {
+    "attacks": 144203,
+    "buys": 514209,
+    "decisions": 3200000,
+    "draw_plays": 92920,
+    "end_turns": 490451,
+    "mode_1": 487468,
+    "mode_2": 93153,
+    "mode_3": 258903,
+    "mode_4": 83311,
+    "pending_modes": 922835,
+    "plays": 1128302,
+    "resets": 6233
+  }
+}

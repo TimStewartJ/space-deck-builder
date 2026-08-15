@@ -186,6 +186,8 @@ class PPOConfig:
 @dataclass
 class RunConfig:
     """Training run topology and schedule."""
+    engine: str = "object"
+    vec_threads: int = 4
     episodes: int = 16000
     updates: int = 200
     num_workers: int = 20
@@ -214,8 +216,18 @@ class RunConfig:
     lr_horizon: int | None = None
 
     _VALID_SCHEDULES = {"constant", "linear", "cosine"}
+    _VALID_ENGINES = {"object", "vec"}
 
     def __post_init__(self):
+        if self.engine not in self._VALID_ENGINES:
+            raise ValueError(
+                f"Unknown engine {self.engine!r}. "
+                f"Valid: {', '.join(sorted(self._VALID_ENGINES))}"
+            )
+        if self.vec_threads <= 0:
+            raise ValueError(
+                f"vec_threads must be positive, got {self.vec_threads}"
+            )
         if self.self_play_schedule not in self._VALID_SCHEDULES:
             raise ValueError(
                 f"Unknown self_play_schedule {self.self_play_schedule!r}. "

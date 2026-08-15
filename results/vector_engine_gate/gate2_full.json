@@ -1,0 +1,77 @@
+{
+  "games": 16000,
+  "steps": 200,
+  "integrated_steps": 40,
+  "threads": 16,
+  "supported_cards": [
+    "Battle Blob",
+    "Blob Carrier",
+    "Blob Fighter",
+    "Blob Wheel",
+    "Mothership",
+    "Ram",
+    "The Hive",
+    "Trade Pod",
+    "Battle Station",
+    "Mech World",
+    "Stealth Needle",
+    "Corvette",
+    "Dreadnaught",
+    "Fleet HQ",
+    "Space Station",
+    "War World",
+    "Central Office",
+    "Cutter",
+    "Embassy Yacht",
+    "Federation Shuttle",
+    "Flagship",
+    "Freighter",
+    "Trade Escort",
+    "Scout",
+    "Viper",
+    "Explorer"
+  ],
+  "supported_count": 26,
+  "action_profile": {
+    "play": 1866665,
+    "effect": 74063,
+    "buy": 243036,
+    "attack_base": 56549,
+    "attack_player": 336972,
+    "scrap": 165542,
+    "end": 457173
+  },
+  "engine_mask_observation": {
+    "median_decisions_per_sec": 7306393.139590653,
+    "minimum": 6624585.36819613,
+    "maximum": 7490270.256019648,
+    "repetitions": [
+      7353502.151329358,
+      7490270.256019648,
+      7161121.198752222,
+      7306393.139590653,
+      6624585.36819613
+    ]
+  },
+  "integrated_actual_policy": {
+    "median_decisions_per_sec": 542367.7334596,
+    "minimum": 538489.8221218423,
+    "maximum": 546468.8506350422,
+    "repetitions": [
+      542607.7201359245,
+      538489.8221218423,
+      542367.7334596,
+      546468.8506350422,
+      541009.4001218296
+    ]
+  },
+  "integrated_action_profile": {
+    "play": 805912,
+    "effect": 601097,
+    "buy": 784626,
+    "attack_base": 118332,
+    "attack_player": 342327,
+    "scrap": 463746,
+    "end": 83960
+  }
+}

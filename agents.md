@@ -129,6 +129,17 @@ Shipping arrays through `mp.Queue` instead cost a pickle, pipe write, unpickle
 and staging copy per decision — roughly 4.7 GB per update, all serialised
 through the single server thread.
 
+### Compiler-backed vector engine (experimental)
+`src/vector_engine/` compiles all 49 canonical cards from the existing `Effect`
+trees into fixed-width opcode tables and runs the rules in one 16-thread Numba
+SPMD process, including pending target choices and continuation effects.
+
+Correctness is differential: scalar and vector legal masks/observations match
+before every action, and complete canonical state matches afterward. Gate 2
+measured 5.88M engine+mask+observation decisions/s and 587k/s with the actual
+GPU policy, so rollouts are policy-bound. `train --engine vec` is guarded to
+the random opponent; object remains the default.
+
 ### Diagnosing a slow rollout
 `scripts/bench_rollout.py` reports decisions/sec plus a per-phase breakdown of
 the server (`idle drain stage h2d kernel sync dispatch`) and the workers
@@ -152,6 +163,11 @@ Read it this way:
 - `src/ppo/mp_sim_worker.py` — Worker game loop, pipelined submit/collect
 - `src/ppo/mp_inference_server.py` — Batched GPU inference server
 - `src/ppo/shared_io.py` — Shared-memory transport for the inference round trip
+- `src/vector_engine/rules.py` — Effect-to-IR compiler and scalar IR interpreter
+- `src/vector_engine/state.py` — SoA state and scalar canonical conversion
+- `src/vector_engine/kernels.py` — Numba rules, masks, observations, and wrapper
+- `src/vector_engine/differential.py` — Per-step scalar/vector oracle
+- `src/vector_engine/policy.py` — Actual PPO policy integration
 - `src/ppo/opponent_pool.py` — Fixed opponents, self-play snapshots, PFSP weighting
 - `src/ppo/elo_tournament.py` — Cross-play Elo tournaments
 - `src/ppo/ppo_actor_critic.py` — Actor-Critic neural network

@@ -1,0 +1,88 @@
+{
+  "baseline_decisions_per_sec": 95000,
+  "games": 16000,
+  "repetitions": 5,
+  "results": {
+    "numba": {
+      "ceiling_vs_current": 700.4585377469859,
+      "decisions_per_sec": 66543561.08596367,
+      "digest": "ff0550f10fa14b4987e0f725a9807fbb88e91c155091869122db339636cf2542",
+      "execution_model": "compiled-spmd",
+      "gate_eligible": true,
+      "gate_verdict": "PROCEED",
+      "repetitions": [
+        66543561.08596367,
+        67921805.02119575,
+        65838067.15350724,
+        62882823.75292352,
+        67773779.59792486
+      ],
+      "step_ms": 0.24044399997364962
+    },
+    "numpy": {
+      "ceiling_vs_current": 18.041739298865394,
+      "decisions_per_sec": 1713965.2333922125,
+      "digest": "ff0550f10fa14b4987e0f725a9807fbb88e91c155091869122db339636cf2542",
+      "execution_model": "array-simd",
+      "gate_eligible": true,
+      "gate_verdict": "PROCEED",
+      "repetitions": [
+        1743915.3974321948,
+        1668523.5073804199,
+        1717567.6794118364,
+        1698155.871708752,
+        1713965.2333922125
+      ],
+      "step_ms": 9.335078500007512
+    },
+    "torch-cpu": {
+      "ceiling_vs_current": 12.09037550400516,
+      "decisions_per_sec": 1148585.67288049,
+      "digest": "ff0550f10fa14b4987e0f725a9807fbb88e91c155091869122db339636cf2542",
+      "execution_model": "eager",
+      "gate_eligible": false,
+      "gate_verdict": "EAGER ONLY",
+      "repetitions": [
+        1176911.886924682,
+        1183790.5921813296,
+        1148585.67288049,
+        1135342.8357491493,
+        1133640.6444193001
+      ],
+      "step_ms": 13.930175499990582
+    },
+    "torch-cuda": {
+      "ceiling_vs_current": 9.578890754179088,
+      "decisions_per_sec": 909994.6216470135,
+      "digest": "ff0550f10fa14b4987e0f725a9807fbb88e91c155091869122db339636cf2542",
+      "execution_model": "eager",
+      "gate_eligible": false,
+      "gate_verdict": "EAGER ONLY",
+      "repetitions": [
+        892043.4518831756,
+        921536.3889241328,
+        873231.3415494513,
+        909994.6216470135,
+        913760.1716504921
+      ],
+      "step_ms": 17.582521500007715
+    }
+  },
+  "skipped": {},
+  "steps": 200,
+  "verification_digest": "ad960a8163e242b4884ab7e2b98fb136903146ffe82e7f019911fe71df93feb3",
+  "workload_profile": {
+    "attacks": 144203,
+    "buys": 514209,
+    "decisions": 3200000,
+    "draw_plays": 92920,
+    "end_turns": 490451,
+    "mode_1": 487468,
+    "mode_2": 93153,
+    "mode_3": 258903,
+    "mode_4": 83311,
+    "pending_modes": 922835,
+    "plays": 1128302,
+    "resets": 6233
+  }
+}

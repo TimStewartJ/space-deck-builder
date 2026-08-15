@@ -1,0 +1,24 @@
+[22:56:34] Metrics file: logs\metrics_20260814_225634_28700.jsonl
+[22:56:34] Master seed set to 0 (random/numpy/torch).
+[22:56:35] Model has 0.28M parameters (actor: mlp, pool: sum). Action dim: 494.
+[22:56:35] Opponent pool: random
+[22:56:35] LR schedule: cosine 3.0e-04 -> 1.0e-05 over 2 updates
+[22:56:35] --- Update 1/2 (opponents: random) ---
+[22:57:54] [VectorRunner] loop=67.50s mask_obs=7.57s policy=52.28s store=2.38s opponent=3.48s step=1.55s concat=3.65s gae=0.08s transfer=6.76s iterations=1193 calls=1144 avg_batch=2409
+[22:57:55] Rollout: 16000 episodes, 2755492 steps in 80.6s (198.5 ep/s) (vec 4 threads)  win_rate=52%  avg_decisions/ep=172
+[23:00:05] PPO: actor=-0.002  critic=0.028  ent=0.99  kl=0.0035  clip=0.017  gnorm=0.298  ev=-0.00  lr=3.00e-04  129.9s  samples=2755492
+[23:00:05] Checkpoint saved: models/ppo_agent_0814_2300_upd1_wins-1.pth
+[23:00:06] --- Update 2/2 (opponents: random) ---
+[23:00:34] [VectorRunner] loop=22.80s mask_obs=5.88s policy=11.69s store=1.46s opponent=2.49s step=1.06s concat=1.50s gae=0.05s transfer=0.62s iterations=1110 calls=1041 avg_batch=2625
+[23:00:35] Rollout: 16000 episodes, 2732721 steps in 29.2s (547.7 ep/s) (vec 4 threads)  win_rate=62%  avg_decisions/ep=171
+[23:01:18] PPO: actor=-0.002  critic=0.022  ent=0.98  kl=0.0030  clip=0.010  gnorm=0.125  ev=0.68  lr=1.00e-05  42.6s  samples=2732721
+[23:01:18] Evaluating (update 2) — 50 games × 1 opponent types
+[23:01:22]   vs random: 34/50 wins (68%), avg 175 steps/game
+[23:01:22]   Overall: 34/50 wins (68%) in 4.8s
+[23:01:22] Checkpoint saved: models/ppo_agent_0814_2301_upd2_wins34.pth
+[23:01:23] Episodes:    109.8s total, 54.9s avg/update
+[23:01:23] PPO updates: 172.6s total, 86.3s avg/update
+[23:01:23] Evaluation:  4.8s total, 2.4s avg/update
+[23:01:23] Avg PPO decision time: 0.000000s/decision
+[23:01:23] Total wall time: 287.9s
+[23:01:23] Training complete.

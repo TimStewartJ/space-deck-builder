@@ -122,6 +122,24 @@ pickle, a pipe write, an unpickle and a staging copy per decision — about
 4.7 GB per update, all funnelled through the single server thread. Masks stay
 `uint8` end to end because the sampling path only compares them.
 
+### Compiler-backed vector engine (Gate 2)
+
+`src/vector_engine/` is a rules-correct experimental replacement for the
+worker/IPC path. It compiles all 49 canonical cards from the existing
+declarative `Effect` trees to fixed-width opcode tables consumed by a Numba
+SPMD engine, including pending target choices and continuation effects.
+
+The scalar engine remains the oracle: tests compare every legal mask and
+505-float observation before each action, then every canonical state field
+afterward. The final detached full-card 16,000-game gate measured 5.88M
+decisions/s for engine + masks + observations and 587k/s with the actual PPO
+policy.
+Use `train --engine vec --opponents random` for the guarded end-to-end path;
+object remains the default and other opponent types fail explicitly. See
+[`docs/decisions/0003-compiler-backed-numba-vector-engine.md`](docs/decisions/0003-compiler-backed-numba-vector-engine.md)
+and [`docs/decisions/0004-complete-vector-engine-and-training-path.md`](docs/decisions/0004-complete-vector-engine-and-training-path.md)
+and [`results/vector_engine_gate.md`](results/vector_engine_gate.md).
+
 ### Measuring rollout performance
 
 `scripts/bench_rollout.py` runs a short training and prints decisions/sec
@@ -133,10 +151,10 @@ and how much of their time was spent blocked):
 uv run --extra rocm python scripts/bench_rollout.py --updates 3
 ```
 
-Judge changes against the "vs April code, today" figure it reports. The
-absolute April 2026 number is not currently reachable on the reference
-machine — re-running that exact commit measures roughly 3x slower than it did
-then, for reasons outside this codebase — so the script prints both.
+Always launch performance measurements outside automation/agent process trees.
+The same rollout measured about 3.7x slower as a child of the agent runtime
+despite Normal process priority. The Task Scheduler launchers under `scripts/`
+avoid that inherited execution context.
 
 ### Project Structure
 
