@@ -17,6 +17,7 @@ from src.vector_engine.differential import (
     assert_masks_equal,
 )
 from src.vector_engine.kernels import (
+    BUY_OFFSET,
     EFFECT_NONSCRAP_OFFSET,
     EFFECT_SCRAP_OFFSET,
     MAX_FORCED_DRAWS,
@@ -229,6 +230,168 @@ def test_multiple_identical_ally_effects_are_consumed_one_copy_at_a_time():
     )
     assert not context.mask[effect_index]
     assert not engine.build_masks()[0, effect_index]
+
+
+def test_blob_carrier_free_topdeck_acquisition_matches_scalar():
+    game, _, carrier = _controlled_pair("Blob Carrier")
+    player = game.current_player
+    player.played_cards = []
+    ally = _template("Trade Pod").clone()
+    target = _template("Battle Blob").clone()
+    player.hand.append(ally)
+    game.trade_row = [target]
+    engine = VectorEngine(
+        from_games([game], RULES, training_players=[0]), RULES
+    )
+
+    for card in (ally, carrier):
+        context = build_action_context(
+            game,
+            player,
+            REGISTRY.card_index_map,
+            get_action_space_size(REGISTRY.card_names),
+        )
+        _step_pair(
+            game,
+            engine,
+            PLAY_OFFSET + card.index,
+            context.resolvers[PLAY_OFFSET + card.index],
+        )
+    effect_index = EFFECT_NONSCRAP_OFFSET + carrier.index
+    context = build_action_context(
+        game,
+        player,
+        REGISTRY.card_index_map,
+        get_action_space_size(REGISTRY.card_names),
+    )
+    _step_pair(game, engine, effect_index, context.resolvers[effect_index])
+    buy_index = BUY_OFFSET + target.index
+    context = build_action_context(
+        game,
+        player,
+        REGISTRY.card_index_map,
+        get_action_space_size(REGISTRY.card_names),
+    )
+    _step_pair(game, engine, buy_index, context.resolvers[buy_index])
+    assert player.ordered_top == [target]
+
+
+def test_stealth_needle_full_copy_lifecycle_matches_scalar():
+    game, _, needle = _controlled_pair("Stealth Needle")
+    player = game.current_player
+    ram = _template("Ram").clone()
+    player.hand.append(ram)
+    engine = VectorEngine(
+        from_games([game], RULES, training_players=[0]), RULES
+    )
+
+    for card in (ram, needle):
+        context = build_action_context(
+            game,
+            player,
+            REGISTRY.card_index_map,
+            get_action_space_size(REGISTRY.card_names),
+        )
+        _step_pair(
+            game,
+            engine,
+            PLAY_OFFSET + card.index,
+            context.resolvers[PLAY_OFFSET + card.index],
+        )
+    context = build_action_context(
+        game,
+        player,
+        REGISTRY.card_index_map,
+        get_action_space_size(REGISTRY.card_names),
+    )
+    copy_index = EFFECT_NONSCRAP_OFFSET + ram.index
+    _step_pair(game, engine, copy_index, context.resolvers[copy_index])
+
+    ally_index = EFFECT_NONSCRAP_OFFSET + needle.index
+    context = build_action_context(
+        game,
+        player,
+        REGISTRY.card_index_map,
+        get_action_space_size(REGISTRY.card_names),
+    )
+    _step_pair(game, engine, ally_index, context.resolvers[ally_index])
+    scrap_index = EFFECT_SCRAP_OFFSET + needle.index
+    context = build_action_context(
+        game,
+        player,
+        REGISTRY.card_index_map,
+        get_action_space_size(REGISTRY.card_names),
+    )
+    _step_pair(game, engine, scrap_index, context.resolvers[scrap_index])
+    assert needle not in player.played_cards
+    assert ram in player.played_cards
+
+
+def test_fleet_hq_later_ship_trigger_matches_scalar():
+    game, _, fleet = _controlled_pair("Fleet HQ")
+    player = game.current_player
+    scout = _starter("Scout")
+    player.hand.append(scout)
+    engine = VectorEngine(
+        from_games([game], RULES, training_players=[0]), RULES
+    )
+
+    for card in (fleet, scout):
+        context = build_action_context(
+            game,
+            player,
+            REGISTRY.card_index_map,
+            get_action_space_size(REGISTRY.card_names),
+        )
+        _step_pair(
+            game,
+            engine,
+            PLAY_OFFSET + card.index,
+            context.resolvers[PLAY_OFFSET + card.index],
+        )
+    assert player.combat == 1
+
+
+def test_central_office_ship_topdeck_token_matches_scalar():
+    game, _, office = _controlled_pair("Central Office")
+    player = game.current_player
+    target = _template("Trade Pod").clone()
+    game.trade_row = [target]
+    engine = VectorEngine(
+        from_games([game], RULES, training_players=[0]), RULES
+    )
+
+    context = build_action_context(
+        game,
+        player,
+        REGISTRY.card_index_map,
+        get_action_space_size(REGISTRY.card_names),
+    )
+    _step_pair(
+        game,
+        engine,
+        PLAY_OFFSET + office.index,
+        context.resolvers[PLAY_OFFSET + office.index],
+    )
+    effect_index = EFFECT_NONSCRAP_OFFSET + office.index
+    context = build_action_context(
+        game,
+        player,
+        REGISTRY.card_index_map,
+        get_action_space_size(REGISTRY.card_names),
+    )
+    _step_pair(game, engine, effect_index, context.resolvers[effect_index])
+    player.trade = 10
+    engine.state.trade[0, 0] = 10
+    buy_index = BUY_OFFSET + target.index
+    context = build_action_context(
+        game,
+        player,
+        REGISTRY.card_index_map,
+        get_action_space_size(REGISTRY.card_names),
+    )
+    _step_pair(game, engine, buy_index, context.resolvers[buy_index])
+    assert player.ordered_top == [target]
 
 
 def test_scrapping_one_duplicate_preserves_survivors_effects():

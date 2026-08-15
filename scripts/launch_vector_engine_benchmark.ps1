@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Launch the Gate 2 rules-engine benchmark outside the caller's process tree.
+    Launch the full vector rules-engine benchmark outside the caller's process tree.
 
 .DESCRIPTION
     Uses Windows Task Scheduler at Normal priority and emits timestamped log
@@ -30,9 +30,9 @@ $logDir = Join-Path $Repo "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss_fff"
 $runId = [guid]::NewGuid().ToString("N").Substring(0, 8)
-$taskName = if ($Name) { $Name } else { "sdb_gate2_$stamp`_$runId" }
-$log = Join-Path $logDir "gate2_$stamp.log"
-$json = Join-Path $logDir "gate2_$stamp.json"
+$taskName = if ($Name) { $Name } else { "sdb_rules_$stamp`_$runId" }
+$log = Join-Path $logDir "rules_$stamp.log"
+$json = Join-Path $logDir "rules_$stamp.json"
 
 if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
     throw "Scheduled task '$taskName' already exists."
@@ -53,7 +53,7 @@ $inner = (
 
 if (-not $PSCmdlet.ShouldProcess(
     $taskName,
-    "Register and start detached Gate 2 vector-engine benchmark"
+    "Register and start detached full vector-engine benchmark"
 )) {
     Write-Host "Would execute via cmd.exe:"
     Write-Host "  $inner"

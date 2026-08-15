@@ -1,6 +1,6 @@
 # 0003 - Compile declarative effects to a Numba SPMD engine
 
-**Status:** Accepted for Gate 2 (2026-08-14)
+**Status:** Accepted for Gate 2 (2026-08-14), superseded in part by ADR 0005
 **Context branch:** `feat/vector-engine-gate2`
 
 ## Context

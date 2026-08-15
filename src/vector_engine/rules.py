@@ -11,60 +11,32 @@ current scalar-engine behavior.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import IntEnum
-
 import numpy as np
 
 from src.cards.card import Card, CardType
 from src.cards.effects import CardEffectType, Effect
 from src.cards.factions import Faction, parse_faction
 from src.cards.registry import CardRegistry
+from src.rules.ir import (
+    EffectOpcode,
+    EffectTrigger,
+    PENDING_DRAW_ON_COMPLETE,
+    PENDING_MANDATORY,
+    TARGET_DISCARD,
+    TARGET_HAND,
+    TARGET_TRADE,
+    compile_effect_op,
+    compile_effect_trigger,
+    effect_defaults_to_auto,
+)
 
 
 MAX_BUNDLES = 8
 MAX_OPS = 16
 MAX_PENDING_PER_ACTIVATION = 4
 PENDING_DOMAIN_BASE = 1 << 3
-
-
-class EffectOpcode(IntEnum):
-    NOP = 0
-    ADD_TRADE = 1
-    ADD_COMBAT = 2
-    ADD_HEALTH = 3
-    DRAW = 4
-    DRAW_PER_FACTION = 5
-    DRAW_IF_BASES_GE_2 = 6
-    QUEUE_SCRAP = 7
-    ADD_DISCARD_DEBT = 8
-    QUEUE_DESTROY_BASE = 9
-    QUEUE_SCRAP_DRAW = 10
-    QUEUE_DISCARD_DRAW = 11
-
-
-class EffectTrigger(IntEnum):
-    AUTO = 1
-    ALLY = 2
-    SCRAP = 3
-    ACTIVATE = 4
-
-
-TARGET_HAND = 1
-TARGET_DISCARD = 2
-TARGET_TRADE = 4
-PENDING_MANDATORY = 1 << 8
-PENDING_DRAW_ON_COMPLETE = 1 << 9
-
-_AUTO_EFFECT_TYPES = frozenset(
-    {
-        CardEffectType.COMBAT,
-        CardEffectType.TRADE,
-        CardEffectType.HEAL,
-        CardEffectType.DRAW,
-        CardEffectType.TARGET_DISCARD,
-        CardEffectType.PARENT,
-    }
-)
+PENDING_DOMAIN_MARKET = 1 << 4
+PENDING_DOMAIN_PLAYED = 1 << 5
 
 
 @dataclass(frozen=True)
@@ -158,59 +130,7 @@ def _templates_by_name(
 
 
 def _opcode(effect: Effect) -> tuple[EffectOpcode, int, int]:
-    kind = effect.effect_type
-    if kind == CardEffectType.COMBAT:
-        return EffectOpcode.ADD_COMBAT, effect.value, 0
-    if kind == CardEffectType.TRADE:
-        return EffectOpcode.ADD_TRADE, effect.value, 0
-    if kind == CardEffectType.HEAL:
-        return EffectOpcode.ADD_HEALTH, effect.value, 0
-    if kind == CardEffectType.DRAW:
-        return EffectOpcode.DRAW, effect.value, 0
-    if kind == CardEffectType.DRAW_PER_FACTION:
-        faction = (
-            int(parse_faction(effect.faction_target))
-            if effect.faction_target
-            else int(Faction.NONE)
-        )
-        return EffectOpcode.DRAW_PER_FACTION, 0, faction
-    if kind == CardEffectType.CONDITIONAL_DRAW:
-        if effect.text != "bases_ge_2":
-            raise ValueError(
-                f"unsupported conditional draw condition {effect.text!r}"
-            )
-        return EffectOpcode.DRAW_IF_BASES_GE_2, effect.value, 2
-    if kind == CardEffectType.SCRAP:
-        sources = 0
-        for target in effect.card_targets or ():
-            if target == "hand":
-                sources |= TARGET_HAND
-            elif target == "discard":
-                sources |= TARGET_DISCARD
-            elif target == "trade":
-                sources |= TARGET_TRADE
-            else:
-                raise ValueError(f"unsupported scrap target {target!r}")
-        if effect.is_mandatory:
-            sources |= PENDING_MANDATORY
-        return EffectOpcode.QUEUE_SCRAP, effect.value, sources
-    if kind == CardEffectType.TARGET_DISCARD:
-        if effect.card_targets and "opponent" not in effect.card_targets:
-            raise ValueError("target discard must target opponent")
-        return EffectOpcode.ADD_DISCARD_DEBT, effect.value, 0
-    if kind == CardEffectType.DESTROY_BASE:
-        flags = PENDING_MANDATORY if effect.is_mandatory else 0
-        return EffectOpcode.QUEUE_DESTROY_BASE, effect.value, flags
-    if kind == CardEffectType.SCRAP_FROM_HAND_DISCARD:
-        flags = TARGET_HAND | TARGET_DISCARD | PENDING_DRAW_ON_COMPLETE
-        return EffectOpcode.QUEUE_SCRAP_DRAW, effect.value, flags
-    if kind == CardEffectType.DISCARD_DRAW:
-        flags = TARGET_HAND | PENDING_DRAW_ON_COMPLETE
-        return EffectOpcode.QUEUE_DISCARD_DRAW, effect.value, flags
-    if kind == CardEffectType.COMPLEX:
-        # The object engine intentionally treats COMPLEX as an applied no-op.
-        return EffectOpcode.NOP, 0, 0
-    raise ValueError(f"unsupported effect type {kind.value}")
+    return compile_effect_op(effect)
 
 
 def _effective_gate(
@@ -221,19 +141,13 @@ def _effective_gate(
     inherited_requirement: int,
     inherited_auto: bool,
 ) -> tuple[EffectTrigger, int, int]:
-    faction_name = effect.faction_requirement or inherited_faction
-    requirement = (
-        effect.faction_requirement_count
-        if effect.faction_requirement
-        else inherited_requirement
+    return compile_effect_trigger(
+        effect,
+        inherited_scrap=inherited_scrap,
+        inherited_faction=inherited_faction,
+        inherited_requirement=inherited_requirement,
+        inherited_auto=inherited_auto,
     )
-    if effect.is_scrap_effect or inherited_scrap:
-        return EffectTrigger.SCRAP, int(Faction.NONE), 0
-    if faction_name:
-        return EffectTrigger.ALLY, int(parse_faction(faction_name)), requirement
-    if inherited_auto:
-        return EffectTrigger.AUTO, int(Faction.NONE), 0
-    return EffectTrigger.ACTIVATE, int(Faction.NONE), 0
 
 
 def _flatten(
@@ -261,8 +175,7 @@ def _flatten(
         inherited_requirement = effect.faction_requirement_count
     if inherited_auto is None:
         inherited_auto = (
-            effect.effect_type in _AUTO_EFFECT_TYPES
-            and not effect.is_or_effect
+            effect_defaults_to_auto(effect)
         )
     if inherited_scrap and inherited_faction:
         raise ValueError(
@@ -290,13 +203,6 @@ def _flatten(
                 raise ValueError(
                     "nested or scrap OR children are unsupported"
                 )
-        parent_gate = _effective_gate(
-            effect,
-            inherited_scrap=inherited_scrap,
-            inherited_faction=inherited_faction,
-            inherited_requirement=inherited_requirement,
-            inherited_auto=inherited_auto,
-        )
         leaves: list[_Leaf] = []
         children = effect.child_effects or ()
         for child_index, child in enumerate(children):
@@ -316,15 +222,6 @@ def _flatten(
                     stage=child_stage,
                     inside_or=inside_or or effect.is_or_effect,
                 )
-            )
-        gates = {
-            (leaf.trigger, leaf.faction, leaf.requirement)
-            for leaf in leaves
-        }
-        if gates != {parent_gate}:
-            raise ValueError(
-                "mixed-gate parent effects cannot preserve atomic "
-                "Effect.apply semantics"
             )
         return leaves
 
@@ -377,6 +274,10 @@ def _pending_domain(leaf: _Leaf) -> int:
         return TARGET_HAND
     if leaf.opcode == EffectOpcode.QUEUE_DESTROY_BASE:
         return PENDING_DOMAIN_BASE
+    if leaf.opcode == EffectOpcode.QUEUE_ACQUIRE_SHIP_TOP:
+        return PENDING_DOMAIN_MARKET
+    if leaf.opcode == EffectOpcode.QUEUE_COPY_SHIP:
+        return PENDING_DOMAIN_PLAYED
     return 0
 
 
@@ -470,6 +371,8 @@ def compile_rules(
                 EffectOpcode.QUEUE_DESTROY_BASE,
                 EffectOpcode.QUEUE_SCRAP_DRAW,
                 EffectOpcode.QUEUE_DISCARD_DRAW,
+                EffectOpcode.QUEUE_ACQUIRE_SHIP_TOP,
+                EffectOpcode.QUEUE_COPY_SHIP,
             }
             auto_queues = sum(
                 leaf.opcode in queue_opcodes
@@ -477,11 +380,16 @@ def compile_rules(
                 if bundle[0].trigger == EffectTrigger.AUTO
                 for leaf in bundle
             )
+            explicit_groups: dict[tuple[int, int], list[_Leaf]] = {}
+            for source_effect, bundle in bundles_with_source:
+                if bundle[0].trigger != EffectTrigger.AUTO:
+                    explicit_groups.setdefault(
+                        (source_effect, bundle[0].stage), []
+                    ).extend(bundle)
             max_explicit_queues = max(
                 (
-                    sum(leaf.opcode in queue_opcodes for leaf in bundle)
-                    for _, bundle in bundles_with_source
-                    if bundle[0].trigger != EffectTrigger.AUTO
+                    sum(leaf.opcode in queue_opcodes for leaf in leaves)
+                    for leaves in explicit_groups.values()
                 ),
                 default=0,
             )
@@ -498,9 +406,8 @@ def compile_rules(
                     for leaf in bundle
                 ]
             )
-            for _, bundle in bundles_with_source:
-                if bundle[0].trigger != EffectTrigger.AUTO:
-                    _validate_disjoint_pending_domains(bundle)
+            for leaves in explicit_groups.values():
+                _validate_disjoint_pending_domains(leaves)
         except ValueError as exc:
             reasons[index] = str(exc)
             continue

@@ -111,6 +111,7 @@ def test_trade_row_scrap_pending_refills_on_completion():
     game.trade_deck.append(refill)
     engine = make_engine(game)
     step_pair(game, engine, OFFSETS["play_card"] + card.index)
+    step_pair(game, engine, EFFECT_NONSCRAP_OFFSET + card.index)
     assert game.current_player.pending_action_sets
     step_pair(game, engine, OFFSETS["scrap_trade"] + target.index)
     assert not game.current_player.pending_action_sets
@@ -155,6 +156,7 @@ def test_scrap_draw_completion_draws_resolved_count():
     )
     engine = make_engine(game)
     step_pair(game, engine, OFFSETS["play_card"] + card.index)
+    step_pair(game, engine, EFFECT_NONSCRAP_OFFSET + card.index)
     for _ in range(2):
         target = game.current_player.hand[0]
         step_pair(game, engine, OFFSETS["scrap_hand"] + target.index)
@@ -170,6 +172,7 @@ def test_pending_source_snapshot_and_skip_preserve_resolved_draw():
     game.current_player.discard_pile.append(discard_target)
     engine = make_engine(game)
     step_pair(game, engine, OFFSETS["play_card"] + card.index)
+    step_pair(game, engine, EFFECT_NONSCRAP_OFFSET + card.index)
     step_pair(game, engine, OFFSETS["scrap_hand"] + hand_target.index)
 
     scalar_pending = game.current_player.pending_action_sets[0]

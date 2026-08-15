@@ -122,12 +122,39 @@ def parse_effect_text(text: str) -> Effect:
         return Effect(CardEffectType.DESTROY_BASE, 1, text, faction_requirement, is_scrap,
                       is_ally, faction_requirement_count, is_mandatory=False)
 
-    # Detect "counts as an ally for all factions" (e.g. Mech World).
-    # Returns a COMPLEX effect with marker text; the loader sets ally_factions on the Card.
+    # Mech World contributes one wildcard ally without changing its faction.
     if "counts as an ally for all factions" in text.lower():
-        return Effect(CardEffectType.COMPLEX, 0, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)
+        return Effect(CardEffectType.WILDCARD_ALLY, 0, text, faction_requirement, is_scrap, is_ally, faction_requirement_count)
 
     # --- Precompiled complex effects (no runtime text parsing) ---
+
+    if text == "Acquire any ship for free and put it on top of your deck":
+        return Effect(
+            CardEffectType.ACQUIRE_SHIP_TOP,
+            1,
+            text,
+            faction_requirement=faction_requirement,
+            is_scrap_effect=is_scrap,
+            is_ally_effect=is_ally,
+            faction_requirement_count=faction_requirement_count,
+        )
+
+    if "put the next ship you acquire this turn on top of your deck" in text:
+        return Effect(
+            CardEffectType.NEXT_SHIP_TOP,
+            1,
+            text,
+            faction_requirement=faction_requirement,
+            is_scrap_effect=is_scrap,
+            is_ally_effect=is_ally,
+            faction_requirement_count=faction_requirement_count,
+        )
+
+    if text.startswith("Copy another ship you've played this turn"):
+        return Effect(CardEffectType.COPY_SHIP, 1, text)
+
+    if "Whenever you play a ship, gain {1 Combat}" in text:
+        return Effect(CardEffectType.PASSIVE_SHIP_COMBAT, 1, text)
 
     # "Draw a card for each <Faction> card" (e.g. Blob World)
     draw_per_faction = re.search(r"Draw a card for each (\w+) card", text)

@@ -30,13 +30,14 @@ def test_four_games_match_after_every_decision(setup):
         games,
         rules,
         registry,
-        max_steps=250,
+        max_steps=1500,
     )
     assert result.steps >= 100
     assert result.action_counts["play"] > 0
     assert result.action_counts["buy"] > 0
     assert result.action_counts["end"] > 0
     assert result.action_counts["attack_player"] > 0
+    assert result.games_completed == 4
 
 
 def test_same_seed_has_reproducible_trace_summary(setup):

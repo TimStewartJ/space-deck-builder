@@ -1,6 +1,10 @@
 """Effect-object to vector-rule IR compiler tests."""
 from __future__ import annotations
 
+import hashlib
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -14,6 +18,7 @@ from src.vector_engine.rules import (
     apply_bundle_to_totals,
     compile_rules,
 )
+from src.rules.ir import RULE_IR_VERSION
 
 
 @pytest.fixture(scope="module")
@@ -46,6 +51,68 @@ def _bundles(rules, card_name):
         }
         for bundle in range(int(rules.bundle_count[card]))
     ]
+
+
+def _rule_ir_digest(rules):
+    cards = []
+    for card in range(rules.num_cards):
+        bundles = []
+        for bundle in range(int(rules.bundle_count[card])):
+            start = int(rules.bundle_op_start[card, bundle])
+            count = int(rules.bundle_op_count[card, bundle])
+            bundles.append(
+                {
+                    "trigger": int(rules.bundle_trigger[card, bundle]),
+                    "faction": int(rules.bundle_faction[card, bundle]),
+                    "requirement": int(
+                        rules.bundle_requirement[card, bundle]
+                    ),
+                    "source": int(
+                        rules.bundle_source_effect[card, bundle]
+                    ),
+                    "stage": int(rules.bundle_stage[card, bundle]),
+                    "next": int(rules.bundle_next[card, bundle]),
+                    "ops": [
+                        [
+                            int(rules.op_code[card, operation]),
+                            int(rules.op_value[card, operation]),
+                            int(rules.op_arg[card, operation]),
+                        ]
+                        for operation in range(start, start + count)
+                    ],
+                }
+            )
+        cards.append(
+            {
+                "name": rules.card_names[card],
+                "cost": int(rules.cost[card]),
+                "type": int(rules.card_type[card]),
+                "defense": int(rules.defense[card]),
+                "faction": int(rules.faction[card]),
+                "ally_factions": int(rules.ally_factions[card]),
+                "bundles": bundles,
+            }
+        )
+    payload = json.dumps(
+        {"version": RULE_IR_VERSION, "cards": cards},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def test_core_set_rule_ir_matches_versioned_golden_snapshot(compiled):
+    _, _, rules = compiled
+    fixture = json.loads(
+        (
+            Path(__file__).parent
+            / "fixtures"
+            / "core_set_rule_ir_v1.json"
+        ).read_text()
+    )
+    assert fixture["version"] == RULE_IR_VERSION
+    assert fixture["card_count"] == rules.num_cards
+    assert fixture["sha256"] == _rule_ir_digest(rules)
 
 
 def test_compiles_canonical_width_and_metadata(compiled):
@@ -99,17 +166,58 @@ def test_parent_children_remain_one_auto_bundle(compiled):
     assert bundles[1]["ops"] == [(EffectOpcode.DRAW, 1, 0)]
 
 
-def test_complex_effects_compile_to_current_noop_semantics(compiled):
+def test_mech_world_compiles_as_passive_wildcard_ally(compiled):
     _, _, rules = compiled
     bundles = _bundles(rules, "Mech World")
     assert bundles == [
         {
-            "trigger": EffectTrigger.ACTIVATE,
+            "trigger": EffectTrigger.PASSIVE,
             "faction": 0,
             "requirement": 0,
-            "ops": [(EffectOpcode.NOP, 0, 0)],
+            "ops": [(EffectOpcode.WILDCARD_ALLY, 0, 15)],
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("card_name", "opcode", "trigger"),
+    [
+        (
+            "Blob Carrier",
+            EffectOpcode.QUEUE_ACQUIRE_SHIP_TOP,
+            EffectTrigger.ALLY,
+        ),
+        (
+            "Central Office",
+            EffectOpcode.ADD_NEXT_SHIP_TOP,
+            EffectTrigger.ACTIVATE,
+        ),
+        (
+            "Freighter",
+            EffectOpcode.ADD_NEXT_SHIP_TOP,
+            EffectTrigger.ALLY,
+        ),
+        (
+            "Stealth Needle",
+            EffectOpcode.QUEUE_COPY_SHIP,
+            EffectTrigger.AUTO,
+        ),
+        (
+            "Fleet HQ",
+            EffectOpcode.PASSIVE_SHIP_COMBAT,
+            EffectTrigger.PASSIVE,
+        ),
+    ],
+)
+def test_physical_complex_effects_have_explicit_ir(
+    compiled, card_name, opcode, trigger
+):
+    _, _, rules = compiled
+    assert any(
+        bundle["trigger"] == trigger
+        and any(operation[0] == opcode for operation in bundle["ops"])
+        for bundle in _bundles(rules, card_name)
+    )
 
 
 def test_explorer_scrap_bundle_is_separate(compiled):
@@ -407,7 +515,7 @@ def test_faction_gated_scrap_fails_closed(compiled):
     assert "faction-gated scrap" in rules.unsupported_reason[original.index]
 
 
-def test_mixed_gate_parent_fails_closed(compiled):
+def test_mixed_gate_parent_compiles_independent_trigger_bundles(compiled):
     cards, registry, _ = compiled
     original = cards[0]
     synthetic = Card(
@@ -431,8 +539,12 @@ def test_mixed_gate_parent_fails_closed(compiled):
         faction="Blob",
     )
     rules = compile_rules([synthetic, *cards], registry)
-    assert not rules.supported[original.index]
-    assert "mixed-gate parent" in rules.unsupported_reason[original.index]
+    assert rules.supported[original.index]
+    bundles = _bundles(rules, original.name)
+    assert [bundle["trigger"] for bundle in bundles] == [
+        EffectTrigger.AUTO,
+        EffectTrigger.ALLY,
+    ]
 
 
 def test_nested_different_faction_gates_fail_closed(compiled):

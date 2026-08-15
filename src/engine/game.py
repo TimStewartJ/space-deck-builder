@@ -240,10 +240,22 @@ class Game:
                 self.stats.record_card_play(self.current_player.name)
                 if _log_enabled:
                     log(f"{self.current_player.name} played {card.name}", v=True)
+                self._apply_ship_play_passives(card)
                 # Apply the newly played card's own auto-applicable effects,
                 # plus any other cards in play with unapplied simple effects
                 # (e.g. bases whose effects reset each turn).
                 self._apply_auto_effects(card)
+
+        elif (
+            action.type == ActionType.APPLY_EFFECT
+            and action.additional_params
+            and action.additional_params.get("copy_source") is not None
+        ):
+            source = action.additional_params["copy_source"]
+            target = action.additional_params["copy_target"]
+            source.copy_ship_rules(target)
+            self.current_player.invalidate_faction_cache()
+            self._apply_auto_effects(source)
 
         elif action.type == ActionType.APPLY_EFFECT and action.card_effect is not None:
             # Resolve source card for scrap-from-play effects
@@ -259,25 +271,33 @@ class Game:
 
         elif action.type == ActionType.BUY_CARD:
             card = action.card
+            params = action.additional_params or {}
+            free = bool(params.get("free"))
+            force_top = params.get("destination") == "top"
+            acquired = False
             if card is not None:
                 # Validate affordability (defense in depth — action generation
                 # already filters, but crafted actions could bypass it)
-                if self.current_player.trade < card.cost:
+                if not free and self.current_player.trade < card.cost:
                     return False
                 # Direct reference path — check if it's an explorer or trade row card
                 if self.explorer_pile and card is self.explorer_pile[-1]:
                     self.explorer_pile.pop()
-                    self.current_player.trade -= card.cost
-                    self.current_player.discard_pile.append(card)
+                    if not free:
+                        self.current_player.trade -= card.cost
+                    self._place_acquired_card(card, force_top)
                     self.stats.record_card_buy(self.current_player.name)
                     if _log_enabled:
                         log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
-                    return False
+                    acquired = True
                 # Find in trade row by identity
-                for i, tr_card in enumerate(self.trade_row):
-                    if tr_card is card:
-                        self.current_player.trade -= card.cost
-                        self.current_player.discard_pile.append(card)
+                if not acquired:
+                    for i, tr_card in enumerate(self.trade_row):
+                        if tr_card is not card:
+                            continue
+                        if not free:
+                            self.current_player.trade -= card.cost
+                        self._place_acquired_card(card, force_top)
                         self.stats.record_card_buy(self.current_player.name)
                         if _log_enabled:
                             log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
@@ -288,36 +308,46 @@ class Game:
                             self.stats.trade_row_refreshes += 1
                             if _log_enabled:
                                 log(f"Added {new_card.name} to trade row", v=True)
-                        return False
+                        acquired = True
+                        break
             # Fallback: index-based scan
             explorer_idx = self.card_index_map.get("Explorer") if self.card_index_map else None
-            if action.card_id is not None and action.card_id == explorer_idx:
+            if (
+                not acquired
+                and action.card_id is not None
+                and action.card_id == explorer_idx
+            ):
                 if self.explorer_pile:
                     card = self.explorer_pile.pop()
-                    if self.current_player.trade < card.cost:
+                    if not free and self.current_player.trade < card.cost:
                         self.explorer_pile.append(card)
                         return False
-                    self.current_player.trade -= card.cost
-                    self.current_player.discard_pile.append(card)
+                    if not free:
+                        self.current_player.trade -= card.cost
+                    self._place_acquired_card(card, force_top)
                     self.stats.record_card_buy(self.current_player.name)
                     if _log_enabled:
                         log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
-                    return False
-            for i, card in enumerate(self.trade_row):
-                if card.index == action.card_id and self.current_player.trade >= card.cost:
-                    self.current_player.trade -= card.cost
-                    self.current_player.discard_pile.append(card)
-                    self.stats.record_card_buy(self.current_player.name)
-                    if _log_enabled:
-                        log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
-                    self.trade_row.pop(i)
-                    if self.trade_deck:
-                        new_card = self.trade_deck.pop()
-                        self.trade_row.append(new_card)
-                        self.stats.trade_row_refreshes += 1
+                    acquired = True
+            if not acquired:
+                for i, card in enumerate(self.trade_row):
+                    if card.index == action.card_id and (
+                        free or self.current_player.trade >= card.cost
+                    ):
+                        if not free:
+                            self.current_player.trade -= card.cost
+                        self._place_acquired_card(card, force_top)
+                        self.stats.record_card_buy(self.current_player.name)
                         if _log_enabled:
-                            log(f"Added {new_card.name} to trade row", v=True)
-                    break
+                            log(f"{self.current_player.name} bought {card.name} for {card.cost} trade", v=True)
+                        self.trade_row.pop(i)
+                        if self.trade_deck:
+                            new_card = self.trade_deck.pop()
+                            self.trade_row.append(new_card)
+                            self.stats.trade_row_refreshes += 1
+                            if _log_enabled:
+                                log(f"Added {new_card.name} to trade row", v=True)
+                        break
 
         elif action.type == ActionType.ATTACK_BASE:
             # Use direct card reference when available
@@ -496,16 +526,6 @@ class Game:
 
         return False  # Turn continues
 
-    # Set of effect types that can be auto-applied without player choice
-    _AUTO_APPLY_TYPES = frozenset((
-        CardEffectType.COMBAT,
-        CardEffectType.TRADE,
-        CardEffectType.HEAL,
-        CardEffectType.DRAW,
-        CardEffectType.TARGET_DISCARD,
-        CardEffectType.PARENT,
-    ))
-
     def _apply_auto_effects(self, played_card):
         """Apply simple auto-applicable effects on the played card and any
         other cards in play with unapplied effects (e.g. bases whose effects
@@ -515,16 +535,42 @@ class Game:
         (require a choice), and ally-gated effects (surfaced as APPLY_EFFECT).
         The applied guard in Effect.apply() prevents double-application.
         """
+        from src.rules.ir import effect_defaults_to_auto
+
         for pc in self.current_player.played_cards:
             for effect in pc.effects:
                 if (
-                    effect.effect_type in self._AUTO_APPLY_TYPES
+                    effect_defaults_to_auto(effect)
                     and not effect.applied
                     and not effect.is_or_effect
                     and not effect.is_scrap_effect
                     and not effect.faction_requirement
                 ):
-                    effect.apply(self, self.current_player, pc)
+                    effect.apply(
+                        self, self.current_player, pc, auto_only=True
+                    )
+
+    def _apply_ship_play_passives(self, played_card):
+        if played_card.card_type != CardType.SHIP:
+            return
+        for base in self.current_player.bases:
+            for effect in base.effects:
+                if effect.effect_type == CardEffectType.PASSIVE_SHIP_COMBAT:
+                    self.current_player.combat += effect.value
+
+    def _place_acquired_card(self, card, force_top=False):
+        top = force_top
+        if (
+            not top
+            and card.card_type == CardType.SHIP
+            and self.current_player.next_ship_to_top > 0
+        ):
+            self.current_player.next_ship_to_top -= 1
+            top = True
+        if top:
+            self.current_player.put_on_top(card)
+        else:
+            self.current_player.discard_pile.append(card)
 
     def play(self):
         self.start_game()
