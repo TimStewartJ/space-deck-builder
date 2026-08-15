@@ -125,17 +125,19 @@ pickle, a pipe write, an unpickle and a staging copy per decision — about
 ### Compiler-backed vector engine (Gate 2)
 
 `src/vector_engine/` is a rules-correct experimental replacement for the
-worker/IPC path, not yet the training default. It compiles the existing
+worker/IPC path. It compiles all 49 canonical cards from the existing
 declarative `Effect` trees to fixed-width opcode tables consumed by a Numba
-SPMD engine. The compiler currently supports 26 canonical cards and rejects
-target-selection, pending, and OR effects explicitly.
+SPMD engine, including pending target choices and continuation effects.
 
 The scalar engine remains the oracle: tests compare every legal mask and
 505-float observation before each action, then every canonical state field
-afterward. The detached 16,000-game Gate 2 measured 7.31M decisions/s for
-engine + masks + observations and 542k/s with the actual PPO policy, making the
-supported slice policy-bound. See
+afterward. The final detached full-card 16,000-game gate measured 5.88M
+decisions/s for engine + masks + observations and 587k/s with the actual PPO
+policy.
+Use `train --engine vec --opponents random` for the guarded end-to-end path;
+object remains the default and other opponent types fail explicitly. See
 [`docs/decisions/0003-compiler-backed-numba-vector-engine.md`](docs/decisions/0003-compiler-backed-numba-vector-engine.md)
+and [`docs/decisions/0004-complete-vector-engine-and-training-path.md`](docs/decisions/0004-complete-vector-engine-and-training-path.md)
 and [`results/vector_engine_gate.md`](results/vector_engine_gate.md).
 
 ### Measuring rollout performance

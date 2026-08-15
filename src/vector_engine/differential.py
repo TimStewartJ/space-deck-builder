@@ -20,10 +20,16 @@ from src.vector_engine.kernels import (
     ATTACK_BASE_OFFSET,
     ATTACK_PLAYER_INDEX,
     BUY_OFFSET,
+    DESTROY_BASE_OFFSET,
+    DISCARD_OFFSET,
     EFFECT_NONSCRAP_OFFSET,
     EFFECT_SCRAP_OFFSET,
     MAX_FORCED_DRAWS,
     PLAY_OFFSET,
+    SCRAP_DISCARD_OFFSET,
+    SCRAP_HAND_OFFSET,
+    SCRAP_TRADE_OFFSET,
+    SKIP_INDEX,
     VectorEngine,
 )
 from src.vector_engine.rules import CompiledRules
@@ -68,14 +74,16 @@ def make_supported_game(
 def _capture_scalar_step(
     game: Game,
     action: Action,
-) -> tuple[list[int], int]:
+) -> tuple[list[int], list[int]]:
     """Apply one scalar action and capture nondeterministic outputs.
 
     The vector engine consumes the realized draw/refill card ids, making the
     state transition exact without changing the scalar engine's global RNG.
     """
     drawn: list[int] = []
+    refills: list[int] = []
     original_draw = Player.draw_card
+    original_fill = Game.fill_trade_row
 
     def recording_draw(player):
         card = original_draw(player)
@@ -83,21 +91,29 @@ def _capture_scalar_step(
             drawn.append(int(card.index))
         return card
 
-    refill = NO_CARD
+    def recording_fill(target_game):
+        before = len(target_game.trade_row)
+        original_fill(target_game)
+        refills.extend(
+            int(card.index) for card in target_game.trade_row[before:]
+        )
+
     if (
         action.type == ActionType.BUY_CARD
         and action.card is not None
         and action.card in game.trade_row
         and game.trade_deck
     ):
-        refill = int(game.trade_deck[-1].index)
+        refills.append(int(game.trade_deck[-1].index))
 
     Player.draw_card = recording_draw
+    Game.fill_trade_row = recording_fill
     try:
         game.apply_decision(action)
     finally:
         Player.draw_card = original_draw
-    return drawn, refill
+        Game.fill_trade_row = original_fill
+    return drawn, refills
 
 
 def _action_group(index: int, num_cards: int) -> str:
@@ -113,6 +129,18 @@ def _action_group(index: int, num_cards: int) -> str:
         return "effect"
     if EFFECT_SCRAP_OFFSET <= index < EFFECT_SCRAP_OFFSET + num_cards:
         return "scrap"
+    if SCRAP_HAND_OFFSET <= index < SCRAP_HAND_OFFSET + num_cards:
+        return "scrap_hand"
+    if SCRAP_DISCARD_OFFSET <= index < SCRAP_DISCARD_OFFSET + num_cards:
+        return "scrap_discard"
+    if SCRAP_TRADE_OFFSET <= index < SCRAP_TRADE_OFFSET + num_cards:
+        return "scrap_trade"
+    if DESTROY_BASE_OFFSET <= index < DESTROY_BASE_OFFSET + num_cards:
+        return "destroy_base"
+    if DISCARD_OFFSET <= index < DISCARD_OFFSET + num_cards:
+        return "discard"
+    if index == SKIP_INDEX:
+        return "skip"
     return "end"
 
 
@@ -130,6 +158,12 @@ def choose_differential_action(
         "attack_base",
         "attack_player",
         "scrap",
+        "scrap_hand",
+        "scrap_discard",
+        "scrap_trade",
+        "destroy_base",
+        "discard",
+        "skip",
         "end",
     )
     start = step % len(groups)
@@ -188,7 +222,9 @@ def run_differential_trace(
             (len(games), MAX_FORCED_DRAWS), NO_CARD, dtype=np.int16
         )
         forced_draw_count = np.zeros(len(games), dtype=np.int8)
-        forced_refill = np.full(len(games), NO_CARD, dtype=np.int16)
+        forced_refill = np.full(
+            (len(games), 8), NO_CARD, dtype=np.int16
+        )
         active = False
 
         for game_index, game in enumerate(games):
@@ -239,14 +275,18 @@ def run_differential_trace(
             actions[game_index] = action_index
             group = _action_group(action_index, rules.num_cards)
             action_counts[group] = action_counts.get(group, 0) + 1
-            drawn, refill = _capture_scalar_step(game, action)
+            drawn, refills = _capture_scalar_step(game, action)
             if len(drawn) > MAX_FORCED_DRAWS:
                 raise AssertionError(
                     f"{len(drawn)} draws exceed tape capacity"
                 )
             forced_draws[game_index, : len(drawn)] = drawn
             forced_draw_count[game_index] = len(drawn)
-            forced_refill[game_index] = refill
+            if len(refills) > forced_refill.shape[1]:
+                raise AssertionError(
+                    f"{len(refills)} refills exceed tape capacity"
+                )
+            forced_refill[game_index, : len(refills)] = refills
 
         if not active:
             break
@@ -260,10 +300,16 @@ def run_differential_trace(
         steps_run += 1
 
         for game_index, game in enumerate(games):
-            assert_canonical_equal(
-                canonical_scalar_snapshot(game, rules),
-                canonical_vector_snapshot(engine.state, game_index),
-            )
+            try:
+                assert_canonical_equal(
+                    canonical_scalar_snapshot(game, rules),
+                    canonical_vector_snapshot(engine.state, game_index),
+                )
+            except AssertionError as exc:
+                raise AssertionError(
+                    f"state divergence game={game_index} step={step} "
+                    f"action={int(actions[game_index])}: {exc}"
+                ) from exc
 
     completed = sum(game.is_game_over for game in games)
     return DifferentialResult(

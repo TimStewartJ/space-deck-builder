@@ -25,10 +25,16 @@ from src.vector_engine.kernels import (
     ATTACK_BASE_OFFSET,
     ATTACK_PLAYER_INDEX,
     BUY_OFFSET,
+    DESTROY_BASE_OFFSET,
+    DISCARD_OFFSET,
     EFFECT_NONSCRAP_OFFSET,
     EFFECT_SCRAP_OFFSET,
     END_TURN_INDEX,
     PLAY_OFFSET,
+    SCRAP_DISCARD_OFFSET,
+    SCRAP_HAND_OFFSET,
+    SCRAP_TRADE_OFFSET,
+    SKIP_INDEX,
     VectorEngine,
     configure_numba_threads,
 )
@@ -37,6 +43,14 @@ from src.vector_engine.rules import compile_rules
 from src.vector_engine.state import (
     INSTANCE_ACTIVE,
     INSTANCE_PLAYED_THIS_TURN,
+    PENDING_DESTROY_BASE,
+    PENDING_DISCARD,
+    PENDING_SCRAP,
+    PENDING_TARGET_BASE,
+    PENDING_TARGET_HAND,
+    PENDING_TARGET_TRADE,
+    SOURCE_HAND,
+    SOURCE_TRADE,
     VectorState,
     ZONE_BASES,
     ZONE_DECK,
@@ -63,13 +77,22 @@ def make_state(games, rules, registry):
     blob_fighter = registry.card_index_map["Blob Fighter"]
     blob_wheel = registry.card_index_map["Blob Wheel"]
     mothership = registry.card_index_map["Mothership"]
+    battle_pod = registry.card_index_map["Battle Pod"]
+    imperial_fighter = registry.card_index_map["Imperial Fighter"]
+    brain_world = registry.card_index_map["Brain World"]
     state.zones[:, :, ZONE_HAND, scout] = 2
     state.zones[:, :, ZONE_HAND, viper] = 1
     state.zones[:, :, ZONE_HAND, trade_pod] = 1
     state.zones[:, :, ZONE_HAND, blob_fighter] = 1
+    state.zones[:, :, ZONE_HAND, battle_pod] = 1
+    state.zones[:, :, ZONE_HAND, imperial_fighter] = 1
+    state.zones[:, :, ZONE_HAND, brain_world] = 1
     state.zones[:, :, ZONE_DECK, scout] = 5
     state.zones[:, :, ZONE_DECK, viper] = 2
     state.zones[:, :, ZONE_DECK, mothership] = 1
+    state.zones[:, :, ZONE_DECK, battle_pod] = 2
+    state.zones[:, :, ZONE_DECK, imperial_fighter] = 2
+    state.zones[:, :, ZONE_DECK, brain_world] = 1
     state.zones[:, :, ZONE_DISCARD, scout] = 3
 
     # Seed the explicit-effect and attack branches. They need only remain
@@ -110,13 +133,50 @@ def make_state(games, rules, registry):
         (game * 7 + slot * 11) % len(supported)
     ]
     state.trade_deck[:, supported] = 3
+
+    # Keep every pending-state branch alive independently of which cards the
+    # deterministic schedule happens to buy during a short benchmark.
+    games_index = np.arange(games)
+    scrap_hand = games_index % 50 == 0
+    scrap_trade = games_index % 50 == 1
+    destroy = games_index % 50 == 2
+    discard = games_index % 50 == 3
+    for selected, mode, sources in (
+        (scrap_hand, PENDING_SCRAP, SOURCE_HAND),
+        (scrap_trade, PENDING_SCRAP, SOURCE_TRADE),
+        (destroy, PENDING_DESTROY_BASE, 0),
+        (discard, PENDING_DISCARD, SOURCE_HAND),
+    ):
+        state.pending_mode[selected, 0, 0] = mode
+        state.pending_remaining[selected, 0, 0] = 1
+        state.pending_sources[selected, 0, 0] = sources
+        state.pending_count[selected, 0] = 1
+        if mode == PENDING_SCRAP and sources == SOURCE_HAND:
+            state.pending_targets[
+                selected, 0, 0, PENDING_TARGET_HAND
+            ] = state.zones[selected, 0, ZONE_HAND]
+        elif mode == PENDING_SCRAP and sources == SOURCE_TRADE:
+            for game in np.flatnonzero(selected):
+                for card in state.trade_row[game]:
+                    if card >= 0:
+                        state.pending_targets[
+                            game, 0, 0, PENDING_TARGET_TRADE, card
+                        ] += 1
+        elif mode == PENDING_DESTROY_BASE:
+            state.pending_targets[
+                selected, 0, 0, PENDING_TARGET_BASE
+            ] = state.zones[selected, 1, ZONE_BASES]
+        elif mode == PENDING_DISCARD:
+            state.pending_targets[
+                selected, 0, 0, PENDING_TARGET_HAND
+            ] = state.zones[selected, 0, ZONE_HAND]
     return state
 
 
 def choose_actions(mask, step, num_cards):
     actions = np.full(mask.shape[0], END_TURN_INDEX, dtype=np.int32)
     game = np.arange(mask.shape[0])
-    phase = (game + step) % 7
+    phase = (game + step) % 13
     ranges = (
         (PLAY_OFFSET, PLAY_OFFSET + num_cards),
         (EFFECT_NONSCRAP_OFFSET, EFFECT_NONSCRAP_OFFSET + num_cards),
@@ -124,8 +184,14 @@ def choose_actions(mask, step, num_cards):
         (ATTACK_BASE_OFFSET, ATTACK_BASE_OFFSET + num_cards),
         (ATTACK_PLAYER_INDEX, ATTACK_PLAYER_INDEX + 1),
         (EFFECT_SCRAP_OFFSET, EFFECT_SCRAP_OFFSET + num_cards),
+        (SCRAP_HAND_OFFSET, SCRAP_HAND_OFFSET + num_cards),
+        (SCRAP_DISCARD_OFFSET, SCRAP_DISCARD_OFFSET + num_cards),
+        (SCRAP_TRADE_OFFSET, SCRAP_TRADE_OFFSET + num_cards),
+        (DESTROY_BASE_OFFSET, DESTROY_BASE_OFFSET + num_cards),
+        (DISCARD_OFFSET, DISCARD_OFFSET + num_cards),
+        (SKIP_INDEX, SKIP_INDEX + 1),
     )
-    chosen = phase == 6
+    chosen = phase == 12
     for target_phase, (start, end) in enumerate(ranges):
         candidates = mask[:, start:end]
         selected = (phase == target_phase) & candidates.any(axis=1)
@@ -159,6 +225,12 @@ def build_schedule(initial, rules, steps):
             ("attack_base", ATTACK_BASE_OFFSET, ATTACK_BASE_OFFSET + rules.num_cards),
             ("attack_player", ATTACK_PLAYER_INDEX, ATTACK_PLAYER_INDEX + 1),
             ("scrap", EFFECT_SCRAP_OFFSET, EFFECT_SCRAP_OFFSET + rules.num_cards),
+            ("scrap_hand", SCRAP_HAND_OFFSET, SCRAP_HAND_OFFSET + rules.num_cards),
+            ("scrap_discard", SCRAP_DISCARD_OFFSET, SCRAP_DISCARD_OFFSET + rules.num_cards),
+            ("scrap_trade", SCRAP_TRADE_OFFSET, SCRAP_TRADE_OFFSET + rules.num_cards),
+            ("destroy_base", DESTROY_BASE_OFFSET, DESTROY_BASE_OFFSET + rules.num_cards),
+            ("discard", DISCARD_OFFSET, DISCARD_OFFSET + rules.num_cards),
+            ("skip", SKIP_INDEX, SKIP_INDEX + 1),
             ("end", END_TURN_INDEX, END_TURN_INDEX + 1),
         ):
             counts[name] = counts.get(name, 0) + int(
@@ -173,8 +245,20 @@ def build_schedule(initial, rules, steps):
         "attack_base": 0.01,
         "attack_player": 0.01,
         "scrap": 0.002,
-        "end": 0.08,
+        "end": 0.07,
     }
+    counts["pending"] = sum(
+        counts.get(name, 0)
+        for name in (
+            "scrap_hand",
+            "scrap_discard",
+            "scrap_trade",
+            "destroy_base",
+            "discard",
+            "skip",
+        )
+    )
+    minimum_rates["pending"] = 0.01
     failures = [
         f"{name}={counts.get(name, 0) / decisions:.2%} < {minimum:.2%}"
         for name, minimum in minimum_rates.items()
@@ -189,16 +273,25 @@ def build_schedule(initial, rules, steps):
 
 def benchmark_engine(initial, rules, actions, repetitions):
     samples = []
+    phase_samples = []
     checksums = []
     for _ in range(repetitions):
         engine = VectorEngine(initial.copy(), rules)
+        phases = {"mask": 0.0, "observation": 0.0, "step": 0.0}
         started = time.perf_counter()
         for action in actions:
+            phase = time.perf_counter()
             engine.build_masks()
+            phases["mask"] += time.perf_counter() - phase
+            phase = time.perf_counter()
             engine.materialize_observations()
+            phases["observation"] += time.perf_counter() - phase
+            phase = time.perf_counter()
             engine.step(action)
+            phases["step"] += time.perf_counter() - phase
         elapsed = time.perf_counter() - started
         samples.append(initial.games * len(actions) / elapsed)
+        phase_samples.append(phases)
         checksums.append(
             int(engine.state.zones.sum())
             + int(engine.observations.sum())
@@ -206,7 +299,7 @@ def benchmark_engine(initial, rules, actions, repetitions):
         )
     if len(set(checksums)) != 1:
         raise RuntimeError(f"engine benchmark diverged: {checksums}")
-    return samples
+    return samples, phase_samples
 
 
 def benchmark_integrated(initial, rules, registry, steps, repetitions):
@@ -220,6 +313,7 @@ def benchmark_integrated(initial, rules, registry, steps, repetitions):
         "attack_base": 0,
         "attack_player": 0,
         "scrap": 0,
+        "pending": 0,
         "end": 0,
     }
     for _ in range(repetitions):
@@ -269,6 +363,31 @@ def benchmark_integrated(initial, rules, registry, steps, repetitions):
                     & (action < EFFECT_SCRAP_OFFSET + rules.num_cards)
                 ).sum()
             )
+            action_profile["pending"] += int(
+                (
+                    (
+                        (action >= SCRAP_HAND_OFFSET)
+                        & (action < SCRAP_HAND_OFFSET + rules.num_cards)
+                    )
+                    | (
+                        (action >= SCRAP_DISCARD_OFFSET)
+                        & (action < SCRAP_DISCARD_OFFSET + rules.num_cards)
+                    )
+                    | (
+                        (action >= SCRAP_TRADE_OFFSET)
+                        & (action < SCRAP_TRADE_OFFSET + rules.num_cards)
+                    )
+                    | (
+                        (action >= DESTROY_BASE_OFFSET)
+                        & (action < DESTROY_BASE_OFFSET + rules.num_cards)
+                    )
+                    | (
+                        (action >= DISCARD_OFFSET)
+                        & (action < DISCARD_OFFSET + rules.num_cards)
+                    )
+                    | (action == SKIP_INDEX)
+                ).sum()
+            )
             action_profile["end"] += int(
                 (action == END_TURN_INDEX).sum()
             )
@@ -310,7 +429,9 @@ def main():
     warm.materialize_observations()
     warm.step(np.full(64, END_TURN_INDEX, dtype=np.int32))
 
-    engine = benchmark_engine(initial, rules, actions, args.reps)
+    engine, engine_phases = benchmark_engine(
+        initial, rules, actions, args.reps
+    )
     integrated, integrated_profile = benchmark_integrated(
         initial,
         rules,
@@ -327,6 +448,17 @@ def main():
         "supported_count": len(rules.supported_names),
         "action_profile": profile,
         "engine_mask_observation": summarize(engine),
+        "engine_phase_seconds": {
+            phase: {
+                "median": statistics.median(
+                    sample[phase] for sample in engine_phases
+                ),
+                "repetitions": [
+                    sample[phase] for sample in engine_phases
+                ],
+            }
+            for phase in ("mask", "observation", "step")
+        },
         "integrated_actual_policy": summarize(integrated),
         "integrated_action_profile": integrated_profile,
     }

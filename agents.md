@@ -130,15 +130,15 @@ and staging copy per decision — roughly 4.7 GB per update, all serialised
 through the single server thread.
 
 ### Compiler-backed vector engine (experimental)
-`src/vector_engine/` compiles the existing `Effect` trees into fixed-width
-opcode tables and runs the supported rules in one 16-thread Numba SPMD process.
-It currently supports 26 canonical cards and fails closed on target-selection,
-pending, and OR effects. It is not wired into `train` yet.
+`src/vector_engine/` compiles all 49 canonical cards from the existing `Effect`
+trees into fixed-width opcode tables and runs the rules in one 16-thread Numba
+SPMD process, including pending target choices and continuation effects.
 
 Correctness is differential: scalar and vector legal masks/observations match
 before every action, and complete canonical state matches afterward. Gate 2
-measured 7.31M engine+mask+observation decisions/s and 542k/s with the actual
-GPU policy, so supported rollouts are policy-bound.
+measured 5.88M engine+mask+observation decisions/s and 587k/s with the actual
+GPU policy, so rollouts are policy-bound. `train --engine vec` is guarded to
+the random opponent; object remains the default.
 
 ### Diagnosing a slow rollout
 `scripts/bench_rollout.py` reports decisions/sec plus a per-phase breakdown of

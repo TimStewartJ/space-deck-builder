@@ -62,55 +62,10 @@ def test_compiles_canonical_width_and_metadata(compiled):
 
 
 def test_supported_set_is_explicit_and_stable(compiled):
-    _, _, rules = compiled
-    expected = {
-        "Battle Blob",
-        "Blob Carrier",
-        "Blob Fighter",
-        "Blob Wheel",
-        "Mothership",
-        "Ram",
-        "The Hive",
-        "Trade Pod",
-        "Battle Station",
-        "Mech World",
-        "Stealth Needle",
-        "Corvette",
-        "Dreadnaught",
-        "Fleet HQ",
-        "Space Station",
-        "War World",
-        "Central Office",
-        "Cutter",
-        "Embassy Yacht",
-        "Federation Shuttle",
-        "Flagship",
-        "Freighter",
-        "Trade Escort",
-        "Scout",
-        "Viper",
-        "Explorer",
-    }
-    assert set(rules.supported_names) == expected
-    assert len(rules.supported_names) == 26
-
-
-@pytest.mark.parametrize(
-    ("card", "reason_fragment"),
-    [
-        ("Battle Pod", "target selection"),
-        ("Blob Destroyer", "target selection"),
-        ("Blob World", "OR effects"),
-        ("Brain World", "target selection"),
-        ("Imperial Fighter", "target selection"),
-        ("Recycling Station", "OR effects"),
-    ],
-)
-def test_unsupported_cards_fail_closed(compiled, card, reason_fragment):
     _, registry, rules = compiled
-    index = registry.card_index_map[card]
-    assert not rules.supported[index]
-    assert reason_fragment in rules.unsupported_reason[index]
+    assert rules.supported_names == tuple(registry.card_names)
+    assert len(rules.supported_names) == 49
+    assert all(reason is None for reason in rules.unsupported_reason)
 
 
 def test_trade_pod_compiles_auto_and_ally_bundles(compiled):
@@ -164,6 +119,130 @@ def test_explorer_scrap_bundle_is_separate(compiled):
     assert bundles[0]["ops"] == [(EffectOpcode.ADD_TRADE, 2, 0)]
     assert bundles[1]["trigger"] == EffectTrigger.SCRAP
     assert bundles[1]["ops"] == [(EffectOpcode.ADD_COMBAT, 2, 0)]
+
+
+@pytest.mark.parametrize(
+    ("card_name", "opcode"),
+    [
+        ("Battle Pod", EffectOpcode.QUEUE_SCRAP),
+        ("Imperial Fighter", EffectOpcode.ADD_DISCARD_DEBT),
+        ("Missile Mech", EffectOpcode.QUEUE_DESTROY_BASE),
+        ("Brain World", EffectOpcode.QUEUE_SCRAP_DRAW),
+        ("Recycling Station", EffectOpcode.ADD_TRADE),
+    ],
+)
+def test_choice_effects_compile_to_current_scalar_semantics(
+    compiled, card_name, opcode
+):
+    _, _, rules = compiled
+    bundles = _bundles(rules, card_name)
+    assert any(
+        operation[0] == opcode
+        for bundle in bundles
+        for operation in bundle["ops"]
+    )
+
+
+def test_or_effect_compiles_current_two_stage_resolver_semantics(compiled):
+    _, _, rules = compiled
+    bundles = _bundles(rules, "Blob World")
+    operations = [
+        operation[0] for bundle in bundles for operation in bundle["ops"]
+    ]
+    assert operations == [
+        EffectOpcode.ADD_COMBAT,
+        EffectOpcode.DRAW_PER_FACTION,
+    ]
+    assert bundles[0]["trigger"] == EffectTrigger.ACTIVATE
+    card = rules.card_names.index("Blob World")
+    assert rules.bundle_stage[card, 0] == 0
+    assert rules.bundle_stage[card, 1] == 1
+    assert rules.bundle_next[card, 0] == 1
+
+
+def test_compiler_rejects_unrepresentable_or_shapes(compiled):
+    cards, registry, _ = compiled
+    original = cards[0]
+    three_child = Card(
+        original.name,
+        original.index,
+        original.cost,
+        [
+            Effect(
+                CardEffectType.PARENT,
+                is_or_effect=True,
+                child_effects=[
+                    Effect(CardEffectType.COMBAT, 1),
+                    Effect(CardEffectType.TRADE, 1),
+                    Effect(CardEffectType.HEAL, 1),
+                ],
+            )
+        ],
+        CardType.SHIP,
+    )
+    rules = compile_rules([three_child, *cards], registry)
+    assert not rules.supported[original.index]
+    assert "exactly two" in rules.unsupported_reason[original.index]
+
+
+def test_compiler_rejects_scrap_gated_or(compiled):
+    cards, registry, _ = compiled
+    original = cards[0]
+    synthetic = Card(
+        original.name,
+        original.index,
+        original.cost,
+        [
+            Effect(
+                CardEffectType.PARENT,
+                is_or_effect=True,
+                is_scrap_effect=True,
+                child_effects=[
+                    Effect(CardEffectType.COMBAT, 1),
+                    Effect(CardEffectType.TRADE, 1),
+                ],
+            )
+        ],
+        CardType.SHIP,
+    )
+    rules = compile_rules([synthetic, *cards], registry)
+    assert not rules.supported[original.index]
+    assert "scrap-gated OR" in rules.unsupported_reason[original.index]
+
+
+def test_compiler_rejects_indirectly_nested_or(compiled):
+    cards, registry, _ = compiled
+    original = cards[0]
+    nested = Effect(
+        CardEffectType.PARENT,
+        is_or_effect=True,
+        child_effects=[
+            Effect(CardEffectType.COMBAT, 1),
+            Effect(CardEffectType.TRADE, 1),
+        ],
+    )
+    synthetic = Card(
+        original.name,
+        original.index,
+        original.cost,
+        [
+            Effect(
+                CardEffectType.PARENT,
+                is_or_effect=True,
+                child_effects=[
+                    Effect(
+                        CardEffectType.PARENT,
+                        child_effects=[nested],
+                    ),
+                    Effect(CardEffectType.HEAL, 1),
+                ],
+            )
+        ],
+        CardType.SHIP,
+    )
+    rules = compile_rules([synthetic, *cards], registry)
+    assert not rules.supported[original.index]
+    assert "nested OR" in rules.unsupported_reason[original.index]
 
 
 def test_scalar_ir_interpreter_enforces_ally_requirement(compiled):
@@ -225,6 +304,84 @@ def test_every_supported_bundle_has_valid_operation_ranges(compiled):
             assert 0 <= start <= operation_count
             assert 0 < length <= operation_count
             assert start + length <= operation_count
+
+
+def test_no_single_activation_can_overflow_pending_queue(compiled):
+    _, _, rules = compiled
+    queue_ops = {
+        EffectOpcode.QUEUE_SCRAP,
+        EffectOpcode.QUEUE_DESTROY_BASE,
+        EffectOpcode.QUEUE_SCRAP_DRAW,
+        EffectOpcode.QUEUE_DISCARD_DRAW,
+    }
+    for card in range(rules.num_cards):
+        for bundle in range(int(rules.bundle_count[card])):
+            start = int(rules.bundle_op_start[card, bundle])
+            length = int(rules.bundle_op_count[card, bundle])
+            queued = sum(
+                EffectOpcode(int(rules.op_code[card, operation]))
+                in queue_ops
+                for operation in range(start, start + length)
+            )
+            assert queued <= 4
+
+
+def test_compiler_rejects_pending_queue_overflow(compiled):
+    cards, registry, _ = compiled
+    original = cards[0]
+    synthetic = Card(
+        original.name,
+        original.index,
+        original.cost,
+        [
+            Effect(
+                CardEffectType.PARENT,
+                child_effects=[
+                    Effect(
+                        CardEffectType.SCRAP,
+                        1,
+                        card_targets=["hand"],
+                    )
+                    for _ in range(5)
+                ],
+            )
+        ],
+        CardType.SHIP,
+    )
+    rules = compile_rules([synthetic, *cards], registry)
+    assert not rules.supported[original.index]
+    assert "pending queue capacity" in rules.unsupported_reason[original.index]
+
+
+def test_compiler_rejects_overlapping_pending_domains(compiled):
+    cards, registry, _ = compiled
+    original = cards[0]
+    synthetic = Card(
+        original.name,
+        original.index,
+        original.cost,
+        [
+            Effect(
+                CardEffectType.PARENT,
+                child_effects=[
+                    Effect(
+                        CardEffectType.SCRAP,
+                        1,
+                        card_targets=["trade"],
+                    ),
+                    Effect(
+                        CardEffectType.SCRAP,
+                        1,
+                        card_targets=["trade"],
+                    ),
+                ],
+            )
+        ],
+        CardType.SHIP,
+    )
+    rules = compile_rules([synthetic, *cards], registry)
+    assert not rules.supported[original.index]
+    assert "overlapping pending" in rules.unsupported_reason[original.index]
 
 
 def test_faction_gated_scrap_fails_closed(compiled):
@@ -304,3 +461,29 @@ def test_nested_different_faction_gates_fail_closed(compiled):
     rules = compile_rules([synthetic, *cards], registry)
     assert not rules.supported[original.index]
     assert "unsupported conjunction" in rules.unsupported_reason[original.index]
+
+
+def test_faction_gated_or_fails_closed(compiled):
+    cards, registry, _ = compiled
+    original = cards[0]
+    synthetic = Card(
+        original.name,
+        original.index,
+        original.cost,
+        [
+            Effect(
+                CardEffectType.PARENT,
+                faction_requirement="Blob",
+                is_or_effect=True,
+                child_effects=[
+                    Effect(CardEffectType.COMBAT, 1),
+                    Effect(CardEffectType.TRADE, 1),
+                ],
+            )
+        ],
+        CardType.SHIP,
+        faction="Blob",
+    )
+    rules = compile_rules([synthetic, *cards], registry)
+    assert not rules.supported[original.index]
+    assert "faction-gated OR" in rules.unsupported_reason[original.index]

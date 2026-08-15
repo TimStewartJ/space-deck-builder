@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import random
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -266,3 +267,31 @@ def test_initial_scalar_mask_and_observation_match(setup):
         return_numpy=True,
     )
     assert np.array_equal(vector_obs, scalar_obs)
+
+
+def test_engine_rejects_noncanonical_or_incomplete_rules(setup):
+    _, _, rules = setup
+    state = VectorState.empty(1, rules.num_cards)
+    incomplete_flags = rules.supported.copy()
+    incomplete_flags[0] = False
+    with pytest.raises(ValueError, match="do not cover every card"):
+        VectorEngine(
+            state.copy(),
+            replace(rules, supported=incomplete_flags),
+        )
+    with pytest.raises(ValueError, match="canonical 49-card ordering"):
+        VectorEngine(
+            state.copy(),
+            replace(
+                rules,
+                card_names=(*rules.card_names[:-1], "Not Explorer"),
+            ),
+        )
+
+
+def test_pending_overflow_flag_is_never_silent(setup):
+    _, _, rules = setup
+    engine = empty_engine(rules)
+    engine.state.pending_overflow[0] = True
+    with pytest.raises(RuntimeError, match="pending queue overflow"):
+        engine.step(np.asarray([END_TURN_INDEX], dtype=np.int32))

@@ -10,7 +10,7 @@ from src.cards.factions import Faction
 from src.config import DataConfig
 from src.encoding.action_context import build_action_context
 from src.encoding.action_encoder import get_action_space_size
-from src.encoding.action_encoder import END_TURN_INDEX
+from src.encoding.action_encoder import END_TURN_INDEX, SKIP_INDEX
 from src.engine.game import Game
 from src.vector_engine.differential import (
     _capture_scalar_step,
@@ -129,14 +129,17 @@ def _step_pair(game, engine, action_index, action):
     )
     assert context.mask[action_index]
 
-    drawn, refill = _capture_scalar_step(game, action)
+    drawn, refills = _capture_scalar_step(game, action)
     tape = np.full((1, MAX_FORCED_DRAWS), NO_CARD, dtype=np.int16)
     tape[0, : len(drawn)] = drawn
     engine.step(
         np.asarray([action_index], dtype=np.int32),
         forced_draws=tape,
         forced_draw_count=np.asarray([len(drawn)], dtype=np.int8),
-        forced_refill=np.asarray([refill], dtype=np.int16),
+        forced_refill=np.asarray(
+            [refills + [NO_CARD] * (8 - len(refills))],
+            dtype=np.int16,
+        ),
     )
     assert_canonical_equal(
         canonical_scalar_snapshot(game, RULES),
@@ -156,22 +159,30 @@ def test_supported_card_matches_scalar_engine(card_name):
     )
     _step_pair(game, engine, play_index, context.resolvers[play_index])
 
-    # Consume every explicit ally/base/scrap action this card exposes.
-    for _ in range(4):
+    # Consume every explicit effect and any pending target-selection set.
+    for _ in range(12):
         context = build_action_context(
             game,
             game.current_player,
             REGISTRY.card_index_map,
             get_action_space_size(REGISTRY.card_names),
         )
-        candidates = (
-            EFFECT_NONSCRAP_OFFSET + card.index,
-            EFFECT_SCRAP_OFFSET + card.index,
-        )
-        action_index = next(
-            (index for index in candidates if context.mask[index]),
-            None,
-        )
+        pending = game.current_player.get_current_pending_set()
+        if pending is not None:
+            legal = np.flatnonzero(context.mask)
+            action_index = next(
+                (int(index) for index in legal if int(index) != SKIP_INDEX),
+                int(legal[0]) if len(legal) else None,
+            )
+        else:
+            candidates = (
+                EFFECT_NONSCRAP_OFFSET + card.index,
+                EFFECT_SCRAP_OFFSET + card.index,
+            )
+            action_index = next(
+                (index for index in candidates if context.mask[index]),
+                None,
+            )
         if action_index is None:
             break
         _step_pair(

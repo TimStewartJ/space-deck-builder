@@ -7,6 +7,7 @@ from typing import Iterable
 import numpy as np
 
 from src.engine.game import Game
+from src.engine.actions import ActionType, CardSource
 from src.vector_engine.rules import CompiledRules
 
 
@@ -20,6 +21,19 @@ NUM_PLAYERS = 2
 MAX_CARD_INSTANCES = 16
 INSTANCE_ACTIVE = np.uint16(1 << 15)
 INSTANCE_PLAYED_THIS_TURN = np.uint16(1 << 14)
+MAX_PENDING_SETS = 4
+PENDING_NONE = 0
+PENDING_SCRAP = 1
+PENDING_DESTROY_BASE = 2
+PENDING_DISCARD = 3
+SOURCE_HAND = 1
+SOURCE_DISCARD = 2
+SOURCE_TRADE = 4
+PENDING_TARGET_HAND = 0
+PENDING_TARGET_DISCARD = 1
+PENDING_TARGET_TRADE = 2
+PENDING_TARGET_BASE = 3
+PENDING_TARGET_GROUPS = 4
 
 NO_CARD = -1
 NO_WINNER = -1
@@ -44,6 +58,16 @@ class VectorState:
     done: np.ndarray
     winner: np.ndarray
     effect_state: np.ndarray
+    pending_mode: np.ndarray
+    pending_remaining: np.ndarray
+    pending_sources: np.ndarray
+    pending_mandatory: np.ndarray
+    pending_draw_on_complete: np.ndarray
+    pending_resolved: np.ndarray
+    pending_targets: np.ndarray
+    pending_count: np.ndarray
+    pending_overflow: np.ndarray
+    discard_debt: np.ndarray
     rng_state: np.ndarray
     hand_size: np.ndarray
     turn_cap: np.ndarray
@@ -81,6 +105,41 @@ class VectorState:
                     MAX_CARD_INSTANCES,
                 ),
                 dtype=np.uint16,
+            ),
+            pending_mode=np.zeros(
+                (games, NUM_PLAYERS, MAX_PENDING_SETS), dtype=np.int8
+            ),
+            pending_remaining=np.zeros(
+                (games, NUM_PLAYERS, MAX_PENDING_SETS), dtype=np.int8
+            ),
+            pending_sources=np.zeros(
+                (games, NUM_PLAYERS, MAX_PENDING_SETS), dtype=np.int16
+            ),
+            pending_mandatory=np.zeros(
+                (games, NUM_PLAYERS, MAX_PENDING_SETS), dtype=np.bool_
+            ),
+            pending_draw_on_complete=np.zeros(
+                (games, NUM_PLAYERS, MAX_PENDING_SETS), dtype=np.bool_
+            ),
+            pending_resolved=np.zeros(
+                (games, NUM_PLAYERS, MAX_PENDING_SETS), dtype=np.int8
+            ),
+            pending_targets=np.zeros(
+                (
+                    games,
+                    NUM_PLAYERS,
+                    MAX_PENDING_SETS,
+                    PENDING_TARGET_GROUPS,
+                    num_cards,
+                ),
+                dtype=np.int8,
+            ),
+            pending_count=np.zeros(
+                (games, NUM_PLAYERS), dtype=np.int8
+            ),
+            pending_overflow=np.zeros(games, dtype=np.bool_),
+            discard_debt=np.zeros(
+                (games, NUM_PLAYERS), dtype=np.int8
             ),
             rng_state=(
                 (np.arange(games, dtype=np.int64) + 1) * 1_103_515_245
@@ -151,11 +210,96 @@ def _effect_instance_state(
             if source < 0 or source >= len(card.effects):
                 continue
             effect = card.effects[source]
-            if not effect.all_child_effects_used():
+            available = not effect.all_child_effects_used()
+            if effect.is_or_effect:
+                stage = int(rules.bundle_stage[card_index, bundle])
+                children = effect.child_effects or ()
+                if stage == 0:
+                    available = bool(
+                        children
+                        and not children[0].all_child_effects_used()
+                    )
+                else:
+                    available = any(
+                        not child.all_child_effects_used()
+                        for child in children[1:]
+                    )
+            if available:
                 value |= 1 << bundle
         states[card_index, slot] = value
         next_slot[card_index] += 1
     return states
+
+
+def _pending_state(player):
+    modes = np.zeros(MAX_PENDING_SETS, dtype=np.int8)
+    remaining = np.zeros(MAX_PENDING_SETS, dtype=np.int8)
+    sources = np.zeros(MAX_PENDING_SETS, dtype=np.int16)
+    mandatory = np.zeros(MAX_PENDING_SETS, dtype=np.bool_)
+    draw_on_complete = np.zeros(MAX_PENDING_SETS, dtype=np.bool_)
+    resolved = np.zeros(MAX_PENDING_SETS, dtype=np.int8)
+    targets = np.zeros(
+        (MAX_PENDING_SETS, PENDING_TARGET_GROUPS, 49),
+        dtype=np.int8,
+    )
+    if len(player.pending_action_sets) > MAX_PENDING_SETS:
+        raise ValueError(
+            f"{len(player.pending_action_sets)} pending sets exceed "
+            f"MAX_PENDING_SETS={MAX_PENDING_SETS}"
+        )
+    for index, pending in enumerate(player.pending_action_sets):
+        remaining[index] = pending.decisions_left
+        mandatory[index] = pending.mandatory
+        draw_on_complete[index] = pending.on_complete_draw
+        resolved[index] = pending.resolved_count
+        if not pending.actions:
+            # An optional set can outlive its snapshotted targets and expose
+            # only SKIP. Mode/source no longer affect that legal action.
+            modes[index] = PENDING_SCRAP
+            continue
+        action_type = pending.actions[0].type
+        if action_type == ActionType.SCRAP_CARD:
+            modes[index] = PENDING_SCRAP
+            for action in pending.actions:
+                if action.card_source == CardSource.HAND:
+                    sources[index] |= SOURCE_HAND
+                    targets[
+                        index, PENDING_TARGET_HAND, action.card_id
+                    ] += 1
+                elif action.card_source == CardSource.DISCARD:
+                    sources[index] |= SOURCE_DISCARD
+                    targets[
+                        index, PENDING_TARGET_DISCARD, action.card_id
+                    ] += 1
+                elif action.card_source == CardSource.TRADE:
+                    sources[index] |= SOURCE_TRADE
+                    targets[
+                        index, PENDING_TARGET_TRADE, action.card_id
+                    ] += 1
+        elif action_type == ActionType.DESTROY_BASE:
+            modes[index] = PENDING_DESTROY_BASE
+            for action in pending.actions:
+                targets[
+                    index, PENDING_TARGET_BASE, action.card_id
+                ] += 1
+        elif action_type == ActionType.DISCARD_CARDS:
+            modes[index] = PENDING_DISCARD
+            sources[index] = SOURCE_HAND
+            for action in pending.actions:
+                targets[
+                    index, PENDING_TARGET_HAND, action.card_id
+                ] += 1
+        else:
+            raise ValueError(f"unsupported pending action {action_type}")
+    return (
+        modes,
+        remaining,
+        sources,
+        mandatory,
+        draw_on_complete,
+        resolved,
+        targets,
+    )
 
 
 def from_games(
@@ -202,6 +346,21 @@ def from_games(
             state.effect_state[
                 game_index, player_index
             ] = _effect_instance_state(game, player_index, rules)
+            (
+                state.pending_mode[game_index, player_index],
+                state.pending_remaining[game_index, player_index],
+                state.pending_sources[game_index, player_index],
+                state.pending_mandatory[game_index, player_index],
+                state.pending_draw_on_complete[game_index, player_index],
+                state.pending_resolved[game_index, player_index],
+                state.pending_targets[game_index, player_index],
+            ) = _pending_state(player)
+            state.pending_count[game_index, player_index] = len(
+                player.pending_action_sets
+            )
+            state.discard_debt[
+                game_index, player_index
+            ] = player.pending_start_of_turn_discards
 
         if len(game.trade_row) > state.trade_row.shape[1]:
             raise ValueError("trade row exceeds configured width")
@@ -273,6 +432,9 @@ def canonical_scalar_snapshot(
                 "effect_state": _effect_instance_state(
                     game, player_index, rules
                 ),
+                "pending": _pending_state(player),
+                "pending_count": len(player.pending_action_sets),
+                "discard_debt": player.pending_start_of_turn_discards,
             }
         )
     return {
@@ -337,6 +499,23 @@ def canonical_vector_snapshot(
                 "effect_state": state.effect_state[
                     game_index, player
                 ].copy(),
+                "pending": (
+                    state.pending_mode[game_index, player].copy(),
+                    state.pending_remaining[game_index, player].copy(),
+                    state.pending_sources[game_index, player].copy(),
+                    state.pending_mandatory[game_index, player].copy(),
+                    state.pending_draw_on_complete[
+                        game_index, player
+                    ].copy(),
+                    state.pending_resolved[game_index, player].copy(),
+                    state.pending_targets[game_index, player].copy(),
+                ),
+                "pending_count": int(
+                    state.pending_count[game_index, player]
+                ),
+                "discard_debt": int(
+                    state.discard_debt[game_index, player]
+                ),
             }
         )
     row = state.trade_row[game_index]
@@ -391,6 +570,9 @@ def assert_canonical_equal(
             "health",
             "authority_gained",
             "effect_state",
+            "pending",
+            "pending_count",
+            "discard_debt",
         ):
             left = scalar["players"][player][key]
             right = vector["players"][player][key]
@@ -402,6 +584,15 @@ def assert_canonical_equal(
                         f"player {player} {key} diverged at {first}: "
                         f"scalar={left[first]!r}, vector={right[first]!r}"
                     )
+            elif isinstance(left, tuple):
+                for component, (left_array, right_array) in enumerate(
+                    zip(left, right)
+                ):
+                    if not np.array_equal(left_array, right_array):
+                        raise AssertionError(
+                            f"player {player} {key}[{component}] diverged: "
+                            f"scalar={left_array}, vector={right_array}"
+                        )
             elif left != right:
                 raise AssertionError(
                     f"player {player} {key} diverged: "

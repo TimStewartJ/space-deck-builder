@@ -49,6 +49,23 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
     num_concurrent = run_cfg.num_concurrent or run_cfg.episodes // max(1, run_cfg.num_workers)
     num_concurrent = min(run_cfg.episodes, num_concurrent)
 
+    if run_cfg.engine == "vec":
+        if run_cfg.self_play or (pool is not None and pool.has_snapshots):
+            raise ValueError(
+                "vector engine does not yet support self-play snapshots"
+            )
+        from src.ppo.vector_batch_runner import VectorBatchRunner
+        return VectorBatchRunner(
+            model=agent.model,
+            cards=cards,
+            registry=registry,
+            device=sim_device,
+            ppo_config=ppo_cfg,
+            opponent_spec=run_cfg.opponents,
+            num_threads=run_cfg.vec_threads,
+            num_concurrent=run_cfg.num_concurrent,
+        )
+
     if run_cfg.num_workers > 1:
         from src.ppo.mp_batch_runner import MultiProcessBatchRunner
 
@@ -337,7 +354,14 @@ def train(
         rollout_win_rate = total_wins / max(1, total_games)
         throughput = run_cfg.episodes / max(0.001, duration_episodes)
 
-        workers_msg = f" ({run_cfg.num_workers} workers)" if run_cfg.num_workers > 1 else ""
+        if run_cfg.engine == "vec":
+            workers_msg = f" (vec {runner.num_threads} threads)"
+        else:
+            workers_msg = (
+                f" ({run_cfg.num_workers} workers)"
+                if run_cfg.num_workers > 1
+                else ""
+            )
         logger.info(f"Rollout: {run_cfg.episodes} episodes, {num_samples} steps in "
                      f"{duration_episodes:.1f}s ({throughput:.1f} ep/s){workers_msg}  "
                      f"win_rate={rollout_win_rate:.0%}  avg_decisions/ep={avg_decisions_per_ep:.0f}")
@@ -384,6 +408,11 @@ def train(
         card_emb_grad = (agent.model.card_emb.weight.grad is not None
                          and agent.model.card_emb.weight.grad.norm().item())
         logger.debug(f"Card Emb grad: {card_emb_grad:.4f}")
+
+        # The next rollout is evaluated before these names would otherwise be
+        # rebound, so keeping a multi-GB rollout alive here can double GPU
+        # memory at the next assignment. PPO has consumed them completely.
+        del states, actions, old_lp, returns, advs, masks
 
         # NaN guard: abort training immediately if loss diverged
         if ppo_metrics.get("nan_detected"):

@@ -65,3 +65,28 @@ def test_production_mask_suppression_matches_worker_policy():
     assert not effective[1, 1]
     assert effective[2, 1]
     assert masks[:, 1].all()
+
+
+def test_policy_buffers_reuse_capacity_across_variable_batch_sizes():
+    data = DataConfig()
+    cards = data.load_cards()
+    registry = data.build_registry(cards)
+    model = PPOActorCritic(
+        state_dim=get_state_size(registry.card_names),
+        action_dim=get_action_space_size(registry.card_names),
+        num_cards=registry.num_cards,
+        model_config=ModelConfig(),
+    )
+    evaluator = VectorPolicyEvaluator(model, torch.device("cpu"))
+    observations = np.zeros(
+        (64, get_state_size(registry.card_names)), dtype=np.float32
+    )
+    masks = np.zeros(
+        (64, get_action_space_size(registry.card_names)), dtype=np.bool_
+    )
+    masks[:, 1] = True
+    evaluator.decide(observations, masks)
+    pointer = evaluator.device_observations.data_ptr()
+    evaluator.decide(observations[:63], masks[:63])
+    assert evaluator.device_observations.data_ptr() == pointer
+    assert evaluator._capacity == 64

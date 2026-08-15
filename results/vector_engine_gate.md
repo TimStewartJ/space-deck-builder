@@ -147,3 +147,51 @@ The 5M engine gate passes by 1.43x, and the environment is roughly 13x faster
 than the integrated policy path. The rollout is policy-bound as required.
 
 Raw data: [`gate2_full.json`](vector_engine_gate/gate2_full.json)
+
+## Gate 3 result
+
+Gate 3 extends the IR and state machine to all 49 canonical cards under current
+scalar semantics:
+
+- hand/discard/trade scrap targets;
+- deferred forced discard;
+- destroy-base targets;
+- discard-draw and scrap-draw completion continuations;
+- current two-stage OR resolution;
+- ordered duplicate-card activation state.
+
+The guarded `train --engine vec --opponents random` path collects linked PPO
+rollouts, computes GAE, runs an optimizer update, evaluates through the scalar
+reporting path, and saves a checkpoint. Other opponent types fail explicitly.
+
+Final detached full-card benchmark:
+
+| path | median decisions/s | range |
+| --- | ---: | ---: |
+| full engine + legal mask + observation | **5.88M** | 5.44M-6.49M |
+| integrated actual GPU policy | **587k** | 578k-602k |
+
+The environment is about 10.0x faster than policy inference. Raw data:
+[`gate3_full.json`](vector_engine_gate/gate3_full.json).
+
+### Default-size training reality
+
+A detached two-update run at 16,000 episodes proves the guarded path survives
+consecutive default-size updates without OOM after consumed rollout tensors
+are deleted:
+
+| update | rollout | PPO | samples |
+| ---: | ---: | ---: | ---: |
+| 1 (JIT/cold) | 80.6s | 129.9s | 2.76M |
+| 2 (warm) | **29.2s** | **42.6s** | 2.73M |
+
+This is functional but **not faster than the current object rollout at the
+legacy 16,000-episode budget**. The engine itself is fast; millions of
+observations/masks, variable-size policy calls, rollout storage, and PPO
+optimization dominate and cause memory pressure. At 4,000 episodes, the warm
+vector rollout is 9.6s and PPO is 9.2s.
+
+Therefore the next performance work is not more simulation optimization. It
+is the compute-budget pilot plus bounded/streamed rollout and PPO storage.
+
+Raw log: [`two_update_smoke.log`](vector_engine_gate/two_update_smoke.log)
