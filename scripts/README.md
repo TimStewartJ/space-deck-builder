@@ -41,6 +41,8 @@ pwsh -File scripts\<name>.ps1
 | Script | Purpose |
 |---|---|
 | `bench_rollout.py` | Runs a short training and reports rollout decisions/sec plus a full per-phase breakdown of the inference server and the workers. The first place to look when a rollout is slow, and the yardstick any rollout change should be measured against. |
+| `bench_vec_primitives.py` | Measures the engine-only throughput ceiling of a possible struct-of-arrays game engine. Runs one deterministic fake workload through NumPy SIMD, Numba SPMD, and eager torch CPU/CUDA/ROCm backends; requires exact per-step masks and final state equality before timing, rejects branch-degenerate workloads, and interleaves repetitions. Torch results describe eager execution only, not a fused GPU compiler. It is a go/no-go gate for a rules-correct vector-engine spike, not a training benchmark. |
+| `launch_vec_benchmark.ps1` | Launches `bench_vec_primitives.py` through Windows Task Scheduler at Normal priority, outside the caller's process tree. Use this for the intended 16,000-game gate; running the same workload as a child of the agent runtime can distort throughput by several times. |
 | `benchmark.py` | End-to-end episode/throughput benchmark for the BatchRunner. Compares sequential vs batched modes. |
 | `device_benchmark.py` | Lower-level per-device timing for the inference path. |
 | `bench_token_path.py` | Training-shaped step benchmark (forward + backward + optimizer, real batch size) comparing `token_features=False` vs `True`. Written after a forward-only microbenchmark badly understated the tokenized path's real cost. |

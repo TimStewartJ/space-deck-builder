@@ -65,5 +65,6 @@ explicit = true
 
 [dependency-groups]
 dev = [
+    "numba>=0.67,<0.68",
     "pytest>=9.0.3",
 ]
