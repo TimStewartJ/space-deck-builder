@@ -105,11 +105,11 @@ seconds instead of ~22 seconds. PPO optimization still costs ~22 seconds per
 update, so unchanged end-to-end training is closer to 24-25 seconds/update
 (~1.8x), not hundreds of times faster.
 
-## Next gate
+## Gate 2 requirements
 
-Build an Effect-to-IR compiler and Numba SPMD vertical slice covering the 27
-cards without choice points plus real play, buy, attack, end turn, draw, ally
-effects, legal masks, and observation generation.
+Build an Effect-to-IR compiler and Numba SPMD vertical slice covering the
+compiler-validated no-target-selection subset plus real play, buy, attack, end
+turn, draw, ally effects, legal masks, and observation generation.
 
 Requirements:
 
@@ -118,3 +118,32 @@ Requirements:
 3. Sustain at least 5M engine+mask+observation decisions/s at G=16,000.
 4. Demonstrate an integrated rollout that is policy-bound rather than
    environment-bound.
+
+## Gate 2 result
+
+Gate 2 completed on `feat/vector-engine-gate2`.
+
+The compiler supports **26 canonical cards** and rejects 23 with explicit
+target-selection/pending/OR reasons. The earlier "27 no-choice cards" estimate
+was not a valid semantic category and is superseded by compiler validation.
+
+Correctness:
+
+- one differential case for every supported card;
+- four simultaneous scalar/vector games over 250 decisions;
+- exact legal masks and 505-float observations before every step;
+- exact canonical state after every step;
+- actual PPO policy smoke on CPU and ROCm;
+- 434 repository tests passing.
+
+Detached branch-diverse benchmark at G=16,000:
+
+| path | median decisions/s | range |
+| --- | ---: | ---: |
+| engine + legal mask + observation | **7.31M** | 6.62M-7.49M |
+| integrated actual GPU policy | **542k** | 538k-546k |
+
+The 5M engine gate passes by 1.43x, and the environment is roughly 13x faster
+than the integrated policy path. The rollout is policy-bound as required.
+
+Raw data: [`gate2_full.json`](vector_engine_gate/gate2_full.json)
