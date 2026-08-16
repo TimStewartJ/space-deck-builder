@@ -30,6 +30,11 @@ device. Opponent decision rows are grouped by snapshot id and sent through one
 batched `VectorPolicyEvaluator` call per active snapshot. Fixed rows continue
 through the Numba selector.
 
+Snapshot policies receive a separate reusable observation buffer oriented to
+the acting player. The learning policy's rollout buffer remains oriented to
+`training_player`; reusing it for snapshot decisions would invert private and
+opponent zones whenever the snapshot is acting.
+
 Result accounting uses the existing snapshot names, so `OpponentPool` EMA,
 PFSP summaries, geometric eviction, checkpoint manifests, and resume behavior
 remain unchanged.

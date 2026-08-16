@@ -2429,6 +2429,7 @@ class VectorEngine:
         self.observations = np.zeros(
             (self.state.games, 505), dtype=np.float32
         )
+        self.perspective_observations = np.zeros_like(self.observations)
         self._empty_forced_draws = np.full(
             (self.state.games, MAX_FORCED_DRAWS),
             NO_CARD,
@@ -2493,6 +2494,22 @@ class VectorEngine:
             self.observations,
         )
         return self.observations
+
+    def materialize_current_player_observations(self) -> np.ndarray:
+        """Encode every game from its acting player's policy perspective."""
+        materialize_observations_kernel(
+            self.state.zones,
+            self.state.trade,
+            self.state.combat,
+            self.state.health,
+            self.state.trade_row,
+            self.state.current_player,
+            self.state.first_player,
+            self.state.current_player,
+            self.masks,
+            self.perspective_observations,
+        )
+        return self.perspective_observations
 
     def build_action_weights(self) -> np.ndarray:
         """Physical scalar-Action multiplicities for fixed opponents."""

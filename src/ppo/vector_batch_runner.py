@@ -311,6 +311,7 @@ class VectorBatchRunner:
 
             if len(opponent_rows):
                 phase = time.perf_counter()
+                snapshot_observations = None
                 fixed_rows = opponent_rows[
                     opponent_kinds[opponent_rows] < SNAPSHOT_OFFSET
                 ]
@@ -332,11 +333,15 @@ class VectorBatchRunner:
                     ]
                     if not len(snapshot_rows):
                         continue
+                    if snapshot_observations is None:
+                        snapshot_observations = (
+                            engine.materialize_current_player_observations()
+                        )
                     evaluator = self._snapshot_evaluator(snapshot_index)
                     timing["snapshot_policy_calls"] += 1
                     timing["snapshot_policy_rows"] += len(snapshot_rows)
                     decision = evaluator.decide(
-                        observations[snapshot_rows],
+                        snapshot_observations[snapshot_rows],
                         masks[snapshot_rows],
                     )
                     actions[snapshot_rows] = decision.actions
