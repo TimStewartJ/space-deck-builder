@@ -11,6 +11,7 @@ from src.encoding.action_encoder import get_action_space_size
 from src.encoding.state_encoder import get_state_size
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.ppo.ppo_trainer import _make_runner
+from src.ppo.opponent_pool import OpponentPool
 from src.ppo.vector_batch_runner import (
     VectorBatchRunner,
     _compute_linked_gae,
@@ -236,6 +237,59 @@ def test_vector_runner_collects_weighted_mixed_opponents(setup):
     assert all(result[1] > 0 for result in runner.opponent_results.values())
 
 
+def test_vector_runner_collects_snapshot_self_play(setup):
+    _, cards, registry = setup
+    snapshot_model = make_model(registry)
+    runner = VectorBatchRunner(
+        model=make_model(registry),
+        cards=cards,
+        registry=registry,
+        device=torch.device("cpu"),
+        ppo_config=PPOConfig(),
+        opponent_spec="random,heuristic,simple",
+        seed=23,
+        snapshot_state_dicts=[
+            (
+                "PPO_1",
+                snapshot_model.state_dict(),
+                ModelConfig(),
+            )
+        ],
+        self_play_ratio=1.0,
+        pfsp_weights=[1.0],
+    )
+    rollout = runner.run_episodes(8)
+    assert isinstance(rollout, PackedRolloutBatch)
+    assert runner.opponent_results["PPO_1"][1] == 8
+    assert sum(
+        runner.opponent_results[name][1]
+        for name in ("Random", "Heuristic", "Simple")
+    ) == 0
+    assert (runner._last_opponent_kinds == 3).all()
+
+
+def test_snapshot_evaluators_are_lazy_and_cached(setup):
+    _, cards, registry = setup
+    snapshot_model = make_model(registry)
+    runner = VectorBatchRunner(
+        model=make_model(registry),
+        cards=cards,
+        registry=registry,
+        device=torch.device("cpu"),
+        ppo_config=PPOConfig(),
+        opponent_spec="random",
+        snapshot_state_dicts=[
+            ("PPO_2", snapshot_model.state_dict(), ModelConfig())
+        ],
+        self_play_ratio=0.0,
+    )
+    assert runner._snapshot_evaluators == {}
+    first = runner._snapshot_evaluator(0)
+    second = runner._snapshot_evaluator(0)
+    assert first is second
+    assert list(runner._snapshot_evaluators) == [0]
+
+
 def test_trainer_selects_vector_runner(setup):
     data, cards, registry = setup
     model = make_model(registry)
@@ -263,3 +317,46 @@ def test_trainer_selects_vector_runner(setup):
         registry,
     )
     assert isinstance(runner, VectorBatchRunner)
+
+
+def test_trainer_passes_snapshot_pool_to_vector_runner(setup):
+    data, cards, registry = setup
+    model = make_model(registry)
+    pool = OpponentPool(opponent_spec="random,heuristic,simple")
+    pool.add_snapshot(
+        model.state_dict(),
+        "PPO_4",
+        model_config=ModelConfig(),
+        update=4,
+    )
+
+    class Agent:
+        simulation_device = torch.device("cpu")
+
+        def __init__(self):
+            self.model = model
+
+    runner = _make_runner(
+        Agent(),
+        cards,
+        registry.card_names,
+        get_action_space_size(registry.card_names),
+        PPOConfig(),
+        RunConfig(
+            engine="vec",
+            episodes=8,
+            num_workers=1,
+            opponents="random,heuristic,simple",
+            self_play=True,
+            self_play_ratio=0.75,
+        ),
+        data,
+        lambda: None,
+        registry,
+        pool=pool,
+        current_self_play_ratio=0.6,
+    )
+    assert isinstance(runner, VectorBatchRunner)
+    assert runner.self_play_ratio == 0.6
+    assert [name for name, _, _ in runner.snapshot_state_dicts] == ["PPO_4"]
+    assert runner.pfsp_weights == [1.0]

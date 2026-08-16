@@ -10,7 +10,7 @@ import numpy as np
 import torch
 from numba import njit, prange
 
-from src.config import DataConfig, PPOConfig
+from src.config import ModelConfig, PPOConfig
 from src.encoding.action_encoder import get_action_space_size
 from src.encoding.state_encoder import get_state_size
 from src.ppo.ppo_actor_critic import PPOActorCritic
@@ -22,9 +22,10 @@ from src.vector_engine.kernels import (
 from src.vector_engine.opponents import (
     OPPONENT_CODE,
     OPPONENT_LABEL,
+    SNAPSHOT_OFFSET,
     _select_random_legal,
     compile_opponent_policy_data,
-    sample_opponent_kinds,
+    sample_mixed_opponent_kinds,
     select_fixed_actions,
 )
 from src.ppo.opponent_pool import OpponentPool
@@ -152,6 +153,11 @@ class VectorBatchRunner:
         seed: int | None = None,
         num_threads: int = 4,
         num_concurrent: int | None = None,
+        snapshot_state_dicts: (
+            list[tuple[str, dict, ModelConfig | None]] | None
+        ) = None,
+        self_play_ratio: float = 0.0,
+        pfsp_weights: list[float] | None = None,
     ):
         self.opponent_entries = OpponentPool(
             opponent_spec=opponent_spec
@@ -166,9 +172,38 @@ class VectorBatchRunner:
             num_threads, numba.config.NUMBA_NUM_THREADS
         )
         self.num_concurrent = num_concurrent
+        self.snapshot_state_dicts = list(snapshot_state_dicts or ())
+        self.self_play_ratio = self_play_ratio
+        self.pfsp_weights = (
+            list(pfsp_weights) if pfsp_weights is not None else None
+        )
         self.opponent_results: dict[str, list[int]] = {}
         self._batch_index = 0
-        self._last_opponent_kinds = np.empty(0, dtype=np.int8)
+        self._last_opponent_kinds = np.empty(0, dtype=np.int16)
+        self._snapshot_evaluators: dict[int, VectorPolicyEvaluator] = {}
+
+    def _snapshot_evaluator(
+        self, snapshot_index: int
+    ) -> VectorPolicyEvaluator:
+        cached = self._snapshot_evaluators.get(snapshot_index)
+        if cached is not None:
+            return cached
+        state_dim = get_state_size(self.registry.card_names)
+        action_dim = get_action_space_size(self.registry.card_names)
+        _, state_dict, model_config = self.snapshot_state_dicts[
+            snapshot_index
+        ]
+        model = PPOActorCritic(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            num_cards=self.registry.num_cards,
+            model_config=model_config or ModelConfig(),
+            card_registry=self.registry,
+        )
+        model.load_state_dict(state_dict)
+        evaluator = VectorPolicyEvaluator(model, self.device)
+        self._snapshot_evaluators[snapshot_index] = evaluator
+        return evaluator
 
     def run_episodes(self, num_episodes: int) -> tuple:
         if (
@@ -197,8 +232,13 @@ class VectorBatchRunner:
         policy_data = compile_opponent_policy_data(
             self.cards, self.registry, rules
         )
-        opponent_kinds = sample_opponent_kinds(
-            self.opponent_entries, num_episodes, batch_seed
+        opponent_kinds = sample_mixed_opponent_kinds(
+            self.opponent_entries,
+            len(self.snapshot_state_dicts),
+            self.self_play_ratio,
+            self.pfsp_weights,
+            num_episodes,
+            batch_seed,
         )
         self._last_opponent_kinds = opponent_kinds.copy()
 
@@ -220,6 +260,8 @@ class VectorBatchRunner:
             "iterations": 0,
             "policy_calls": 0,
             "policy_rows": 0,
+            "snapshot_policy_calls": 0,
+            "snapshot_policy_rows": 0,
         }
         loop_started = time.perf_counter()
 
@@ -269,14 +311,35 @@ class VectorBatchRunner:
 
             if len(opponent_rows):
                 phase = time.perf_counter()
-                select_fixed_actions(
-                    engine,
-                    policy_data,
-                    opponent_kinds,
-                    opponent_rows,
-                    actions,
-                    action_variants,
-                )
+                fixed_rows = opponent_rows[
+                    opponent_kinds[opponent_rows] < SNAPSHOT_OFFSET
+                ]
+                if len(fixed_rows):
+                    select_fixed_actions(
+                        engine,
+                        policy_data,
+                        opponent_kinds,
+                        fixed_rows,
+                        actions,
+                        action_variants,
+                    )
+                for snapshot_index in range(
+                    len(self.snapshot_state_dicts)
+                ):
+                    snapshot_rows = opponent_rows[
+                        opponent_kinds[opponent_rows]
+                        == SNAPSHOT_OFFSET + snapshot_index
+                    ]
+                    if not len(snapshot_rows):
+                        continue
+                    evaluator = self._snapshot_evaluator(snapshot_index)
+                    timing["snapshot_policy_calls"] += 1
+                    timing["snapshot_policy_rows"] += len(snapshot_rows)
+                    decision = evaluator.decide(
+                        observations[snapshot_rows],
+                        masks[snapshot_rows],
+                    )
+                    actions[snapshot_rows] = decision.actions
                 timing["opponent"] += time.perf_counter() - phase
 
             phase = time.perf_counter()
@@ -338,6 +401,16 @@ class VectorBatchRunner:
                 int((training_won & selected).sum()),
                 int(selected.sum()),
             ]
+        for snapshot_index, (
+            name,
+            _,
+            _,
+        ) in enumerate(self.snapshot_state_dicts):
+            selected = opponent_kinds == SNAPSHOT_OFFSET + snapshot_index
+            self.opponent_results[name] = [
+                int((training_won & selected).sum()),
+                int(selected.sum()),
+            ]
         transfer_started = time.perf_counter()
         result = (
             torch.from_numpy(states).to(self.device),
@@ -353,7 +426,8 @@ class VectorBatchRunner:
         _log.info(
             "[VectorRunner] loop=%.2fs mask_obs=%.2fs policy=%.2fs "
             "store=%.2fs opponent=%.2fs step=%.2fs concat=%.2fs "
-            "gae=%.2fs transfer=%.2fs iterations=%d calls=%d avg_batch=%.0f",
+            "gae=%.2fs transfer=%.2fs iterations=%d calls=%d avg_batch=%.0f "
+            "snapshot_calls=%d snapshot_avg_batch=%.0f",
             loop_elapsed,
             timing["mask_obs"],
             timing["policy"],
@@ -366,5 +440,8 @@ class VectorBatchRunner:
             timing["iterations"],
             timing["policy_calls"],
             timing["policy_rows"] / max(1, timing["policy_calls"]),
+            timing["snapshot_policy_calls"],
+            timing["snapshot_policy_rows"]
+            / max(1, timing["snapshot_policy_calls"]),
         )
         return result

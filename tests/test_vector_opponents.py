@@ -16,6 +16,7 @@ from src.vector_engine.kernels import END_TURN_INDEX, VectorEngine
 from src.vector_engine.opponents import (
     FixedOpponent,
     compile_opponent_policy_data,
+    sample_mixed_opponent_kinds,
     sample_opponent_kinds,
     select_fixed_actions,
 )
@@ -267,6 +268,36 @@ def test_weighted_opponent_sampling_is_reproducible_and_normalized():
         0.3, abs=0.01
     )
     assert frequencies[int(FixedOpponent.SIMPLE)] == pytest.approx(0.1, abs=0.01)
+
+
+def test_snapshot_assignment_obeys_ratio_and_pfsp_weights():
+    entries = [("random", 0.5), ("heuristic", 0.5)]
+    assignments = sample_mixed_opponent_kinds(
+        entries,
+        snapshot_count=2,
+        self_play_ratio=0.4,
+        pfsp_weights=[0.8, 0.2],
+        games=100_000,
+        seed=77,
+    )
+    snapshot = assignments >= 3
+    assert snapshot.mean() == pytest.approx(0.4, abs=0.01)
+    selected = assignments[snapshot] - 3
+    assert (selected == 0).mean() == pytest.approx(0.8, abs=0.01)
+
+
+def test_snapshot_assignment_falls_back_to_fixed_without_snapshots():
+    entries = [("random", 0.25), ("simple", 0.75)]
+    mixed = sample_mixed_opponent_kinds(
+        entries,
+        snapshot_count=0,
+        self_play_ratio=1.0,
+        pfsp_weights=None,
+        games=500,
+        seed=12,
+    )
+    fixed = sample_opponent_kinds(entries, games=500, seed=12)
+    np.testing.assert_array_equal(mixed, fixed)
 
 
 @pytest.mark.parametrize(
