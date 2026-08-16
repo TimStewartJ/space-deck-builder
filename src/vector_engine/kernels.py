@@ -1081,7 +1081,7 @@ def build_action_weights_kernel(
     masks,
     weights,
 ):
-    """Physical Action-object multiplicity for scalar RandomAgent parity."""
+    """Physical Action-object multiplicity for fixed-opponent parity."""
     for game in prange(zones.shape[0]):
         for action in range(weights.shape[1]):
             weights[game, action] = 0
@@ -2495,7 +2495,7 @@ class VectorEngine:
         return self.observations
 
     def build_action_weights(self) -> np.ndarray:
-        """Physical scalar-Action multiplicities for random opponents."""
+        """Physical scalar-Action multiplicities for fixed opponents."""
         s, r = self.state, self.rules
         build_action_weights_kernel(
             s.zones,

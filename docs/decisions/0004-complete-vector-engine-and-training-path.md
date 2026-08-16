@@ -1,6 +1,6 @@
 # 0004 - Complete vector rules and expose a guarded training path
 
-**Status:** Accepted on `feat/vector-engine-gate2` (2026-08-14), superseded in part by ADR 0005
+**Status:** Accepted on `feat/vector-engine-gate2` (2026-08-14), superseded in part by ADRs 0005 and 0006
 
 ## Context
 
@@ -30,7 +30,7 @@ differential coverage.
 
 Expose `RunConfig.engine` and `train --engine {object,vec}`. The vector runner:
 
-- currently accepts only `--opponents random`;
+- initially accepted only `--opponents random` (expanded by ADR 0006);
 - implements RandomAgent's exact action priority (play first, then direct
   attack, then uniform random);
 - stores linked per-game transitions and computes GAE in Numba;
@@ -71,9 +71,10 @@ and streamed/bounded PPO storage are the next performance layer.
 
 ## Consequences
 
-- The vector engine is usable end to end for random-opponent PPO work.
+- The vector engine was initially usable end to end for random-opponent PPO work.
 - Existing default training and reporting remain unchanged.
-- Heuristic/simple/self-play support is the next integration scope, not hidden
+- Fixed heuristic/simple support and snapshot self-play are separate integration
+  scopes; ADR 0006 completes the fixed opponents without hiding self-play
   behind a fallback.
 - PPO optimization remains the dominant whole-update cost after rollout is
   reduced.

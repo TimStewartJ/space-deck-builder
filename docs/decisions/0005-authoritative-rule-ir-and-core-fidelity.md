@@ -53,7 +53,7 @@ physical card. Mech World's wildcard contributes to ally checks only.
 - scalar/vector tests compare masks, observations, pending state, ordered deck
   state, effective per-copy rules, and complete canonical state after actions;
 - complete seeded differential games remain the cross-backend oracle;
-- the guarded random-opponent vector training path remains a required smoke.
+- the guarded fixed-opponent vector training path remains a required smoke.
 
 ## Consequences
 
