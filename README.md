@@ -134,7 +134,9 @@ vector engines no longer maintain separate effect-type implementations.
 
 Snapshot self-play reuses the vector population. Games receive stable PFSP
 snapshot assignments, and opponent rows are grouped into one batched inference
-call per active snapshot model.
+call per active snapshot model. By default, PFSP selects at most three snapshot
+models per rollout so the full historical pool remains available across
+updates without fragmenting every inference iteration across ten tiny batches.
 
 The scalar engine remains the oracle: tests compare every legal mask and
 505-float observation before each action, then every canonical state field

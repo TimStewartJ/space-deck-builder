@@ -158,6 +158,7 @@ class VectorBatchRunner:
         ) = None,
         self_play_ratio: float = 0.0,
         pfsp_weights: list[float] | None = None,
+        max_active_snapshots: int = 3,
     ):
         self.opponent_entries = OpponentPool(
             opponent_spec=opponent_spec
@@ -177,6 +178,7 @@ class VectorBatchRunner:
         self.pfsp_weights = (
             list(pfsp_weights) if pfsp_weights is not None else None
         )
+        self.max_active_snapshots = max_active_snapshots
         self.opponent_results: dict[str, list[int]] = {}
         self._batch_index = 0
         self._last_opponent_kinds = np.empty(0, dtype=np.int16)
@@ -239,6 +241,7 @@ class VectorBatchRunner:
             self.pfsp_weights,
             num_episodes,
             batch_seed,
+            self.max_active_snapshots,
         )
         self._last_opponent_kinds = opponent_kinds.copy()
 

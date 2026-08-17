@@ -1,6 +1,6 @@
 # 0008 - Group snapshot self-play inference in vector rollout
 
-**Status:** Accepted on `feat/vector-self-play` (2026-08-15)
+**Status:** Accepted on `feat/vector-self-play-dense` (2026-08-16)
 
 ## Context
 
@@ -24,6 +24,13 @@ fixed opponent or snapshot according to the current self-play ratio. Snapshot
 selection uses the PFSP weights frozen for that update. Assignments remain
 stable for the complete game.
 
+The persistent pool remains log-spaced and PFSP-weighted, but one vector
+population activates at most three snapshot models by default. The active
+subset is sampled without replacement using PFSP weights, then self-play games
+are distributed across that subset. A different subset is selected each
+update, so the full pool remains eligible while inference fragmentation is
+bounded. `--vec-max-active-snapshots 0` restores unlimited activation.
+
 Only snapshots assigned at least one resident game are reconstructed. Their
 evaluators are cached for the runner lifetime and kept on the simulation
 device. Opponent decision rows are grouped by snapshot id and sent through one
@@ -39,13 +46,15 @@ Result accounting uses the existing snapshot names, so `OpponentPool` EMA,
 PFSP summaries, geometric eviction, checkpoint manifests, and resume behavior
 remain unchanged.
 
-The packed rollout from ADR 0007 stores only the current policy's decisions.
-Snapshot actions are behavior of the environment opponent and therefore do
-not enter PPO minibatches.
+The existing dense vector rollout stores only the current policy's decisions.
+Snapshot actions are behavior of the environment opponent and therefore do not
+enter PPO minibatches.
 
 ## Verification
 
 - assignment tests cover fixed fallback, self-play ratio, and PFSP weighting;
+- active-subset tests enforce the per-rollout cap and full-pool coverage across
+  updates;
 - trainer plumbing passes live and restored snapshot pools to the vector
   runner;
 - all-snapshot vector games complete with legal actions and per-snapshot
@@ -61,5 +70,7 @@ not enter PPO minibatches.
 - Policy inference cost grows with the number of distinct snapshots active in
   one iteration, not directly with the number of self-play games.
 - The snapshot cap bounds resident model memory.
+- The active-model cap bounds policy-call fragmentation independently from the
+  persistent snapshot-pool cap.
 - Building snapshot models once per update adds setup work but avoids
   per-game model construction.

@@ -92,6 +92,10 @@ class TestRunConfigValidation:
         with pytest.raises(ValueError, match="Unknown self_play_schedule"):
             RunConfig(self_play_schedule="exponential")
 
+    def test_negative_vector_snapshot_cap_rejected(self):
+        with pytest.raises(ValueError, match="vec_max_active_snapshots"):
+            RunConfig(vec_max_active_snapshots=-1)
+
     def test_ratio_start_below_zero_rejected(self):
         with pytest.raises(ValueError, match="self_play_ratio_start"):
             RunConfig(self_play_ratio_start=-0.1)
@@ -115,12 +119,14 @@ class TestRunConfigValidation:
             self_play_ratio=0.8,
             self_play_ratio_start=0.1,
             self_play_schedule="cosine",
+            vec_max_active_snapshots=5,
         )
         d = cfg.to_dict()
         cfg2 = RunConfig.from_dict(d)
         assert cfg2.self_play_ratio == 0.8
         assert cfg2.self_play_ratio_start == 0.1
         assert cfg2.self_play_schedule == "cosine"
+        assert cfg2.vec_max_active_snapshots == 5
 
     def test_from_dict_ignores_unknown_keys(self):
         """from_dict should gracefully handle checkpoints with extra keys."""

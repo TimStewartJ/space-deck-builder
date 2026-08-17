@@ -300,6 +300,39 @@ def test_snapshot_assignment_falls_back_to_fixed_without_snapshots():
     np.testing.assert_array_equal(mixed, fixed)
 
 
+def test_snapshot_assignment_caps_models_per_rollout():
+    assignments = sample_mixed_opponent_kinds(
+        [("random", 1.0)],
+        snapshot_count=10,
+        self_play_ratio=0.5,
+        pfsp_weights=[1.0] * 10,
+        games=20_000,
+        seed=99,
+        max_active_snapshots=3,
+    )
+    snapshot_assignments = assignments[assignments >= 3]
+    assert len(np.unique(snapshot_assignments)) == 3
+    assert len(snapshot_assignments) / len(assignments) == pytest.approx(
+        0.5, abs=0.01
+    )
+
+
+def test_snapshot_cap_preserves_pool_coverage_across_rollouts():
+    selected = set()
+    for seed in range(40):
+        assignments = sample_mixed_opponent_kinds(
+            [("random", 1.0)],
+            snapshot_count=10,
+            self_play_ratio=1.0,
+            pfsp_weights=[1.0] * 10,
+            games=200,
+            seed=seed,
+            max_active_snapshots=3,
+        )
+        selected.update((np.unique(assignments) - 3).tolist())
+    assert selected == set(range(10))
+
+
 @pytest.mark.parametrize(
     ("player_zero", "player_one"),
     [

@@ -77,6 +77,7 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
                 else run_cfg.self_play_ratio
             ),
             pfsp_weights=pfsp_weights,
+            max_active_snapshots=run_cfg.vec_max_active_snapshots,
         )
 
     if run_cfg.num_workers > 1:

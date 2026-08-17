@@ -239,10 +239,13 @@ def sample_mixed_opponent_kinds(
     pfsp_weights: list[float] | None,
     games: int,
     seed: int,
+    max_active_snapshots: int = 0,
 ) -> np.ndarray:
     """Sample stable fixed or snapshot assignments for resident games."""
     if snapshot_count < 0:
         raise ValueError("snapshot_count must be non-negative")
+    if max_active_snapshots < 0:
+        raise ValueError("max_active_snapshots must be non-negative")
     if not 0.0 <= self_play_ratio <= 1.0:
         raise ValueError("self_play_ratio must be in [0, 1]")
     if snapshot_count == 0:
@@ -280,10 +283,27 @@ def sample_mixed_opponent_kinds(
         )
     snapshot_games = int(use_snapshot.sum())
     if snapshot_games:
+        active_snapshots = np.arange(snapshot_count, dtype=np.int16)
+        if (
+            max_active_snapshots > 0
+            and snapshot_count > max_active_snapshots
+        ):
+            active_snapshots = rng.choice(
+                snapshot_count,
+                size=max_active_snapshots,
+                replace=False,
+                p=weights,
+            ).astype(np.int16)
+        active_weights = weights[active_snapshots]
+        active_weights /= active_weights.sum()
         snapshot_choices = rng.choice(
-            snapshot_count, size=snapshot_games, p=weights
+            len(active_snapshots),
+            size=snapshot_games,
+            p=active_weights,
         )
-        assignments[use_snapshot] = SNAPSHOT_OFFSET + snapshot_choices
+        assignments[use_snapshot] = (
+            SNAPSHOT_OFFSET + active_snapshots[snapshot_choices]
+        )
     return assignments
 
 

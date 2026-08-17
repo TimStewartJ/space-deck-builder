@@ -259,7 +259,8 @@ def test_vector_runner_collects_snapshot_self_play(setup):
         pfsp_weights=[1.0],
     )
     rollout = runner.run_episodes(8)
-    assert isinstance(rollout, PackedRolloutBatch)
+    assert len(rollout) == 6
+    assert len(rollout[0]) > 0
     assert runner.opponent_results["PPO_1"][1] == 8
     assert sum(
         runner.opponent_results[name][1]
@@ -349,6 +350,7 @@ def test_trainer_passes_snapshot_pool_to_vector_runner(setup):
             opponents="random,heuristic,simple",
             self_play=True,
             self_play_ratio=0.75,
+            vec_max_active_snapshots=2,
         ),
         data,
         lambda: None,
@@ -360,3 +362,4 @@ def test_trainer_passes_snapshot_pool_to_vector_runner(setup):
     assert runner.self_play_ratio == 0.6
     assert [name for name, _, _ in runner.snapshot_state_dicts] == ["PPO_4"]
     assert runner.pfsp_weights == [1.0]
+    assert runner.max_active_snapshots == 2
