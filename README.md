@@ -132,19 +132,25 @@ top-deck placement, passive triggers, and per-copy rules for Stealth Needle.
 The same versioned Rule IR drives the scalar interpreter, so the object and
 vector engines no longer maintain separate effect-type implementations.
 
+Snapshot self-play reuses the vector population. Games receive stable PFSP
+snapshot assignments, and opponent rows are grouped into one batched inference
+call per active snapshot model. By default, PFSP selects at most three snapshot
+models per rollout so the full historical pool remains available across
+updates without fragmenting every inference iteration across ten tiny batches.
+
 The scalar engine remains the oracle: tests compare every legal mask and
 505-float observation before each action, then every canonical state field
 afterward. The final detached full-card 16,000-game gate measured 5.88M
 decisions/s for engine + masks + observations and 587k/s with the actual PPO
 policy.
 Use `train --engine vec --opponents random,heuristic,simple` for the guarded
-mixed-opponent path. Weighted specifications use the same syntax as the object
-runner. Snapshot self-play remains unsupported by the vector runner and fails
-explicitly. Object remains the default. See
+mixed-opponent path. Weighted specifications and snapshot self-play use the
+same configuration as the object runner. Object remains the default. See
 [`docs/decisions/0003-compiler-backed-numba-vector-engine.md`](docs/decisions/0003-compiler-backed-numba-vector-engine.md)
 and [`docs/decisions/0004-complete-vector-engine-and-training-path.md`](docs/decisions/0004-complete-vector-engine-and-training-path.md)
 and [`docs/decisions/0005-authoritative-rule-ir-and-core-fidelity.md`](docs/decisions/0005-authoritative-rule-ir-and-core-fidelity.md)
 and [`docs/decisions/0006-vector-fixed-opponents.md`](docs/decisions/0006-vector-fixed-opponents.md)
+and [`docs/decisions/0008-vector-snapshot-self-play.md`](docs/decisions/0008-vector-snapshot-self-play.md)
 and [`results/vector_engine_gate.md`](results/vector_engine_gate.md).
 
 ### Measuring rollout performance

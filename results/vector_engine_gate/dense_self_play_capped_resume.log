@@ -1,0 +1,26 @@
+[19:47:16] Metrics file: logs\metrics_20260816_194716_4956.jsonl
+[19:47:16] Master seed set to 52 (random/numpy/torch).
+[19:47:16] Resuming from E:\sdb-dense-selfplay\models\ppo_agent_0816_1946_upd12_wins5.pth: prev_update=12, will run updates 13..13
+[19:47:17] Model has 0.28M parameters (actor: mlp, pool: sum). Action dim: 494.
+[19:47:17] Restored 10 self-play snapshot(s) from pool manifest.
+[19:47:17] Opponent pool: heuristic, random, simple + self-play (ratio: 0.5, pfsp: variance)
+[19:47:17] Re-pinning LR scheduler T_max: 11 -> 12 (extending cosine horizon for resumed run).
+[19:47:17] Restored LR scheduler state (last_epoch=12, T_max=12).
+[19:47:17] LR schedule: cosine 3.0e-04 -> 1.0e-05 over 13 updates
+[19:47:17] --- Update 13/13 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[19:47:24] [VectorRunner] loop=7.55s mask_obs=0.12s policy=5.00s store=0.01s opponent=2.33s step=0.06s concat=0.01s gae=0.01s transfer=0.01s iterations=508 calls=493 avg_batch=36 snapshot_calls=1214 snapshot_avg_batch=8
+[19:47:24] Rollout: 128 episodes, 17629 steps in 7.7s (16.5 ep/s) (vec 4 threads)  win_rate=68%  avg_decisions/ep=138
+[19:47:24]   PFSP: PPO_1: wr=61% w=0.08, PPO_4: wr=55% w=0.08, PPO_5: wr=74% w=0.06, PPO_6: wr=63% w=0.07, PPO_7: wr=56% w=0.08, PPO_8: wr=54% w=0.08, PPO_9: wr=51% w=0.08, PPO_10: wr=53% w=0.08, PPO_11: wr=54% w=0.08, PPO_12: wr=50% w=0.32
+[19:47:27] PPO: actor=0.001  critic=0.063  ent=0.81  kl=0.0001  clip=0.000  gnorm=0.338  ev=0.83  lr=1.00e-05  2.2s  samples=17629
+[19:47:27] Evaluating (update 13) — 6 games × 3 opponent types
+[19:47:27]   vs heuristic: 0/2 wins (0%), avg 116 steps/game
+[19:47:27]   vs random: 2/2 wins (100%), avg 134 steps/game
+[19:47:27]   vs simple: 2/2 wins (100%), avg 126 steps/game
+[19:47:27]   Overall: 4/6 wins (67%) in 0.8s
+[19:47:27] Checkpoint saved: models/ppo_agent_0816_1947_upd13_wins4.pth
+[19:47:27] Episodes:    7.7s total, 7.7s avg/update
+[19:47:27] PPO updates: 2.2s total, 2.2s avg/update
+[19:47:27] Evaluation:  0.8s total, 0.8s avg/update
+[19:47:27] Avg PPO decision time: 0.000000s/decision
+[19:47:27] Total wall time: 10.7s
+[19:47:27] Training complete.

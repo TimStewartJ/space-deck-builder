@@ -25,6 +25,12 @@ def test_train_cli_defaults_match_run_config_curriculum():
 
     assert args.self_play == cfg.self_play
     assert args.opponents == cfg.opponents
+    assert args.vec_max_active_snapshots == cfg.vec_max_active_snapshots
+
+
+def test_train_cli_can_disable_vector_snapshot_cap():
+    args = _parse_train_args(["--vec-max-active-snapshots", "0"])
+    assert args.vec_max_active_snapshots == 0
 
 
 def test_train_cli_self_play_keeps_fixed_opponent_pool():

@@ -265,3 +265,45 @@ Raw artifacts:
 - [`fixed_opponents_training_smoke.jsonl`](vector_engine_gate/fixed_opponents_training_smoke.jsonl)
 - [`fixed_opponents_2k_training_smoke.log`](vector_engine_gate/fixed_opponents_2k_training_smoke.log)
 - [`fixed_opponents_2k_training_smoke.jsonl`](vector_engine_gate/fixed_opponents_2k_training_smoke.jsonl)
+
+## Dense vector snapshot self-play
+
+ADR 0008 ports snapshot/PFSP self-play directly onto the fast dense vector
+rollout. Games keep stable fixed-or-snapshot assignments, snapshot policies
+receive acting-player observations, and result names feed the existing EMA,
+geometric pool, manifest, and resume machinery.
+
+An uncapped 12-update, 2,000-episode probe grew the persistent pool to ten
+snapshots. Snapshot inference increasingly fragmented:
+
+| active snapshots | snapshot calls | avg snapshot batch | rollout |
+| ---: | ---: | ---: | ---: |
+| 1 | 454 | 46 | 2.3s |
+| 6 | 3,194 | 47 | 8.9s |
+| 9 | 4,291 | 33 | 11.2s |
+| 10 | 4,371 | 32 | 10.4s |
+
+The default now activates at most three PFSP-weighted snapshots per resident
+population while retaining the complete log-spaced pool across updates. The
+identical seed and 12-update protocol then measured:
+
+| metric | uncapped | capped at 3 |
+| --- | ---: | ---: |
+| total run | 132.4s | **100.3s** |
+| late-update rollout | 10.4s | **5.0s** |
+| late snapshot calls | 4,371 | **1,476** |
+| late average snapshot batch | 32 | **93** |
+
+The cap does not discard snapshots. A resume smoke restored ten pool entries;
+PFSP selected three (`PPO_7`, `PPO_8`, and `PPO_11`) for that resident
+population, and update 13 completed through train, eval, checkpoint, and result
+accounting.
+
+Raw artifacts:
+
+- [`dense_self_play_uncapped_probe.log`](vector_engine_gate/dense_self_play_uncapped_probe.log)
+- [`dense_self_play_uncapped_probe.jsonl`](vector_engine_gate/dense_self_play_uncapped_probe.jsonl)
+- [`dense_self_play_capped_probe.log`](vector_engine_gate/dense_self_play_capped_probe.log)
+- [`dense_self_play_capped_probe.jsonl`](vector_engine_gate/dense_self_play_capped_probe.jsonl)
+- [`dense_self_play_capped_resume.log`](vector_engine_gate/dense_self_play_capped_resume.log)
+- [`dense_self_play_capped_resume.jsonl`](vector_engine_gate/dense_self_play_capped_resume.jsonl)

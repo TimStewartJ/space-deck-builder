@@ -188,6 +188,11 @@ class RunConfig:
     """Training run topology and schedule."""
     engine: str = "object"
     vec_threads: int = 4
+    # Limit distinct snapshot models active in one vector rollout. The full
+    # pool remains eligible across updates; a PFSP-weighted subset is selected
+    # per resident population to avoid fragmenting inference into tiny batches.
+    # Zero disables the limit.
+    vec_max_active_snapshots: int = 3
     episodes: int = 16000
     updates: int = 200
     num_workers: int = 20
@@ -227,6 +232,11 @@ class RunConfig:
         if self.vec_threads <= 0:
             raise ValueError(
                 f"vec_threads must be positive, got {self.vec_threads}"
+            )
+        if self.vec_max_active_snapshots < 0:
+            raise ValueError(
+                "vec_max_active_snapshots must be non-negative, got "
+                f"{self.vec_max_active_snapshots}"
             )
         if self.self_play_schedule not in self._VALID_SCHEDULES:
             raise ValueError(

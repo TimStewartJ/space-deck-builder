@@ -6,8 +6,11 @@ import pytest
 import torch
 
 from src.config import DataConfig, ModelConfig
+from src.ai.agent import Agent
+from src.encoding.action_context import build_action_context
 from src.encoding.action_encoder import get_action_space_size
-from src.encoding.state_encoder import get_state_size
+from src.encoding.state_encoder import encode_state, get_state_size
+from src.engine.game import Game
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.vector_engine.kernels import PLAY_OFFSET, VectorEngine
 from src.vector_engine.policy import (
@@ -15,7 +18,7 @@ from src.vector_engine.policy import (
     suppress_redundant_end_turn,
 )
 from src.vector_engine.rules import compile_rules
-from src.vector_engine.state import VectorState, ZONE_HAND
+from src.vector_engine.state import VectorState, ZONE_HAND, from_games
 
 
 @pytest.mark.parametrize("device_name", ["cpu", "cuda"])
@@ -90,3 +93,43 @@ def test_policy_buffers_reuse_capacity_across_variable_batch_sizes():
     evaluator.decide(observations[:63], masks[:63])
     assert evaluator.device_observations.data_ptr() == pointer
     assert evaluator._capacity == 64
+
+
+def test_current_player_observation_matches_scalar_opponent_perspective():
+    data = DataConfig()
+    cards = data.load_cards()
+    registry = data.build_registry(cards)
+    rules = compile_rules(cards, registry)
+    game = Game([], card_index_map=registry.card_index_map)
+    first = game.add_player("P0", Agent("P0"))
+    acting = game.add_player("P1", Agent("P1"))
+    for player in game.players:
+        game.stats.add_player(player.name)
+    game.first_player_name = first.name
+    game.current_turn = 1
+    game.current_player = acting
+    game.is_running = True
+    acting.hand.extend(game.create_starting_deck()[:3])
+
+    engine = VectorEngine(
+        from_games([game], rules, training_players=[0]),
+        rules,
+    )
+    engine.build_masks()
+    vector = engine.materialize_current_player_observations()[0]
+    context = build_action_context(
+        game,
+        acting,
+        registry.card_index_map,
+        get_action_space_size(registry.card_names),
+    )
+    scalar = encode_state(
+        game,
+        is_current_player_training=True,
+        cards=registry.card_names,
+        card_index_map=registry.card_index_map,
+        can_buy=context.can_buy,
+        has_actions=context.has_meaningful,
+        return_numpy=True,
+    )
+    np.testing.assert_array_equal(vector, scalar)

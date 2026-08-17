@@ -71,6 +71,7 @@ OPPONENT_LABEL = {
 OPPONENT_RANDOM = int(FixedOpponent.RANDOM)
 OPPONENT_HEURISTIC = int(FixedOpponent.HEURISTIC)
 OPPONENT_SIMPLE = int(FixedOpponent.SIMPLE)
+SNAPSHOT_OFFSET = len(FixedOpponent)
 
 
 @dataclass(frozen=True)
@@ -229,6 +230,81 @@ def sample_opponent_kinds(
         [OPPONENT_CODE[names[index]] for index in choices],
         dtype=np.int8,
     )
+
+
+def sample_mixed_opponent_kinds(
+    entries: list[tuple[str, float]],
+    snapshot_count: int,
+    self_play_ratio: float,
+    pfsp_weights: list[float] | None,
+    games: int,
+    seed: int,
+    max_active_snapshots: int = 0,
+) -> np.ndarray:
+    """Sample stable fixed or snapshot assignments for resident games."""
+    if snapshot_count < 0:
+        raise ValueError("snapshot_count must be non-negative")
+    if max_active_snapshots < 0:
+        raise ValueError("max_active_snapshots must be non-negative")
+    if not 0.0 <= self_play_ratio <= 1.0:
+        raise ValueError("self_play_ratio must be in [0, 1]")
+    if snapshot_count == 0:
+        return sample_opponent_kinds(entries, games, seed).astype(
+            np.int16
+        )
+
+    weights = (
+        np.ones(snapshot_count, dtype=np.float64)
+        if pfsp_weights is None
+        else np.asarray(pfsp_weights, dtype=np.float64)
+    )
+    if weights.shape != (snapshot_count,):
+        raise ValueError("PFSP weights must match snapshot count")
+    if np.any(weights <= 0) or not np.isfinite(weights).all():
+        raise ValueError("PFSP weights must be finite and positive")
+    weights /= weights.sum()
+
+    fixed_names = [name for name, _ in entries]
+    fixed_weights = np.asarray(
+        [weight for _, weight in entries], dtype=np.float64
+    )
+    rng = np.random.default_rng(seed ^ 0x5EED_0FF5)
+    use_snapshot = rng.random(games) < self_play_ratio
+    assignments = np.empty(games, dtype=np.int16)
+
+    fixed_count = int((~use_snapshot).sum())
+    if fixed_count:
+        fixed_choices = rng.choice(
+            len(entries), size=fixed_count, p=fixed_weights
+        )
+        assignments[~use_snapshot] = np.asarray(
+            [OPPONENT_CODE[fixed_names[index]] for index in fixed_choices],
+            dtype=np.int16,
+        )
+    snapshot_games = int(use_snapshot.sum())
+    if snapshot_games:
+        active_snapshots = np.arange(snapshot_count, dtype=np.int16)
+        if (
+            max_active_snapshots > 0
+            and snapshot_count > max_active_snapshots
+        ):
+            active_snapshots = rng.choice(
+                snapshot_count,
+                size=max_active_snapshots,
+                replace=False,
+                p=weights,
+            ).astype(np.int16)
+        active_weights = weights[active_snapshots]
+        active_weights /= active_weights.sum()
+        snapshot_choices = rng.choice(
+            len(active_snapshots),
+            size=snapshot_games,
+            p=active_weights,
+        )
+        assignments[use_snapshot] = (
+            SNAPSHOT_OFFSET + active_snapshots[snapshot_choices]
+        )
+    return assignments
 
 
 @njit(inline="always")

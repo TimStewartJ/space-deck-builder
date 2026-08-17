@@ -85,6 +85,15 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                    help="Rollout engine: object (default) or compiler-backed Numba vec")
     p.add_argument("--vec-threads", type=int, default=_run.vec_threads,
                    help=f"Numba threads for --engine vec (default: {_run.vec_threads})")
+    p.add_argument(
+        "--vec-max-active-snapshots",
+        type=int,
+        default=_run.vec_max_active_snapshots,
+        help=(
+            "Maximum snapshot models active in one vector rollout "
+            f"(default: {_run.vec_max_active_snapshots}; 0=unlimited)"
+        ),
+    )
     p.add_argument("--num-concurrent", type=int, default=None,
                    help="Concurrent games per worker (default: episodes/workers)")
     p.add_argument("--pfsp", type=str, default=_run.pfsp_mode,
@@ -302,6 +311,7 @@ def _run_train(args):
     run_cfg = RunConfig(
         engine=args.engine,
         vec_threads=args.vec_threads,
+        vec_max_active_snapshots=args.vec_max_active_snapshots,
         episodes=args.episodes, updates=args.updates,
         eval_every=args.eval_every, eval_games=args.eval_games,
         self_play=args.self_play,

@@ -50,9 +50,15 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
     num_concurrent = min(run_cfg.episodes, num_concurrent)
 
     if run_cfg.engine == "vec":
-        if run_cfg.self_play or (pool is not None and pool.has_snapshots):
-            raise ValueError(
-                "vector engine does not yet support self-play snapshots"
+        snapshot_state_dicts = (
+            list(pool._snapshots)
+            if pool is not None and pool.has_snapshots
+            else None
+        )
+        pfsp_weights = None
+        if snapshot_state_dicts:
+            pfsp_weights = pool._pfsp_weights(
+                [name for name, _, _ in snapshot_state_dicts]
             )
         from src.ppo.vector_batch_runner import VectorBatchRunner
         return VectorBatchRunner(
@@ -64,6 +70,14 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
             opponent_spec=run_cfg.opponents,
             num_threads=run_cfg.vec_threads,
             num_concurrent=run_cfg.num_concurrent,
+            snapshot_state_dicts=snapshot_state_dicts,
+            self_play_ratio=(
+                current_self_play_ratio
+                if current_self_play_ratio is not None
+                else run_cfg.self_play_ratio
+            ),
+            pfsp_weights=pfsp_weights,
+            max_active_snapshots=run_cfg.vec_max_active_snapshots,
         )
 
     if run_cfg.num_workers > 1:
