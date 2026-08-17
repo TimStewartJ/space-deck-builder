@@ -27,6 +27,7 @@ def test_train_cli_defaults_match_run_config_curriculum():
     assert args.opponents == cfg.opponents
     assert args.vec_max_active_snapshots == cfg.vec_max_active_snapshots
     assert args.self_play_horizon == cfg.self_play_horizon
+    assert args.eval_num_workers == cfg.eval_num_workers
     assert args.models_dir == DataConfig().models_dir
 
 
@@ -38,6 +39,12 @@ def test_train_cli_accepts_isolated_checkpoint_directory():
 def test_train_cli_accepts_absolute_self_play_horizon():
     args = _parse_train_args(["--self-play-horizon", "263"])
     assert args.self_play_horizon == 263
+
+
+def test_train_cli_accepts_dedicated_eval_workers():
+    args = _parse_train_args(["--num-workers", "16", "--eval-num-workers", "1"])
+    assert args.num_workers == 16
+    assert args.eval_num_workers == 1
 
 
 def test_run_train_passes_isolated_checkpoint_directory(monkeypatch):

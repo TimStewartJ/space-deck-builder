@@ -1,6 +1,6 @@
 # 0009 - Batch snapshot inference and reset long-lived ROCm processes
 
-**Status:** Proposed on `feat/stacked-snapshot-inference` (2026-08-17)
+**Status:** Accepted on `feat/stacked-snapshot-inference` (2026-08-17)
 
 ## Context
 
@@ -93,6 +93,37 @@ cap-3 inference, 4.2 s with actor-only cap-1 inference, and 3.4 s with the
 joint cap-1 path. The last configuration spends about 6.5 s on rollout plus
 PPO, meeting the optimization target before strength selection.
 
+## Active-snapshot selection
+
+The architecture-selection cap pilot resumed the same update-213 checkpoint
+for 50 updates at 2,000 episodes/update and continuation seed 0. Every arm
+retained the original 400-update schedules, used fresh processes after at most
+25 updates, and finished with 5,000 games against each fixed opponent. This is
+a paired engineering pilot, not the three-independent-seed result required for
+a reported model by `eval_protocol.md`.
+
+| Active cap | Warm rollout | Warm rollout + PPO | Heuristic | Overall | Elo |
+|---:|---:|---:|---:|---:|---:|
+| 1 | 3.27 s | 6.28 s | 82.92% | 93.17% | 1092 |
+| 2 | 5.48 s | 8.72 s | 84.14% | 93.51% | 1098 |
+| 3 | 5.42 s | 8.47 s | 85.20% | 94.01% | 1093 |
+
+Elo used 1,000 games/pair and anchored the fixed-opponent update-400 baseline
+at 1000. The cap-1, cap-2, and cap-3 checkpoints were statistically close in
+cross-play: cap 1 scored 51.3% against cap 2 and 48.8% against cap 3; cap 2
+scored 51.8% against cap 3.
+
+Cap 1 met the aggressive latency target, but its seed-0 Heuristic point
+estimate was 2.28 percentage points below cap 3, beyond the pilot's one-point
+guardrail. Cap 2 had no speed advantage over cap 3. Therefore this pilot does
+not justify changing the shipped cap-3 default; cap 1 remains an explicit
+fast-throughput option. A future reported strength claim still requires three
+independent training seeds.
+
+Against the degraded long-lived cap-3 process, the selected cap-3 design
+reduced warm rollout from 12.41 s to 5.42 s and rollout-plus-PPO from 16.23 s
+to 8.47 s. This is a 2.29x rollout speedup and 1.92x end-to-end update speedup.
+
 ## Consequences
 
 - Snapshot inference scales with active model groups rather than one
@@ -102,5 +133,5 @@ PPO, meeting the optimization target before strength selection.
   stacked path.
 - Process startup is paid once per chunk rather than once per update, while
   long-process ROCm drift is bounded.
-- The active-snapshot cap remains an empirical strength/speed choice; this ADR
-  does not change its default before the locked ablation.
+- Cap 3 remains the default because it preserved the strongest fixed-opponent
+  result at the same throughput as cap 2.

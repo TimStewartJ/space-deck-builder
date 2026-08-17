@@ -399,7 +399,7 @@ while ($currentUpdate -lt $TargetUpdate) {
     if (-not $isFinalChunk) {
         $arguments += @(
             "--eval-games", [string]$InterimEvalGames,
-            "--num-workers", [string]$InterimNumWorkers
+            "--eval-num-workers", [string]$InterimNumWorkers
         )
     }
 

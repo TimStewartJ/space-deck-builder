@@ -6,6 +6,7 @@ their own defaults.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
@@ -200,6 +201,9 @@ class RunConfig:
     num_concurrent: int | None = None
     eval_every: int = 5
     eval_games: int = 3200
+    # Evaluation can use a different worker topology from rollout collection.
+    # None inherits num_workers.
+    eval_num_workers: int | None = None
     self_play: bool = False
     opponents: str = "random,heuristic,simple"
     self_play_ratio: float = 0.5
@@ -241,6 +245,11 @@ class RunConfig:
             raise ValueError(
                 "vec_max_active_snapshots must be non-negative, got "
                 f"{self.vec_max_active_snapshots}"
+            )
+        if self.eval_num_workers is not None and self.eval_num_workers <= 0:
+            raise ValueError(
+                "eval_num_workers must be positive when set, got "
+                f"{self.eval_num_workers}"
             )
         if self.self_play_schedule not in self._VALID_SCHEDULES:
             raise ValueError(
@@ -401,6 +410,16 @@ def restore_rng_state(state: dict[str, Any]) -> None:
             "available"
         )
     torch.cuda.set_rng_state_all(cuda_states)
+
+
+@contextmanager
+def preserve_rng_state():
+    """Prevent evaluation or diagnostics from advancing training RNG streams."""
+    state = capture_rng_state()
+    try:
+        yield
+    finally:
+        restore_rng_state(state)
 
 
 def save_checkpoint(

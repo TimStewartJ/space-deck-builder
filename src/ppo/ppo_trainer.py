@@ -9,7 +9,8 @@ import gc
 
 from src.config import (
     DataConfig, PPOConfig, RunConfig, DeviceConfig, ModelConfig,
-    capture_rng_state, load_checkpoint, restore_rng_state, save_checkpoint,
+    capture_rng_state, load_checkpoint, preserve_rng_state,
+    restore_rng_state, save_checkpoint,
 )
 from src.cards.card import Card
 from src.ai.agent import Agent
@@ -491,11 +492,12 @@ def train(
         eval_result = None
         if upd % run_cfg.eval_every == 0 or is_last_update:
             start_time = time.time()
-            wins, eval_result = _run_per_opponent_eval(
-                agent, pool, card_names, cards, run_cfg, ppo_cfg, upd,
-                registry=registry, data_cfg=data_cfg,
-                log_fn=logger.info,
-            )
+            with preserve_rng_state():
+                wins, eval_result = _run_per_opponent_eval(
+                    agent, pool, card_names, cards, run_cfg, ppo_cfg, upd,
+                    registry=registry, data_cfg=data_cfg,
+                    log_fn=logger.info,
+                )
             agent.clear_buffers()
             duration_eval = time.time() - start_time
             total_time_spent_on_eval += duration_eval
@@ -621,6 +623,11 @@ def _run_per_opponent_eval(
     from src.ppo.ppo_eval import evaluate
 
     opponents_spec = ",".join(pool.opponent_types)
+    eval_workers = (
+        run_cfg.eval_num_workers
+        if run_cfg.eval_num_workers is not None
+        else run_cfg.num_workers
+    )
     result = evaluate(
         agent.model,
         data_cfg=data_cfg or DataConfig(),
@@ -628,7 +635,7 @@ def _run_per_opponent_eval(
         opponents=opponents_spec,
         eval_games=run_cfg.eval_games,
         num_concurrent=run_cfg.num_concurrent,
-        num_workers=run_cfg.num_workers if data_cfg is not None else 1,
+        num_workers=eval_workers if data_cfg is not None else 1,
         ppo_config=ppo_cfg,
         label=f"update {upd}",
         min_games_per_opponent=1,

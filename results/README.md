@@ -10,6 +10,7 @@ only on the machine that produced it.
 
 | Date | Writeup | Question | Outcome |
 |---|---|---|---|
+| 2026-08-17 | [`snapshot_inference_optimization.md`](snapshot_inference_optimization.md) | Can vector PFSP self-play avoid fragmented snapshot inference and long-process ROCm drift? | **Yes.** Actor-only stacked inference plus 25-update process chunks cuts degraded cap-3 rollout from 12.41s to 5.42s (2.29x). A paired seed-0 selection pilot keeps cap 3 as the conservative default; cap 1 is an optional 3.27s fast path. |
 | 2026-08-14 | [`vector_engine_gate.md`](vector_engine_gate.md) | Is a struct-of-arrays compiler engine fast enough and rules-exact end to end? | **Yes.** All 49 cards compile and match scalar state/masks/observations. The full engine runs at 5.88M/s, the actual-policy path at 587k/s, and `train --engine vec --opponents random` completes rollout, PPO update, scalar eval, and checkpoint save. |
 | 2026-04-28 | [`curriculum_v02.md`](curriculum_v02.md) | Should the default training curriculum be the fixed mixed pool, or self-play? | Mixed fixed opponents became the default (+6.8pp gauntlet, +136 Elo vs random-only). Self-play is stronger still (+203 Elo, 59.7% head-to-head) but ~1.8x the wall time, so it stays opt-in. |
 | 2026-04-24 | [`token_features_phase1.md`](token_features_phase1.md) | Do static per-card feature tokens beat a pure embedding lookup? | **Tied.** Kept behind `--token-features`, off by default. See the correction at the top — the parameter delta was ~1%, not 2.7x, so this did not test a capacity increase. |

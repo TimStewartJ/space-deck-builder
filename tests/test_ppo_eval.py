@@ -1,7 +1,10 @@
 """Tests for the standalone evaluation module (ppo_eval)."""
 import pytest
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
+from src.config import DataConfig, PPOConfig, RunConfig
 from src.ppo.ppo_eval import _distribute_games, EvalResult, OpponentResult
+from src.ppo.ppo_trainer import _run_per_opponent_eval
 
 
 class TestDistributeGames:
@@ -95,3 +98,31 @@ class TestEvalResultDataclasses:
         )
         assert len(result.per_opponent) == 1
         assert result.total_wins == 80
+
+
+def test_training_eval_uses_dedicated_worker_count(monkeypatch):
+    captured = {}
+    result = SimpleNamespace(total_wins=1)
+
+    def fake_evaluate(*args, **kwargs):
+        captured.update(kwargs)
+        return result
+
+    monkeypatch.setattr("src.ppo.ppo_eval.evaluate", fake_evaluate)
+    agent = SimpleNamespace(model=object(), simulation_device="cpu")
+    pool = SimpleNamespace(opponent_types=["random"])
+
+    wins, actual = _run_per_opponent_eval(
+        agent,
+        pool,
+        [],
+        [],
+        RunConfig(num_workers=16, eval_num_workers=1),
+        PPOConfig(),
+        5,
+        data_cfg=DataConfig(),
+    )
+
+    assert wins == 1
+    assert actual is result
+    assert captured["num_workers"] == 1

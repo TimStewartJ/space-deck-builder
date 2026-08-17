@@ -15,6 +15,7 @@ from src.config import (
     RunConfig,
     capture_rng_state,
     load_checkpoint,
+    preserve_rng_state,
     restore_rng_state,
     save_checkpoint,
 )
@@ -138,6 +139,44 @@ def test_save_load_includes_rng_state(tmp_path: Path):
     assert data["rng_state"]["numpy"]["position"] == (
         rng_state["numpy"]["position"]
     )
+
+
+def test_preserve_rng_state_makes_diagnostics_rng_neutral():
+    original = capture_rng_state()
+    try:
+        random.seed(29)
+        np.random.seed(29)
+        torch.manual_seed(29)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(29)
+        baseline = capture_rng_state()
+
+        with preserve_rng_state():
+            random.random()
+            np.random.random(4)
+            torch.rand(4)
+            if torch.cuda.is_available():
+                torch.rand(4, device="cuda")
+
+        actual_python = random.random()
+        actual_numpy = np.random.random(4)
+        actual_cpu = torch.rand(4)
+        actual_cuda = (
+            torch.rand(4, device="cuda").cpu()
+            if torch.cuda.is_available()
+            else None
+        )
+        restore_rng_state(baseline)
+        assert random.random() == actual_python
+        np.testing.assert_array_equal(np.random.random(4), actual_numpy)
+        torch.testing.assert_close(torch.rand(4), actual_cpu)
+        if actual_cuda is not None:
+            torch.testing.assert_close(
+                torch.rand(4, device="cuda").cpu(),
+                actual_cuda,
+            )
+    finally:
+        restore_rng_state(original)
 
 
 def test_scheduler_load_state_clobbers_t_max():

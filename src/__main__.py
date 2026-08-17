@@ -79,6 +79,12 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--eval-every",  type=int,   default=_run.eval_every,
                    help="Evaluate every N updates (always on last)")
     p.add_argument("--eval-games",  type=int,   default=_run.eval_games)
+    p.add_argument(
+        "--eval-num-workers",
+        type=int,
+        default=_run.eval_num_workers,
+        help="Evaluation workers (default: inherit --num-workers)",
+    )
     p.add_argument("--self-play",   action="store_true", default=_run.self_play,
                    help="Enable self-play snapshots in addition to the fixed opponent pool")
     p.add_argument("--opponents",   type=str, default=_run.opponents,
@@ -338,6 +344,7 @@ def _run_train(args):
         vec_max_active_snapshots=args.vec_max_active_snapshots,
         episodes=args.episodes, updates=args.updates,
         eval_every=args.eval_every, eval_games=args.eval_games,
+        eval_num_workers=args.eval_num_workers,
         self_play=args.self_play,
         opponents=args.opponents,
         self_play_ratio=args.self_play_ratio,
