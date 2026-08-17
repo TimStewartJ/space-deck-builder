@@ -14,6 +14,8 @@ from src.engine.game import Game
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.vector_engine.kernels import PLAY_OFFSET, VectorEngine
 from src.vector_engine.policy import (
+    CurrentSnapshotEvaluator,
+    StackedSnapshotEvaluator,
     VectorPolicyEvaluator,
     suppress_redundant_end_turn,
 )
@@ -133,3 +135,176 @@ def test_current_player_observation_matches_scalar_opponent_perspective():
         return_numpy=True,
     )
     np.testing.assert_array_equal(vector, scalar)
+
+
+def test_selected_current_player_observations_match_full_population():
+    data = DataConfig()
+    cards = data.load_cards()
+    registry = data.build_registry(cards)
+    rules = compile_rules(cards, registry)
+    state = VectorState.empty(5, rules.num_cards)
+    state.health[:] = 50
+    state.current_player[:] = [0, 1, 1, 0, 1]
+    engine = VectorEngine(state, rules)
+    engine.build_masks()
+    expected = engine.materialize_current_player_observations().copy()
+    rows = np.asarray([1, 3, 4], dtype=np.int64)
+
+    actual = engine.materialize_current_player_observations(rows).copy()
+
+    assert actual.shape == (3, expected.shape[1])
+    np.testing.assert_array_equal(actual, expected[rows])
+    assert engine.materialize_current_player_observations(rows[:0]).shape == (
+        0,
+        expected.shape[1],
+    )
+
+
+def test_policy_logits_match_full_forward_actor():
+    data = DataConfig()
+    cards = data.load_cards()
+    registry = data.build_registry(cards)
+    model = PPOActorCritic(
+        state_dim=get_state_size(registry.card_names),
+        action_dim=get_action_space_size(registry.card_names),
+        num_cards=registry.num_cards,
+        model_config=ModelConfig(),
+    )
+    observations = torch.randn(
+        17, get_state_size(registry.card_names)
+    )
+    with torch.no_grad():
+        expected, _ = model(observations)
+        actual = model.policy_logits(observations)
+    torch.testing.assert_close(actual, expected)
+
+
+def test_stacked_snapshot_actor_matches_independent_models():
+    data = DataConfig()
+    cards = data.load_cards()
+    registry = data.build_registry(cards)
+    state_dim = get_state_size(registry.card_names)
+    action_dim = get_action_space_size(registry.card_names)
+    torch.manual_seed(13)
+    models = [
+        PPOActorCritic(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            num_cards=registry.num_cards,
+            model_config=ModelConfig(),
+        )
+        for _ in range(3)
+    ]
+    evaluator = StackedSnapshotEvaluator(
+        models, torch.device("cpu")
+    )
+    observations = torch.randn(3, 19, state_dim)
+    with torch.no_grad():
+        stacked = evaluator._vmapped_forward(
+            evaluator.params,
+            evaluator.buffers,
+            observations,
+        )
+        independent = torch.stack(
+            [
+                model.policy_logits(observations[index])
+                for index, model in enumerate(models)
+            ]
+        )
+    torch.testing.assert_close(
+        stacked,
+        independent,
+        rtol=1e-5,
+        atol=1e-6,
+    )
+
+
+def test_stacked_snapshot_decision_batches_models_once():
+    data = DataConfig()
+    cards = data.load_cards()
+    registry = data.build_registry(cards)
+    state_dim = get_state_size(registry.card_names)
+    action_dim = get_action_space_size(registry.card_names)
+    models = [
+        PPOActorCritic(
+            state_dim=state_dim,
+            action_dim=action_dim,
+            num_cards=registry.num_cards,
+            model_config=ModelConfig(),
+        )
+        for _ in range(3)
+    ]
+    evaluator = StackedSnapshotEvaluator(
+        models, torch.device("cpu")
+    )
+    observations = [
+        np.zeros((count, state_dim), dtype=np.float32)
+        for count in (7, 0, 11)
+    ]
+    masks = [
+        np.zeros((count, action_dim), dtype=np.bool_)
+        for count in (7, 0, 11)
+    ]
+    masks[0][:, 1] = True
+    masks[2][:, 1] = True
+    decision = evaluator.decide(observations, masks)
+    assert [len(actions) for actions in decision.actions] == [7, 0, 11]
+    assert set(decision.actions[0]) == {1}
+    assert set(decision.actions[2]) == {1}
+    assert evaluator.stats["calls"] == 1
+    assert evaluator.stats["rows"] == 18
+
+
+def test_joint_policy_returns_exact_current_values_and_snapshot_actions():
+    data = DataConfig()
+    cards = data.load_cards()
+    registry = data.build_registry(cards)
+    state_dim = get_state_size(registry.card_names)
+    action_dim = get_action_space_size(registry.card_names)
+    current_model = PPOActorCritic(
+        state_dim=state_dim,
+        action_dim=action_dim,
+        num_cards=registry.num_cards,
+        model_config=ModelConfig(),
+    )
+    snapshot_model = PPOActorCritic(
+        state_dim=state_dim,
+        action_dim=action_dim,
+        num_cards=registry.num_cards,
+        model_config=ModelConfig(),
+    )
+    evaluator = CurrentSnapshotEvaluator(
+        current_model,
+        snapshot_model,
+        torch.device("cpu"),
+    )
+    current_observations = np.zeros((7, state_dim), dtype=np.float32)
+    snapshot_observations = np.zeros((11, state_dim), dtype=np.float32)
+    current_masks = np.zeros((7, action_dim), dtype=np.bool_)
+    snapshot_masks = np.zeros((11, action_dim), dtype=np.bool_)
+    for mask in (current_masks, snapshot_masks):
+        mask[:, 1] = True
+
+    decision = evaluator.decide(
+        current_observations,
+        current_masks,
+        snapshot_observations,
+        snapshot_masks,
+    )
+
+    assert len(decision.actions) == 7
+    assert len(decision.snapshot_actions) == 11
+    assert set(decision.actions) == {1}
+    assert set(decision.snapshot_actions) == {1}
+    assert np.isfinite(decision.values).all()
+    assert np.isfinite(decision.log_probs).all()
+    with torch.no_grad():
+        _, expected_values = current_model(
+            torch.from_numpy(current_observations)
+        )
+    np.testing.assert_allclose(
+        decision.values,
+        expected_values.numpy(),
+        rtol=1e-5,
+        atol=1e-6,
+    )

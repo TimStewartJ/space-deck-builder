@@ -2290,6 +2290,110 @@ def step_kernel(
                     )
 
 
+@njit(inline="always")
+def _materialize_observation_row(
+    zones,
+    trade,
+    combat,
+    health,
+    trade_row,
+    current_player,
+    first_player,
+    masks,
+    observations,
+    game,
+    training,
+    output_row,
+):
+    for column in range(observations.shape[1]):
+        observations[output_row, column] = 0.0
+
+    opponent = 1 - training
+    observations[output_row, 0] = (
+        1.0 if current_player[game] == training else 0.0
+    )
+    observations[output_row, 1] = (
+        1.0 if first_player[game] == training else 0.0
+    )
+    can_buy = False
+    for card in range(NUM_CARDS):
+        if masks[game, BUY_OFFSET + card]:
+            can_buy = True
+            break
+    observations[output_row, 2] = 1.0 if can_buy else 0.0
+    has_actions = masks[game, ATTACK_PLAYER_INDEX]
+    if not has_actions:
+        for card in range(NUM_CARDS):
+            if masks[game, PLAY_OFFSET + card]:
+                has_actions = True
+                break
+    observations[output_row, 3] = 1.0 if has_actions else 0.0
+    offset = 4
+
+    for slot in range(trade_row.shape[1]):
+        card = trade_row[game, slot]
+        if card >= 0:
+            value = observations[output_row, offset + card] + 0.125
+            observations[output_row, offset + card] = (
+                1.0 if value > 1.0 else value
+            )
+    offset += NUM_CARDS
+
+    observations[output_row, offset + 0] = trade[game, training] / 100.0
+    observations[output_row, offset + 1] = combat[game, training] / 100.0
+    observations[output_row, offset + 2] = health[game, training] / 100.0
+    observations[output_row, offset + 3] = (
+        zones[game, training, ZONE_DECK].sum() / 40.0
+    )
+    observations[output_row, offset + 4] = (
+        zones[game, training, ZONE_DISCARD].sum() / 40.0
+    )
+    offset += 5
+    for zone in (
+        ZONE_HAND,
+        ZONE_PLAYED,
+        ZONE_DISCARD,
+        ZONE_DECK,
+        ZONE_BASES,
+    ):
+        for card in range(NUM_CARDS):
+            value = zones[game, training, zone, card] * 0.125
+            observations[output_row, offset + card] = (
+                1.0 if value > 1.0 else value
+            )
+        offset += NUM_CARDS
+
+    observations[output_row, offset + 0] = trade[game, opponent] / 100.0
+    observations[output_row, offset + 1] = combat[game, opponent] / 100.0
+    observations[output_row, offset + 2] = health[game, opponent] / 100.0
+    observations[output_row, offset + 3] = (
+        zones[game, opponent, ZONE_DECK].sum() / 40.0
+    )
+    observations[output_row, offset + 4] = (
+        zones[game, opponent, ZONE_HAND].sum() / 10.0
+    )
+    observations[output_row, offset + 5] = (
+        zones[game, opponent, ZONE_DISCARD].sum() / 40.0
+    )
+    offset += 6
+    for card in range(NUM_CARDS):
+        value = (
+            zones[game, opponent, ZONE_HAND, card]
+            + zones[game, opponent, ZONE_DECK, card]
+        ) * 0.125
+        observations[output_row, offset + card] = (
+            1.0 if value > 1.0 else value
+        )
+    offset += NUM_CARDS
+    for zone in (ZONE_PLAYED, ZONE_DISCARD, ZONE_BASES):
+        for card in range(NUM_CARDS):
+            value = zones[game, opponent, zone, card] * 0.125
+            observations[output_row, offset + card] = (
+                1.0 if value > 1.0 else value
+            )
+        offset += NUM_CARDS
+
+
 @njit(parallel=True, cache=True)
 def materialize_observations_kernel(
     zones,
@@ -2304,94 +2408,51 @@ def materialize_observations_kernel(
     observations,
 ):
     for game in prange(zones.shape[0]):
-        for column in range(observations.shape[1]):
-            observations[game, column] = 0.0
+        _materialize_observation_row(
+            zones,
+            trade,
+            combat,
+            health,
+            trade_row,
+            current_player,
+            first_player,
+            masks,
+            observations,
+            game,
+            training_player[game],
+            game,
+        )
 
-        training = training_player[game]
-        opponent = 1 - training
-        observations[game, 0] = (
-            1.0 if current_player[game] == training else 0.0
-        )
-        observations[game, 1] = (
-            1.0 if first_player[game] == training else 0.0
-        )
-        can_buy = False
-        for card in range(NUM_CARDS):
-            if masks[game, BUY_OFFSET + card]:
-                can_buy = True
-                break
-        observations[game, 2] = 1.0 if can_buy else 0.0
-        has_actions = masks[game, ATTACK_PLAYER_INDEX]
-        if not has_actions:
-            for card in range(NUM_CARDS):
-                if masks[game, PLAY_OFFSET + card]:
-                    has_actions = True
-                    break
-        observations[game, 3] = 1.0 if has_actions else 0.0
-        offset = 4
 
-        for slot in range(trade_row.shape[1]):
-            card = trade_row[game, slot]
-            if card >= 0:
-                value = observations[game, offset + card] + 0.125
-                observations[game, offset + card] = (
-                    1.0 if value > 1.0 else value
-                )
-        offset += NUM_CARDS
-
-        observations[game, offset + 0] = trade[game, training] / 100.0
-        observations[game, offset + 1] = combat[game, training] / 100.0
-        observations[game, offset + 2] = health[game, training] / 100.0
-        observations[game, offset + 3] = (
-            zones[game, training, ZONE_DECK].sum() / 40.0
+@njit(parallel=True, cache=True)
+def materialize_selected_observations_kernel(
+    zones,
+    trade,
+    combat,
+    health,
+    trade_row,
+    current_player,
+    first_player,
+    rows,
+    masks,
+    observations,
+):
+    for output_row in prange(rows.shape[0]):
+        game = rows[output_row]
+        _materialize_observation_row(
+            zones,
+            trade,
+            combat,
+            health,
+            trade_row,
+            current_player,
+            first_player,
+            masks,
+            observations,
+            game,
+            current_player[game],
+            output_row,
         )
-        observations[game, offset + 4] = (
-            zones[game, training, ZONE_DISCARD].sum() / 40.0
-        )
-        offset += 5
-        for zone in (
-            ZONE_HAND,
-            ZONE_PLAYED,
-            ZONE_DISCARD,
-            ZONE_DECK,
-            ZONE_BASES,
-        ):
-            for card in range(NUM_CARDS):
-                value = zones[game, training, zone, card] * 0.125
-                observations[game, offset + card] = (
-                    1.0 if value > 1.0 else value
-                )
-            offset += NUM_CARDS
-
-        observations[game, offset + 0] = trade[game, opponent] / 100.0
-        observations[game, offset + 1] = combat[game, opponent] / 100.0
-        observations[game, offset + 2] = health[game, opponent] / 100.0
-        observations[game, offset + 3] = (
-            zones[game, opponent, ZONE_DECK].sum() / 40.0
-        )
-        observations[game, offset + 4] = (
-            zones[game, opponent, ZONE_HAND].sum() / 10.0
-        )
-        observations[game, offset + 5] = (
-            zones[game, opponent, ZONE_DISCARD].sum() / 40.0
-        )
-        offset += 6
-        for card in range(NUM_CARDS):
-            value = (
-                zones[game, opponent, ZONE_HAND, card]
-                + zones[game, opponent, ZONE_DECK, card]
-            ) * 0.125
-            observations[game, offset + card] = (
-                1.0 if value > 1.0 else value
-            )
-        offset += NUM_CARDS
-        for zone in (ZONE_PLAYED, ZONE_DISCARD, ZONE_BASES):
-            for card in range(NUM_CARDS):
-                value = zones[game, opponent, zone, card] * 0.125
-                observations[game, offset + card] = (
-                    1.0 if value > 1.0 else value
-                )
-            offset += NUM_CARDS
 
 
 @dataclass
@@ -2495,9 +2556,32 @@ class VectorEngine:
         )
         return self.observations
 
-    def materialize_current_player_observations(self) -> np.ndarray:
-        """Encode every game from its acting player's policy perspective."""
-        materialize_observations_kernel(
+    def materialize_current_player_observations(
+        self, rows: np.ndarray | None = None
+    ) -> np.ndarray:
+        """Encode selected games from each acting player's perspective."""
+        if rows is None:
+            materialize_observations_kernel(
+                self.state.zones,
+                self.state.trade,
+                self.state.combat,
+                self.state.health,
+                self.state.trade_row,
+                self.state.current_player,
+                self.state.first_player,
+                self.state.current_player,
+                self.masks,
+                self.perspective_observations,
+            )
+            return self.perspective_observations
+        rows = np.asarray(rows, dtype=np.int64)
+        if rows.ndim != 1:
+            raise ValueError("rows must be rank-1")
+        if len(rows) == 0:
+            return self.perspective_observations[:0]
+        if rows.min() < 0 or rows.max() >= self.state.games:
+            raise IndexError("observation row is outside the vector population")
+        materialize_selected_observations_kernel(
             self.state.zones,
             self.state.trade,
             self.state.combat,
@@ -2505,11 +2589,11 @@ class VectorEngine:
             self.state.trade_row,
             self.state.current_player,
             self.state.first_player,
-            self.state.current_player,
+            rows,
             self.masks,
             self.perspective_observations,
         )
-        return self.perspective_observations
+        return self.perspective_observations[: len(rows)]
 
     def build_action_weights(self) -> np.ndarray:
         """Physical scalar-Action multiplicities for fixed opponents."""

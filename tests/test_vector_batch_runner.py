@@ -269,7 +269,7 @@ def test_vector_runner_collects_snapshot_self_play(setup):
     assert (runner._last_opponent_kinds == 3).all()
 
 
-def test_snapshot_evaluators_are_lazy_and_cached(setup):
+def test_stacked_snapshot_evaluators_are_lazy_and_cached(setup):
     _, cards, registry = setup
     snapshot_model = make_model(registry)
     runner = VectorBatchRunner(
@@ -284,11 +284,35 @@ def test_snapshot_evaluators_are_lazy_and_cached(setup):
         ],
         self_play_ratio=0.0,
     )
-    assert runner._snapshot_evaluators == {}
-    first = runner._snapshot_evaluator(0)
-    second = runner._snapshot_evaluator(0)
+    assert runner._stacked_snapshot_evaluators == {}
+    first = runner._stacked_snapshot_evaluator((0,))
+    second = runner._stacked_snapshot_evaluator((0,))
     assert first is second
-    assert list(runner._snapshot_evaluators) == [0]
+    assert list(runner._stacked_snapshot_evaluators) == [(0,)]
+
+
+def test_single_snapshot_uses_joint_policy_evaluator(setup):
+    _, cards, registry = setup
+    snapshot_model = make_model(registry)
+    runner = VectorBatchRunner(
+        model=make_model(registry),
+        cards=cards,
+        registry=registry,
+        device=torch.device("cpu"),
+        ppo_config=PPOConfig(),
+        opponent_spec="random",
+        snapshot_state_dicts=[
+            ("PPO_2", snapshot_model.state_dict(), ModelConfig())
+        ],
+        self_play_ratio=1.0,
+        pfsp_weights=[1.0],
+        seed=29,
+    )
+
+    runner.run_episodes(8)
+
+    evaluator = runner._joint_snapshot_evaluators[0]
+    assert evaluator.stats["calls"] > 0
 
 
 def test_trainer_selects_vector_runner(setup):

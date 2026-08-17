@@ -1,8 +1,9 @@
 """Tests for resume-training: optimizer/scheduler/pool restore round-trips."""
 from __future__ import annotations
-
 from pathlib import Path
+import random
 
+import numpy as np
 import pytest
 import torch
 
@@ -12,7 +13,9 @@ from src.config import (
     ModelConfig,
     PPOConfig,
     RunConfig,
+    capture_rng_state,
     load_checkpoint,
+    restore_rng_state,
     save_checkpoint,
 )
 from src.ppo.opponent_pool import OpponentPool
@@ -74,6 +77,67 @@ def test_save_load_includes_scheduler_state(tmp_path: Path):
     )
     data = load_checkpoint(str(ckpt_path), map_location="cpu")
     assert data["scheduler_state_dict"]["last_epoch"] == 2
+
+
+def test_rng_state_round_trip_continues_every_stream():
+    original = capture_rng_state()
+    try:
+        random.seed(17)
+        np.random.seed(17)
+        torch.manual_seed(17)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(17)
+        saved = capture_rng_state()
+
+        expected_python = random.random()
+        expected_numpy = np.random.random(4)
+        expected_cpu = torch.rand(4)
+        expected_cuda = (
+            torch.rand(4, device="cuda").cpu()
+            if torch.cuda.is_available()
+            else None
+        )
+
+        random.random()
+        np.random.random(4)
+        torch.rand(4)
+        if torch.cuda.is_available():
+            torch.rand(4, device="cuda")
+
+        restore_rng_state(saved)
+
+        assert random.random() == expected_python
+        np.testing.assert_array_equal(np.random.random(4), expected_numpy)
+        torch.testing.assert_close(torch.rand(4), expected_cpu)
+        if expected_cuda is not None:
+            torch.testing.assert_close(
+                torch.rand(4, device="cuda").cpu(),
+                expected_cuda,
+            )
+    finally:
+        restore_rng_state(original)
+
+
+def test_save_load_includes_rng_state(tmp_path: Path):
+    ckpt_path = tmp_path / "ckpt.pth"
+    rng_state = capture_rng_state()
+    save_checkpoint(
+        str(ckpt_path),
+        _dummy_model().state_dict(),
+        update=7,
+        rng_state=rng_state,
+    )
+
+    data = load_checkpoint(str(ckpt_path), map_location="cpu")
+
+    assert set(data["rng_state"]) >= {
+        "python",
+        "numpy",
+        "torch_cpu",
+    }
+    assert data["rng_state"]["numpy"]["position"] == (
+        rng_state["numpy"]["position"]
+    )
 
 
 def test_scheduler_load_state_clobbers_t_max():

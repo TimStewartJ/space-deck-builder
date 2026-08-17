@@ -1,6 +1,7 @@
 """End-to-end PPO rollout collection on the full vector engine."""
 from __future__ import annotations
 
+import json
 import random
 import time
 import logging
@@ -30,6 +31,8 @@ from src.vector_engine.opponents import (
 )
 from src.ppo.opponent_pool import OpponentPool
 from src.vector_engine.policy import (
+    CurrentSnapshotEvaluator,
+    StackedSnapshotEvaluator,
     VectorPolicyEvaluator,
     suppress_redundant_end_turn,
 )
@@ -182,14 +185,56 @@ class VectorBatchRunner:
         self.opponent_results: dict[str, list[int]] = {}
         self._batch_index = 0
         self._last_opponent_kinds = np.empty(0, dtype=np.int16)
-        self._snapshot_evaluators: dict[int, VectorPolicyEvaluator] = {}
+        self._stacked_snapshot_evaluators: dict[
+            tuple[int, ...], StackedSnapshotEvaluator
+        ] = {}
+        self._joint_snapshot_evaluators: dict[
+            int, CurrentSnapshotEvaluator
+        ] = {}
 
-    def _snapshot_evaluator(
-        self, snapshot_index: int
-    ) -> VectorPolicyEvaluator:
-        cached = self._snapshot_evaluators.get(snapshot_index)
+    @staticmethod
+    def _snapshot_config_key(model_config: ModelConfig | None) -> str:
+        return json.dumps(
+            (model_config or ModelConfig()).to_dict(),
+            sort_keys=True,
+        )
+
+    def _snapshot_groups(
+        self, active_indices: np.ndarray
+    ) -> list[tuple[tuple[int, ...], StackedSnapshotEvaluator]]:
+        by_config: dict[str, list[int]] = {}
+        for raw_index in active_indices:
+            snapshot_index = int(raw_index)
+            config = self.snapshot_state_dicts[snapshot_index][2]
+            by_config.setdefault(
+                self._snapshot_config_key(config), []
+            ).append(snapshot_index)
+        return [
+            (
+                tuple(indices),
+                self._stacked_snapshot_evaluator(tuple(indices)),
+            )
+            for indices in by_config.values()
+        ]
+
+    def _stacked_snapshot_evaluator(
+        self,
+        snapshot_indices: tuple[int, ...],
+    ) -> StackedSnapshotEvaluator:
+        cached = self._stacked_snapshot_evaluators.get(snapshot_indices)
         if cached is not None:
             return cached
+        evaluator = StackedSnapshotEvaluator(
+            [
+                self._load_snapshot_model(snapshot_index)
+                for snapshot_index in snapshot_indices
+            ],
+            self.device,
+        )
+        self._stacked_snapshot_evaluators[snapshot_indices] = evaluator
+        return evaluator
+
+    def _load_snapshot_model(self, snapshot_index: int) -> PPOActorCritic:
         state_dim = get_state_size(self.registry.card_names)
         action_dim = get_action_space_size(self.registry.card_names)
         _, state_dict, model_config = self.snapshot_state_dicts[
@@ -203,8 +248,20 @@ class VectorBatchRunner:
             card_registry=self.registry,
         )
         model.load_state_dict(state_dict)
-        evaluator = VectorPolicyEvaluator(model, self.device)
-        self._snapshot_evaluators[snapshot_index] = evaluator
+        return model
+
+    def _joint_snapshot_evaluator(
+        self, snapshot_index: int
+    ) -> CurrentSnapshotEvaluator:
+        cached = self._joint_snapshot_evaluators.get(snapshot_index)
+        if cached is not None:
+            return cached
+        evaluator = CurrentSnapshotEvaluator(
+            self.model,
+            self._load_snapshot_model(snapshot_index),
+            self.device,
+        )
+        self._joint_snapshot_evaluators[snapshot_index] = evaluator
         return evaluator
 
     def run_episodes(self, num_episodes: int) -> tuple:
@@ -244,6 +301,25 @@ class VectorBatchRunner:
             self.max_active_snapshots,
         )
         self._last_opponent_kinds = opponent_kinds.copy()
+        active_snapshot_indices = np.unique(
+            opponent_kinds[opponent_kinds >= SNAPSHOT_OFFSET]
+            - SNAPSHOT_OFFSET
+        )
+        joint_snapshot = (
+            (
+                int(active_snapshot_indices[0]),
+                self._joint_snapshot_evaluator(
+                    int(active_snapshot_indices[0])
+                ),
+            )
+            if len(active_snapshot_indices) == 1
+            else None
+        )
+        snapshot_groups = (
+            []
+            if joint_snapshot is not None
+            else self._snapshot_groups(active_snapshot_indices)
+        )
 
         state_chunks = []
         action_chunks = []
@@ -257,6 +333,7 @@ class VectorBatchRunner:
         timing = {
             "mask_obs": 0.0,
             "policy": 0.0,
+            "joint_policy": 0.0,
             "store": 0.0,
             "opponent": 0.0,
             "step": 0.0,
@@ -265,6 +342,7 @@ class VectorBatchRunner:
             "policy_rows": 0,
             "snapshot_policy_calls": 0,
             "snapshot_policy_rows": 0,
+            "snapshot_model_batches": 0,
         }
         loop_started = time.perf_counter()
 
@@ -288,17 +366,77 @@ class VectorBatchRunner:
             )
             action_variants = np.zeros(num_episodes, dtype=np.int16)
 
-            if len(training_rows):
+            train_obs = observations[training_rows]
+            train_masks = masks[training_rows]
+            effective_masks = (
+                suppress_redundant_end_turn(train_masks)
+                if len(training_rows)
+                else train_masks
+            )
+            training_actions = None
+            training_log_probs = None
+            training_values = None
+
+            fixed_rows = opponent_rows[
+                opponent_kinds[opponent_rows] < SNAPSHOT_OFFSET
+            ]
+            if len(fixed_rows):
+                phase = time.perf_counter()
+                select_fixed_actions(
+                    engine,
+                    policy_data,
+                    opponent_kinds,
+                    fixed_rows,
+                    actions,
+                    action_variants,
+                )
+                timing["opponent"] += time.perf_counter() - phase
+
+            joint_rows = np.empty(0, dtype=np.int64)
+            if joint_snapshot is not None:
+                snapshot_index, joint_evaluator = joint_snapshot
+                joint_rows = opponent_rows[
+                    opponent_kinds[opponent_rows]
+                    == SNAPSHOT_OFFSET + snapshot_index
+                ]
+            if len(joint_rows):
+                if len(training_rows):
+                    timing["policy_calls"] += 1
+                    timing["policy_rows"] += len(training_rows)
+                timing["snapshot_policy_calls"] += 1
+                timing["snapshot_model_batches"] += 1
+                timing["snapshot_policy_rows"] += len(joint_rows)
+                phase = time.perf_counter()
+                snapshot_observations = (
+                    engine.materialize_current_player_observations(
+                        joint_rows
+                    )
+                )
+                decision = joint_evaluator.decide(
+                    train_obs,
+                    train_masks,
+                    snapshot_observations,
+                    masks[joint_rows],
+                )
+                if len(training_rows):
+                    training_actions = decision.actions
+                    training_log_probs = decision.log_probs
+                    training_values = decision.values
+                    actions[training_rows] = training_actions
+                actions[joint_rows] = decision.snapshot_actions
+                timing["joint_policy"] += time.perf_counter() - phase
+            elif len(training_rows):
                 timing["policy_calls"] += 1
                 timing["policy_rows"] += len(training_rows)
                 phase = time.perf_counter()
-                train_obs = observations[training_rows]
-                train_masks = masks[training_rows]
-                effective_masks = suppress_redundant_end_turn(train_masks)
                 decision = policy.decide(train_obs, train_masks)
-                actions[training_rows] = decision.actions
+                training_actions = decision.actions
+                training_log_probs = decision.log_probs
+                training_values = decision.values
+                actions[training_rows] = training_actions
                 timing["policy"] += time.perf_counter() - phase
 
+            if len(training_rows):
                 phase = time.perf_counter()
                 count = len(training_rows)
                 indices = transition_offset + np.arange(count, dtype=np.int64)
@@ -306,48 +444,54 @@ class VectorBatchRunner:
                 last_transition[training_rows] = indices
                 transition_offset += count
                 state_chunks.append(train_obs.copy())
-                action_chunks.append(decision.actions.copy())
-                log_prob_chunks.append(decision.log_probs.copy())
-                value_chunks.append(decision.values.copy())
+                action_chunks.append(training_actions.copy())
+                log_prob_chunks.append(training_log_probs.copy())
+                value_chunks.append(training_values.copy())
                 mask_chunks.append(effective_masks.copy())
                 timing["store"] += time.perf_counter() - phase
 
-            if len(opponent_rows):
+            if len(opponent_rows) and snapshot_groups:
                 phase = time.perf_counter()
                 snapshot_observations = None
-                fixed_rows = opponent_rows[
-                    opponent_kinds[opponent_rows] < SNAPSHOT_OFFSET
+                snapshot_rows = opponent_rows[
+                    opponent_kinds[opponent_rows] >= SNAPSHOT_OFFSET
                 ]
-                if len(fixed_rows):
-                    select_fixed_actions(
-                        engine,
-                        policy_data,
-                        opponent_kinds,
-                        fixed_rows,
-                        actions,
-                        action_variants,
-                    )
-                for snapshot_index in range(
-                    len(self.snapshot_state_dicts)
-                ):
-                    snapshot_rows = opponent_rows[
-                        opponent_kinds[opponent_rows]
-                        == SNAPSHOT_OFFSET + snapshot_index
+                for snapshot_indices, evaluator in snapshot_groups:
+                    row_groups = [
+                        opponent_rows[
+                            opponent_kinds[opponent_rows]
+                            == SNAPSHOT_OFFSET + snapshot_index
+                        ]
+                        for snapshot_index in snapshot_indices
                     ]
-                    if not len(snapshot_rows):
+                    nonempty = sum(bool(len(rows)) for rows in row_groups)
+                    if not nonempty:
                         continue
                     if snapshot_observations is None:
                         snapshot_observations = (
-                            engine.materialize_current_player_observations()
+                            engine.materialize_current_player_observations(
+                                snapshot_rows
+                            )
                         )
-                    evaluator = self._snapshot_evaluator(snapshot_index)
                     timing["snapshot_policy_calls"] += 1
-                    timing["snapshot_policy_rows"] += len(snapshot_rows)
-                    decision = evaluator.decide(
-                        snapshot_observations[snapshot_rows],
-                        masks[snapshot_rows],
+                    timing["snapshot_model_batches"] += nonempty
+                    timing["snapshot_policy_rows"] += sum(
+                        len(rows) for rows in row_groups
                     )
-                    actions[snapshot_rows] = decision.actions
+                    decision = evaluator.decide(
+                        [
+                            snapshot_observations[
+                                np.searchsorted(snapshot_rows, rows)
+                            ]
+                            for rows in row_groups
+                        ],
+                        [masks[rows] for rows in row_groups],
+                    )
+                    for rows, selected_actions in zip(
+                        row_groups, decision.actions
+                    ):
+                        if len(rows):
+                            actions[rows] = selected_actions
                 timing["opponent"] += time.perf_counter() - phase
 
             phase = time.perf_counter()
@@ -431,14 +575,29 @@ class VectorBatchRunner:
         if self.device.type == "cuda":
             torch.cuda.synchronize(self.device)
         transfer_elapsed = time.perf_counter() - transfer_started
+        snapshot_evaluators = (
+            list(self._stacked_snapshot_evaluators.values())
+            + list(self._joint_snapshot_evaluators.values())
+        )
+        snapshot_stats = {
+            key: sum(
+                evaluator.stats[key]
+                for evaluator in snapshot_evaluators
+            )
+            for key in ("stage_s", "launch_s", "sync_s", "gpu_s")
+        }
         _log.info(
             "[VectorRunner] loop=%.2fs mask_obs=%.2fs policy=%.2fs "
+            "joint=%.2fs "
             "store=%.2fs opponent=%.2fs step=%.2fs concat=%.2fs "
             "gae=%.2fs transfer=%.2fs iterations=%d calls=%d avg_batch=%.0f "
-            "snapshot_calls=%d snapshot_avg_batch=%.0f",
+            "snapshot_calls=%d snapshot_avg_batch=%.0f "
+            "snapshot_model_batches=%d snapshot_stage=%.2fs "
+            "snapshot_gpu=%.2fs snapshot_sync=%.2fs",
             loop_elapsed,
             timing["mask_obs"],
             timing["policy"],
+            timing["joint_policy"],
             timing["store"],
             timing["opponent"],
             timing["step"],
@@ -451,5 +610,9 @@ class VectorBatchRunner:
             timing["snapshot_policy_calls"],
             timing["snapshot_policy_rows"]
             / max(1, timing["snapshot_policy_calls"]),
+            timing["snapshot_model_batches"],
+            snapshot_stats["stage_s"],
+            snapshot_stats["gpu_s"],
+            snapshot_stats["sync_s"],
         )
         return result

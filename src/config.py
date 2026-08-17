@@ -205,6 +205,10 @@ class RunConfig:
     self_play_ratio: float = 0.5
     self_play_ratio_start: float = 0.0
     self_play_schedule: str = "linear"
+    # Absolute final update used to evaluate the self-play schedule. Leave
+    # unset for a single-process run; chunked resumes pin every process to the
+    # same horizon so linear and cosine curricula remain continuous.
+    self_play_horizon: int | None = None
     pfsp_mode: str = "uniform"
     # Path to a checkpoint to resume training from.When set, model weights,
     # optimizer state, LR scheduler state, snapshot pool manifest, and the
@@ -255,6 +259,11 @@ class RunConfig:
             raise ValueError(
                 f"self_play_ratio_start ({self.self_play_ratio_start}) must be "
                 f"<= self_play_ratio ({self.self_play_ratio})"
+            )
+        if self.self_play_horizon is not None and self.self_play_horizon <= 0:
+            raise ValueError(
+                "self_play_horizon must be positive when set, got "
+                f"{self.self_play_horizon}"
             )
 
     def to_dict(self) -> dict[str, Any]:
@@ -325,6 +334,75 @@ CHECKPOINT_VERSION = 4
 COMPAT_CHECKPOINT_VERSIONS = {2, 3, 4}
 
 
+def capture_rng_state() -> dict[str, Any]:
+    """Capture every RNG stream that affects reproducible training."""
+    import random
+
+    import numpy as np
+    import torch
+
+    numpy_state = np.random.get_state()
+    state: dict[str, Any] = {
+        "python": random.getstate(),
+        "numpy": {
+            "bit_generator": numpy_state[0],
+            "state": numpy_state[1].tolist(),
+            "position": numpy_state[2],
+            "has_gauss": numpy_state[3],
+            "cached_gaussian": numpy_state[4],
+        },
+        "torch_cpu": torch.get_rng_state(),
+    }
+    if torch.cuda.is_available():
+        state["torch_cuda"] = torch.cuda.get_rng_state_all()
+    return state
+
+
+def restore_rng_state(state: dict[str, Any]) -> None:
+    """Restore RNG streams captured by :func:`capture_rng_state`."""
+    import random
+
+    import numpy as np
+    import torch
+
+    required = {"python", "numpy", "torch_cpu"}
+    missing = required.difference(state)
+    if missing:
+        raise ValueError(
+            "checkpoint RNG state is missing: "
+            + ", ".join(sorted(missing))
+        )
+    numpy_state = state["numpy"]
+    random.setstate(state["python"])
+    np.random.set_state(
+        (
+            numpy_state["bit_generator"],
+            np.asarray(numpy_state["state"], dtype=np.uint32),
+            int(numpy_state["position"]),
+            int(numpy_state["has_gauss"]),
+            float(numpy_state["cached_gaussian"]),
+        )
+    )
+    torch.set_rng_state(state["torch_cpu"])
+
+    cuda_states = state.get("torch_cuda")
+    if cuda_states is None:
+        return
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "checkpoint contains accelerator RNG state, but no accelerator "
+            "is available for an exact training resume"
+        )
+    device_count = torch.cuda.device_count()
+    if len(cuda_states) != device_count:
+        raise RuntimeError(
+            "checkpoint contains RNG state for "
+            f"{len(cuda_states)} accelerator(s), but {device_count} are "
+            "available"
+        )
+    torch.cuda.set_rng_state_all(cuda_states)
+
+
 def save_checkpoint(
     path: str,
     model_state_dict: dict,
@@ -339,11 +417,12 @@ def save_checkpoint(
     optimizer_state_dict: dict | None = None,
     scheduler_state_dict: dict | None = None,
     pool_manifest: dict | None = None,
+    rng_state: dict[str, Any] | None = None,
     extra: dict[str, Any] | None = None,
 ) -> None:
     """Save a versioned checkpoint with config metadata.
 
-    Resume-training metadata (optimizer, scheduler, pool_manifest) is
+    Resume-training metadata (optimizer, scheduler, pool manifest, RNG state) is
     optional — checkpoints that omit it can still be loaded for
     inference/evaluation but cannot be resumed from.
     """
@@ -376,6 +455,8 @@ def save_checkpoint(
         checkpoint["scheduler_state_dict"] = scheduler_state_dict
     if pool_manifest is not None:
         checkpoint["pool_manifest"] = pool_manifest
+    if rng_state is not None:
+        checkpoint["rng_state"] = rng_state
     if extra is not None:
         checkpoint.update(extra)
 

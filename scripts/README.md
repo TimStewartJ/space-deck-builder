@@ -70,7 +70,7 @@ resources are released before the next launch.
 | `hp_sweep_attn.ps1` | Hyperparameter sweep for attention pool+actor (lr / epochs / clip-eps variants). |
 | `hp3_full_resume.ps1` | Two-phase fresh-then-`--resume` run, written to validate `--resume` under real conditions. |
 | `run_pool_comparison.ps1` | Quick A/B pool-type comparison (smaller scale than `overnight_sweep.ps1`). |
-| `chunked_resume.ps1` | Resumes training in fixed-size chunks, one fresh process per chunk. Works around a ROCm/HIP crash seen when a single long-lived training process accumulates ~25-30 updates of InferenceServer and worker spawn/teardown cycles. Reach for this if a long run dies mid-rollout inside `torch_hip.dll`. |
+| `chunked_resume.ps1` | Runs a resumed training arc in fixed-size fresh-process chunks, with a durable manifest, fixed overall LR/curriculum horizons, restored RNG streams, cheap interim evaluations, and a full final evaluation. Launch it outside the Bridge process tree to avoid long-process ROCm latency drift. |
 
 Each orchestrator is **resumable**: it reads its own manifest JSON in
 `logs/` and skips entries already marked `completed` so you can rerun safely

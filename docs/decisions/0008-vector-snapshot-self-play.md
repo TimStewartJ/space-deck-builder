@@ -32,10 +32,11 @@ update, so the full pool remains eligible while inference fragmentation is
 bounded. `--vec-max-active-snapshots 0` restores unlimited activation.
 
 Only snapshots assigned at least one resident game are reconstructed. Their
-evaluators are cached for the runner lifetime and kept on the simulation
-device. Opponent decision rows are grouped by snapshot id and sent through one
-batched `VectorPolicyEvaluator` call per active snapshot. Fixed rows continue
-through the Numba selector.
+actor-only evaluators are cached for the runner lifetime and kept on the
+simulation device. Compatible models share a stacked evaluator; a one-model
+population shares one synchronization with the learning policy. Fixed rows
+continue through the Numba selector. ADR 0009 records the inference and
+fresh-process design.
 
 Snapshot policies receive a separate reusable observation buffer oriented to
 the acting player. The learning policy's rollout buffer remains oriented to

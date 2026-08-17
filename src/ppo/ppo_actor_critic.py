@@ -435,8 +435,10 @@ class PPOActorCritic(nn.Module):
         tokens_zc = card_w.unsqueeze(0) + zone_w.unsqueeze(1)  # [Z, C, E]
         return tokens_zc.unsqueeze(0).expand(B, Z, C, E)
 
-    def forward(self, x: torch.Tensor):
-        # x: [B, state_dim] or [state_dim]
+    def _trunk_features(
+        self, x: torch.Tensor
+    ) -> tuple[torch.Tensor, bool]:
+        """Encode observations through the shared representation trunk."""
         presence, numeric, single = unpack_state_tokens(
             x, self.num_cards, self.action_dim,
         )
@@ -453,10 +455,18 @@ class PPOActorCritic(nn.Module):
             else:
                 card_feat = _sum_pool_tokens(tokens, presence)
 
-        # Shared trunk
         h = self.trunk(torch.cat([card_feat, numeric], dim=1))
+        return h, single
 
-        # Heads
+    def policy_logits(self, x: torch.Tensor) -> torch.Tensor:
+        """Compute actor logits without evaluating the critic head."""
+        h, single = self._trunk_features(x)
+        logits = self.actor_head(h)
+        return logits.squeeze(0) if single else logits
+
+    def forward(self, x: torch.Tensor):
+        # x: [B, state_dim] or [state_dim]
+        h, single = self._trunk_features(x)
         logits = self.actor_head(h)
         value = self.critic_head(h).squeeze(-1)
 

@@ -3,7 +3,10 @@ import math
 import pytest
 
 from src.config import RunConfig
-from src.ppo.ppo_trainer import _compute_self_play_ratio
+from src.ppo.ppo_trainer import (
+    _compute_self_play_progress,
+    _compute_self_play_ratio,
+)
 
 
 class TestComputeSelfPlayRatio:
@@ -65,6 +68,22 @@ class TestComputeSelfPlayRatio:
         assert _compute_self_play_ratio(0.0, 0.7, "unknown", 0.5) == 0.7
 
 
+class TestComputeSelfPlayProgress:
+    def test_chunk_boundaries_share_absolute_horizon(self):
+        first_chunk_end = _compute_self_play_progress(238, 238, 263)
+        second_chunk_start = _compute_self_play_progress(239, 263, 263)
+
+        assert first_chunk_end == pytest.approx(237 / 262)
+        assert second_chunk_start == pytest.approx(238 / 262)
+
+    def test_single_process_defaults_to_run_end(self):
+        assert _compute_self_play_progress(200, 200, None) == 1.0
+
+    def test_horizon_before_run_end_is_rejected(self):
+        with pytest.raises(ValueError, match="self-play horizon"):
+            _compute_self_play_progress(214, 263, 238)
+
+
 class TestRunConfigValidation:
     """Validate RunConfig self-play schedule input validation."""
 
@@ -108,6 +127,10 @@ class TestRunConfigValidation:
         with pytest.raises(ValueError, match="must be <="):
             RunConfig(self_play_ratio=0.3, self_play_ratio_start=0.5)
 
+    def test_non_positive_self_play_horizon_rejected(self):
+        with pytest.raises(ValueError, match="self_play_horizon"):
+            RunConfig(self_play_horizon=0)
+
     def test_edge_ratio_zero_to_one(self):
         cfg = RunConfig(self_play_ratio=1.0, self_play_ratio_start=0.0)
         assert cfg.self_play_ratio_start == 0.0
@@ -119,6 +142,7 @@ class TestRunConfigValidation:
             self_play_ratio=0.8,
             self_play_ratio_start=0.1,
             self_play_schedule="cosine",
+            self_play_horizon=263,
             vec_max_active_snapshots=5,
         )
         d = cfg.to_dict()
@@ -126,6 +150,7 @@ class TestRunConfigValidation:
         assert cfg2.self_play_ratio == 0.8
         assert cfg2.self_play_ratio_start == 0.1
         assert cfg2.self_play_schedule == "cosine"
+        assert cfg2.self_play_horizon == 263
         assert cfg2.vec_max_active_snapshots == 5
 
     def test_from_dict_ignores_unknown_keys(self):

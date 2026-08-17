@@ -1,8 +1,8 @@
 """Tests for train CLI defaults that define the baseline curriculum."""
 import argparse
 
-from src.__main__ import _build_train_parser
-from src.config import RunConfig
+from src.__main__ import _build_train_parser, _run_train
+from src.config import DataConfig, RunConfig
 
 
 def _parse_train_args(argv: list[str]):
@@ -26,6 +26,32 @@ def test_train_cli_defaults_match_run_config_curriculum():
     assert args.self_play == cfg.self_play
     assert args.opponents == cfg.opponents
     assert args.vec_max_active_snapshots == cfg.vec_max_active_snapshots
+    assert args.self_play_horizon == cfg.self_play_horizon
+    assert args.models_dir == DataConfig().models_dir
+
+
+def test_train_cli_accepts_isolated_checkpoint_directory():
+    args = _parse_train_args(["--models-dir", "results/run/models"])
+    assert args.models_dir == "results/run/models"
+
+
+def test_train_cli_accepts_absolute_self_play_horizon():
+    args = _parse_train_args(["--self-play-horizon", "263"])
+    assert args.self_play_horizon == 263
+
+
+def test_run_train_passes_isolated_checkpoint_directory(monkeypatch):
+    captured = {}
+
+    def fake_train(data_cfg, *args, **kwargs):
+        captured["models_dir"] = data_cfg.models_dir
+
+    monkeypatch.setattr("src.ppo.ppo_trainer.train", fake_train)
+    args = _parse_train_args(["--models-dir", "results/run/models"])
+
+    _run_train(args)
+
+    assert captured["models_dir"] == "results/run/models"
 
 
 def test_train_cli_can_disable_vector_snapshot_cap():

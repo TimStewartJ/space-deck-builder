@@ -9,7 +9,7 @@ import gc
 
 from src.config import (
     DataConfig, PPOConfig, RunConfig, DeviceConfig, ModelConfig,
-    save_checkpoint, load_checkpoint,
+    capture_rng_state, load_checkpoint, restore_rng_state, save_checkpoint,
 )
 from src.cards.card import Card
 from src.ai.agent import Agent
@@ -40,6 +40,21 @@ def _compute_self_play_ratio(
     if schedule == "cosine":
         return start + (end - start) * (1 - math.cos(math.pi * progress)) / 2
     return end
+
+
+def _compute_self_play_progress(
+    update: int,
+    run_end_update: int,
+    schedule_horizon: int | None,
+) -> float:
+    """Return absolute curriculum progress for a full or chunked run."""
+    horizon = schedule_horizon or run_end_update
+    if horizon < run_end_update:
+        raise ValueError(
+            "self-play horizon must be at least the run's final update "
+            f"({run_end_update}), got {horizon}"
+        )
+    return (update - 1) / max(1, horizon - 1)
 
 
 def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cfg,
@@ -319,6 +334,19 @@ def train(
     logger.info(f"LR schedule: cosine {ppo_cfg.lr:.1e} -> {ppo_cfg.lr_end:.1e} "
                  f"over {total_horizon} updates")
 
+    if resume_ckpt is not None:
+        rng_state = resume_ckpt.get("rng_state")
+        if rng_state is None:
+            logger.warning(
+                "Resume checkpoint has no RNG state; this first process "
+                "cannot continue the original random streams exactly."
+            )
+        else:
+            restore_rng_state(rng_state)
+            logger.info(
+                "Restored Python, NumPy, Torch CPU, and accelerator RNG state."
+            )
+
     total_time_spent_on_updates = 0.0
     total_time_spent_on_episodes = 0.0
     total_time_spent_on_eval = 0.0
@@ -327,12 +355,26 @@ def train(
     sim_device = str(agent.simulation_device)
 
     end_update = start_update + run_cfg.updates - 1
-    total_horizon = end_update  # used for self-play progress and final-update detection
+    self_play_horizon = run_cfg.self_play_horizon or end_update
+    _compute_self_play_progress(
+        start_update,
+        end_update,
+        run_cfg.self_play_horizon,
+    )
+    if run_cfg.self_play_horizon is not None:
+        logger.info(
+            "Self-play schedule horizon pinned to update "
+            f"{self_play_horizon}."
+        )
     for upd in range(start_update, end_update + 1):
         # Compute the self-play ratio for this update based on the schedule.
         # Progress is measured against the full horizon (including resumed
         # updates) so the curve continues from where it left off.
-        progress = (upd - 1) / max(1, total_horizon - 1)
+        progress = _compute_self_play_progress(
+            upd,
+            end_update,
+            self_play_horizon,
+        )
         current_sp_ratio = _compute_self_play_ratio(
             run_cfg.self_play_ratio_start,
             run_cfg.self_play_ratio,
@@ -461,11 +503,10 @@ def train(
             next_eval = upd + run_cfg.eval_every - upd % run_cfg.eval_every
             logger.debug(f"Skipping eval (next eval at update {next_eval}).")
 
-        # Save checkpoint per update. Includes optimizer + scheduler state
-        # and the snapshot pool manifest so this checkpoint is sufficient
-        # to fully resume training via --resume.
+        # Save every stateful training stream so a fresh process resumes at
+        # the same optimizer, curriculum, and random-sequence boundary.
         ts = datetime.now().strftime("%m%d_%H%M")
-        Path(data_cfg.models_dir).mkdir(exist_ok=True)
+        Path(data_cfg.models_dir).mkdir(parents=True, exist_ok=True)
         ckpt_path = f"{data_cfg.models_dir}/ppo_agent_{ts}_upd{upd}_wins{wins}.pth"
         # Pre-record this checkpoint's path on the snapshot we just added so
         # the manifest written into the same checkpoint references itself
@@ -483,6 +524,7 @@ def train(
             optimizer_state_dict=agent.optimizer.state_dict(),
             scheduler_state_dict=scheduler.state_dict(),
             pool_manifest=pool.to_manifest() if run_cfg.self_play else None,
+            rng_state=capture_rng_state(),
         )
         logger.info(f"Checkpoint saved: {ckpt_path}")
 

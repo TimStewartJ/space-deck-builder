@@ -17,7 +17,13 @@ def _add_common_args(parser: argparse.ArgumentParser):
 
 
 def _build_train_parser(sub: argparse._SubParsersAction):
-    from src.config import PPOConfig, RunConfig, DeviceConfig, ModelConfig
+    from src.config import (
+        DataConfig,
+        DeviceConfig,
+        ModelConfig,
+        PPOConfig,
+        RunConfig,
+    )
     _ppo = PPOConfig()
     _run = RunConfig()
     _dev = DeviceConfig()
@@ -25,6 +31,12 @@ def _build_train_parser(sub: argparse._SubParsersAction):
 
     p = sub.add_parser("train", help="Run PPO training")
     _add_common_args(p)
+    p.add_argument(
+        "--models-dir",
+        type=str,
+        default=DataConfig().models_dir,
+        help="Checkpoint output directory",
+    )
     # PPO hyperparameters (defaults sourced from PPOConfig dataclass)
     p.add_argument("--lr",          type=float, default=_ppo.lr)
     p.add_argument("--lr-end",     type=float, default=_ppo.lr_end,
@@ -79,6 +91,15 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--self-play-schedule", type=str, default=_run.self_play_schedule,
                    choices=["constant", "linear", "cosine"],
                    help="Self-play ratio schedule: linear (default), constant, or cosine ramp")
+    p.add_argument(
+        "--self-play-horizon",
+        type=int,
+        default=_run.self_play_horizon,
+        help=(
+            "Absolute final update for self-play schedule progress. "
+            "Used by fresh-process chunked resumes."
+        ),
+    )
     p.add_argument("--num-workers", type=int, default=_run.num_workers,
                    help=f"Simulation worker processes (1=single-process, >1=multi-process, default: {_run.num_workers})")
     p.add_argument("--engine", choices=["object", "vec"], default=_run.engine,
@@ -288,7 +309,10 @@ def _run_train(args):
     from src.config import DataConfig, PPOConfig, RunConfig, DeviceConfig, ModelConfig
     from src.ppo.ppo_trainer import train
 
-    data_cfg = DataConfig(cards_path=args.cards_path)
+    data_cfg = DataConfig(
+        cards_path=args.cards_path,
+        models_dir=args.models_dir,
+    )
     ppo_cfg = PPOConfig(
         lr=args.lr, gamma=args.gamma, lam=args.lam,
         clip_eps=args.clip_eps, epochs=args.epochs,
@@ -319,6 +343,7 @@ def _run_train(args):
         self_play_ratio=args.self_play_ratio,
         self_play_ratio_start=args.self_play_ratio_start,
         self_play_schedule=args.self_play_schedule,
+        self_play_horizon=args.self_play_horizon,
         pfsp_mode=args.pfsp,
         num_workers=args.num_workers,
         num_concurrent=args.num_concurrent,

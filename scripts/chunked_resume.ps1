@@ -1,148 +1,458 @@
-# Chunked resume orchestrator.
+# Run one training arc in fresh-process chunks while preserving resume state.
 #
-# Resumes PPO training in fixed-size chunks (one fresh process per chunk) to
-# work around a ROCm/HIP runtime crash observed when long-lived training
-# processes accumulate ~25-30 updates worth of InferenceServer + worker
-# spawn/teardown cycles. Symptom: c10::cuda::memcpy_and_sync failure inside
-# torch_hip.dll partway through rollout of update N+25-ish; see overnight
-# crash logs from 2026-04-18.
+# Launch this script outside the Copilot Bridge process tree (for example,
+# through Task Scheduler). Each chunk starts a new Python process, resumes the
+# latest checkpoint, and pins the learning-rate horizon to TargetUpdate.
 #
-# Each chunk runs `--updates <chunk>` from the latest checkpoint. After the
-# chunk exits cleanly, the script finds the new highest-update checkpoint
-# and chains the next process from it. Aborts on any non-zero exit.
-#
-# Usage:
+# Example:
 #   .\scripts\chunked_resume.ps1 `
-#       -StartCheckpoint "models\ppo_agent_..._upd100_wins3198.pth" `
-#       -TargetUpdate 200 `
+#       -StartCheckpoint "models\ppo_agent_..._upd213_wins-1.pth" `
+#       -TargetUpdate 263 `
 #       -ChunkSize 25 `
-#       -Tag "hp3_chunked" `
-#       -ExtraArgs @("--pool-type","attention","--actor-type","attention",`
-#                    "--clip-eps","0.3","--entropy","0.01",`
-#                    "--episodes","16000","--num-workers","16",`
-#                    "--self-play","--eval-every","20")
-#
-# Logs go to logs\chunk_<tag>_<N>_<timestamp>.log. Manifest goes to
-# logs\chunked_resume_<tag>.json.
+#       -Tag "selfplay_cap1" `
+#       -ExtraArgs @("--engine","vec","--episodes","2000","--self-play",`
+#                    "--self-play-schedule","constant","--self-play-ratio","0.5",`
+#                    "--pfsp","variance","--vec-max-active-snapshots","1",`
+#                    "--opponents","random,heuristic,simple","--num-workers","1",`
+#                    "--vec-threads","4","--seed","0","--eval-games","3200")
 
 param(
     [Parameter(Mandatory = $true)] [string] $StartCheckpoint,
-    [Parameter(Mandatory = $true)] [int]    $TargetUpdate,
+    [Parameter(Mandatory = $true)] [int] $TargetUpdate,
     [Parameter(Mandatory = $true)] [string] $Tag,
-    [int]      $ChunkSize  = 25,
-    [string[]] $ExtraArgs  = @(),
-    [string]   $LogsDir    = "E:\resume-training\logs",
-    [string]   $ModelsDir  = "E:\resume-training\models",
-    [string]   $WorkingDir = "E:\resume-training",
-    [string]   $Python     = "E:\resume-training\.venv\Scripts\python.exe"
+    [int] $ChunkSize = 25,
+    [string[]] $ExtraArgs = @(),
+    [int] $InterimEvalGames = 6,
+    [string] $LogsDir = "",
+    [string] $WorkingDir = "",
+    [string] $Python = ""
 )
 
 $ErrorActionPreference = "Stop"
 
-function Get-CurrentUpdate([string] $ckpt) {
-    if ($ckpt -match "upd(\d+)_wins") { return [int]$Matches[1] }
-    throw "Could not parse update number from checkpoint name: $ckpt"
+if (-not $WorkingDir) {
+    $WorkingDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+}
+if (-not $LogsDir) {
+    $LogsDir = Join-Path $WorkingDir "results\chunked_training\$Tag"
+}
+if (-not [System.IO.Path]::IsPathRooted($LogsDir)) {
+    $LogsDir = Join-Path $WorkingDir $LogsDir
+}
+$LogsDir = [System.IO.Path]::GetFullPath($LogsDir)
+$ModelsDir = Join-Path $LogsDir "models"
+if (-not $Python) {
+    $Python = Join-Path $WorkingDir ".venv\Scripts\python.exe"
+}
+if (-not [System.IO.Path]::IsPathRooted($StartCheckpoint)) {
+    $StartCheckpoint = Join-Path $WorkingDir $StartCheckpoint
 }
 
-function Find-Latest-Checkpoint([int] $afterUpdate, [datetime] $afterTime) {
-    Get-ChildItem $ModelsDir -Filter "ppo_agent_*upd*_wins*.pth" |
-        Where-Object { $_.LastWriteTime -ge $afterTime } |
-        ForEach-Object {
-            if ($_.Name -match "upd(\d+)_wins") {
-                [PSCustomObject]@{ File = $_; Update = [int]$Matches[1] }
+if ($ChunkSize -le 0) {
+    throw "ChunkSize must be positive, got $ChunkSize"
+}
+if ($TargetUpdate -le 0) {
+    throw "TargetUpdate must be positive, got $TargetUpdate"
+}
+if ($InterimEvalGames -le 0) {
+    throw "InterimEvalGames must be positive, got $InterimEvalGames"
+}
+foreach (
+    $reserved in @(
+        "--resume",
+        "--updates",
+        "--lr-horizon",
+        "--self-play-horizon",
+        "--models-dir"
+    )
+) {
+    $hasEqualsForm = @(
+        $ExtraArgs | Where-Object {
+            $_.StartsWith(
+                "$reserved=",
+                [System.StringComparison]::OrdinalIgnoreCase
+            )
+        }
+    ).Count -gt 0
+    if (($ExtraArgs -contains $reserved) -or $hasEqualsForm) {
+        throw "ExtraArgs must not contain orchestrator-owned option $reserved"
+    }
+}
+if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) {
+    throw "Python executable does not exist: $Python"
+}
+New-Item -ItemType Directory -Force -Path $LogsDir, $ModelsDir | Out-Null
+
+function Get-CheckpointUpdate([string] $Checkpoint) {
+    if ((Split-Path $Checkpoint -Leaf) -match "upd(\d+)_wins") {
+        return [int]$Matches[1]
+    }
+    throw "Could not parse update number from checkpoint: $Checkpoint"
+}
+
+function Assert-CheckpointUpdate(
+    [string] $Checkpoint,
+    [int] $ExpectedUpdate
+) {
+    if (-not (Test-Path -LiteralPath $Checkpoint -PathType Leaf)) {
+        throw "Checkpoint does not exist: $Checkpoint"
+    }
+    $resolved = (Resolve-Path -LiteralPath $Checkpoint).Path
+    $validator = @"
+import sys
+from src.config import load_checkpoint
+checkpoint = load_checkpoint(sys.argv[1], map_location='cpu')
+actual = int(checkpoint.get('update') or 0)
+expected = int(sys.argv[2])
+if actual != expected:
+    raise RuntimeError(f'checkpoint update {actual} != expected {expected}')
+"@
+    Push-Location $WorkingDir
+    $previousErrorAction = $ErrorActionPreference
+    try {
+        $ErrorActionPreference = "Continue"
+        $validationOutput = & $Python -c $validator `
+            $resolved ([string]$ExpectedUpdate) 2>&1
+        $validationExit = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousErrorAction
+        Pop-Location
+    }
+    if ($validationExit -ne 0) {
+        throw (
+            "Checkpoint validation failed for $resolved`: " +
+            ($validationOutput -join [Environment]::NewLine)
+        )
+    }
+    return $resolved
+}
+
+function Get-LoggedCheckpoint(
+    [string] $Log,
+    [int] $ExpectedUpdate
+) {
+    $lines = @(
+        Select-String `
+            -LiteralPath $Log `
+            -Pattern "Checkpoint saved:\s+(.+)$"
+    )
+    for ($index = $lines.Count - 1; $index -ge 0; $index--) {
+        $candidate = $lines[$index].Matches[0].Groups[1].Value.Trim()
+        if (-not [System.IO.Path]::IsPathRooted($candidate)) {
+            $candidate = Join-Path $WorkingDir $candidate
+        }
+        $candidate = [System.IO.Path]::GetFullPath($candidate)
+        if ((Get-CheckpointUpdate $candidate) -eq $ExpectedUpdate) {
+            $modelRoot = [System.IO.Path]::GetFullPath($ModelsDir).TrimEnd(
+                [System.IO.Path]::DirectorySeparatorChar
+            ) + [System.IO.Path]::DirectorySeparatorChar
+            if (
+                -not $candidate.StartsWith(
+                    $modelRoot,
+                    [System.StringComparison]::OrdinalIgnoreCase
+                )
+            ) {
+                throw "Logged checkpoint is outside isolated models dir: $candidate"
             }
-        } |
-        Where-Object { $_.Update -gt $afterUpdate } |
-        Sort-Object Update -Descending |
-        Select-Object -First 1
+            return $candidate
+        }
+    }
+    return $null
 }
 
-$manifestPath = Join-Path $LogsDir "chunked_resume_$Tag.json"
-$manifest = @{
-    tag               = $Tag
-    target_update     = $TargetUpdate
-    chunk_size        = $ChunkSize
-    start_checkpoint  = $StartCheckpoint
-    started_at        = (Get-Date).ToString("o")
-    chunks            = @()
+function Save-Manifest([object] $Manifest, [string] $Path) {
+    $temporary = "$Path.tmp"
+    $Manifest | ConvertTo-Json -Depth 10 |
+        Set-Content -LiteralPath $temporary -Encoding utf8
+    Move-Item -LiteralPath $temporary -Destination $Path -Force
 }
 
-$currentCkpt = $StartCheckpoint
-$currentUpd  = Get-CurrentUpdate $currentCkpt
+function Set-ManifestProperty(
+    [object] $Manifest,
+    [string] $Name,
+    [object] $Value
+) {
+    if ($Manifest.PSObject.Properties[$Name]) {
+        $Manifest.$Name = $Value
+    } else {
+        $Manifest | Add-Member -NotePropertyName $Name -NotePropertyValue $Value
+    }
+}
 
-Write-Host "[chunked_resume:$Tag] start=$currentCkpt currentUpd=$currentUpd target=$TargetUpdate chunk=$ChunkSize"
+$manifestPath = Join-Path $LogsDir "manifest.json"
+$startUpdate = Get-CheckpointUpdate $StartCheckpoint
+if ($startUpdate -ge $TargetUpdate) {
+    throw (
+        "Start checkpoint update $startUpdate must be below " +
+        "TargetUpdate $TargetUpdate"
+    )
+}
+$startCheckpoint = [System.IO.Path]::GetFullPath($StartCheckpoint)
 
-while ($currentUpd -lt $TargetUpdate) {
-    $remaining = $TargetUpdate - $currentUpd
+if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw |
+        ConvertFrom-Json
+    $expectedExtraArgs = ConvertTo-Json -InputObject @($ExtraArgs) -Compress
+    $actualExtraArgs = ConvertTo-Json `
+        -InputObject @($manifest.extra_args) `
+        -Compress
+    $manifestStart = [System.IO.Path]::GetFullPath(
+        [string]$manifest.start_checkpoint
+    )
+    $expectedStart = [System.IO.Path]::GetFullPath($startCheckpoint)
+    $mismatches = @()
+    if ([int]$manifest.schema_version -ne 1) {
+        $mismatches += "schema_version"
+    }
+    if ([string]$manifest.tag -ne $Tag) {
+        $mismatches += "tag"
+    }
+    if ([int]$manifest.target_update -ne $TargetUpdate) {
+        $mismatches += "target_update"
+    }
+    if ([int]$manifest.chunk_size -ne $ChunkSize) {
+        $mismatches += "chunk_size"
+    }
+    if ([int]$manifest.interim_eval_games -ne $InterimEvalGames) {
+        $mismatches += "interim_eval_games"
+    }
+    if ($manifestStart -ne $expectedStart) {
+        $mismatches += "start_checkpoint"
+    }
+    if (
+        [System.IO.Path]::GetFullPath(
+            [string]$manifest.working_directory
+        ) -ne [System.IO.Path]::GetFullPath($WorkingDir)
+    ) {
+        $mismatches += "working_directory"
+    }
+    if (
+        [System.IO.Path]::GetFullPath(
+            [string]$manifest.models_directory
+        ) -ne [System.IO.Path]::GetFullPath($ModelsDir)
+    ) {
+        $mismatches += "models_directory"
+    }
+    if ($actualExtraArgs -ne $expectedExtraArgs) {
+        $mismatches += "extra_args"
+    }
+    if ($mismatches.Count) {
+        throw (
+            "Existing manifest does not match this invocation: " +
+            ($mismatches -join ", ")
+        )
+    }
+    if ([string]$manifest.state -eq "complete") {
+        $finalCheckpoint = Assert-CheckpointUpdate `
+            ([string]$manifest.final_checkpoint) `
+            $TargetUpdate
+        Write-Host (
+            "[chunked_resume:$Tag] already complete: $finalCheckpoint"
+        )
+        exit 0
+    }
+    $currentUpdate = [int]$manifest.current_update
+    if ($currentUpdate -lt $startUpdate -or $currentUpdate -gt $TargetUpdate) {
+        throw "Manifest current update is invalid: $currentUpdate"
+    }
+    $currentCheckpoint = Assert-CheckpointUpdate `
+        ([string]$manifest.current_checkpoint) `
+        $currentUpdate
+    if ($manifest.current_chunk) {
+        $interrupted = [PSCustomObject]@{
+            state = "interrupted"
+            from_update = [int]$manifest.current_chunk.from_update
+            target_update = [int]$manifest.current_chunk.target_update
+            from_checkpoint = $currentCheckpoint
+            candidate_checkpoint = $null
+            log = [string]$manifest.current_chunk.log
+            error_log = [string]$manifest.current_chunk.error_log
+            metrics = $null
+            exit_code = $null
+            started_at = [string]$manifest.current_chunk.started_at
+            finished_at = (Get-Date).ToString("o")
+        }
+        $manifest.chunks = @($manifest.chunks) + @($interrupted)
+    }
+    Set-ManifestProperty $manifest "state" "running"
+    Set-ManifestProperty $manifest "failure" $null
+    Set-ManifestProperty $manifest "finished_at" $null
+    Set-ManifestProperty $manifest "current_chunk" $null
+    Set-ManifestProperty `
+        $manifest `
+        "last_resumed_at" `
+        (Get-Date).ToString("o")
+} else {
+    $startCheckpoint = Assert-CheckpointUpdate `
+        $startCheckpoint `
+        $startUpdate
+    $currentCheckpoint = $startCheckpoint
+    $currentUpdate = $startUpdate
+    $manifest = [PSCustomObject]@{
+        schema_version = 1
+        state = "running"
+        tag = $Tag
+        target_update = $TargetUpdate
+        chunk_size = $ChunkSize
+        interim_eval_games = $InterimEvalGames
+        start_checkpoint = $currentCheckpoint
+        current_checkpoint = $currentCheckpoint
+        current_update = $currentUpdate
+        working_directory = $WorkingDir
+        models_directory = $ModelsDir
+        extra_args = @($ExtraArgs)
+        started_at = (Get-Date).ToString("o")
+        last_resumed_at = $null
+        finished_at = $null
+        current_chunk = $null
+        failure = $null
+        source_final_checkpoint = $null
+        final_checkpoint = $null
+        chunks = @()
+    }
+}
+Save-Manifest $manifest $manifestPath
+
+Write-Host (
+    "[chunked_resume:$Tag] start=$currentCheckpoint " +
+    "current=$currentUpdate target=$TargetUpdate chunk=$ChunkSize"
+)
+
+while ($currentUpdate -lt $TargetUpdate) {
+    $remaining = $TargetUpdate - $currentUpdate
     $thisChunk = [math]::Min($ChunkSize, $remaining)
+    $chunkTarget = $currentUpdate + $thisChunk
+    $isFinalChunk = $chunkTarget -eq $TargetUpdate
+    $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $log = Join-Path $LogsDir "upd${currentUpdate}_to_${chunkTarget}_$timestamp.log"
+    $errorLog = "$log.err"
 
-    $ts  = Get-Date -Format "yyyyMMdd_HHmmss"
-    $log = Join-Path $LogsDir "chunk_${Tag}_upd$($currentUpd + $thisChunk)_$ts.log"
-
-    $args = @(
-        "-u", "-m", "src", "train",
-        "--resume", $currentCkpt,
-        "--updates", "$thisChunk",
-        # Pin every chunk's cosine LR horizon to the overall TargetUpdate so
-        # the LR curve flows smoothly across chunks instead of pegging to the
-        # floor inside each one.
-        "--lr-horizon", "$TargetUpdate"
-    ) + $ExtraArgs
-
-    Write-Host "[chunked_resume:$Tag] chunk start: from=upd$currentUpd → upd$($currentUpd + $thisChunk)  log=$log"
-    $startTime = Get-Date
-    $proc = Start-Process -FilePath $Python -ArgumentList $args `
-        -WorkingDirectory $WorkingDir -WindowStyle Hidden `
-        -PassThru -RedirectStandardOutput $log -RedirectStandardError "${log}.err"
-
-    while (-not $proc.HasExited) {
-        Start-Sleep -Seconds 60
-        $tail = Get-Content $log -Tail 1 -ErrorAction SilentlyContinue
-        Write-Host "[chunked_resume:$Tag] (running PID=$($proc.Id)): $tail"
+    $arguments = @(
+        "-u", "-m", "src", "train"
+    ) + $ExtraArgs + @(
+        "--models-dir", $ModelsDir,
+        "--resume", $currentCheckpoint,
+        "--updates", [string]$thisChunk,
+        "--lr-horizon", [string]$TargetUpdate,
+        "--self-play-horizon", [string]$TargetUpdate
+    )
+    if (-not $isFinalChunk) {
+        $arguments += @("--eval-games", [string]$InterimEvalGames)
     }
-    $proc.WaitForExit(5000) | Out-Null
-    $exitCode = if ($null -eq $proc.ExitCode) { 0 } else { $proc.ExitCode }
 
-    $newCkpt = Find-Latest-Checkpoint -afterUpdate $currentUpd -afterTime $startTime
-    $newCkptPath = if ($newCkpt) { $newCkpt.File.FullName } else { $null }
-    $newUpd      = if ($newCkpt) { $newCkpt.Update } else { $currentUpd }
-
-    $manifest.chunks += @{
-        chunk_size       = $thisChunk
-        from_update      = $currentUpd
-        to_update_target = $currentUpd + $thisChunk
-        to_update_actual = $newUpd
-        from_ckpt        = $currentCkpt
-        new_ckpt         = $newCkptPath
-        log              = $log
-        exit_code        = $exitCode
-        started_at       = $startTime.ToString("o")
-        ended_at         = (Get-Date).ToString("o")
+    Write-Host (
+        "[chunked_resume:$Tag] chunk start: " +
+        "$currentUpdate -> $chunkTarget; log=$log"
+    )
+    $startedAt = Get-Date
+    $manifest.current_chunk = @{
+        from_update = $currentUpdate
+        target_update = $chunkTarget
+        log = $log
+        error_log = $errorLog
+        started_at = $startedAt.ToString("o")
     }
-    $manifest.last_update = $newUpd
-    $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path $manifestPath
-
+    Save-Manifest $manifest $manifestPath
+    Push-Location $WorkingDir
+    try {
+        & $Python @arguments 1> $log 2> $errorLog
+        $exitCode = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    if ($null -eq $exitCode) {
+        $exitCode = -1
+    }
+    $candidateCheckpoint = $null
+    $validatedCheckpoint = $null
+    $failureReason = $null
+    try {
+        $candidateCheckpoint = Get-LoggedCheckpoint $log $chunkTarget
+    } catch {
+        $failureReason = $_.Exception.Message
+    }
     if ($exitCode -ne 0) {
-        Write-Host "[chunked_resume:$Tag] CHUNK CRASHED with exit=$exitCode after upd$newUpd. Aborting."
-        $manifest.aborted_at      = (Get-Date).ToString("o")
-        $manifest.aborted_reason  = "chunk exit_code=$exitCode (last good upd=$newUpd)"
-        $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path $manifestPath
-        exit 1
+        $failureReason = "chunk process exited with code $exitCode"
+    } elseif (-not $candidateCheckpoint) {
+        $failureReason = (
+            "child log did not report a checkpoint for update $chunkTarget"
+        )
+    } elseif (-not $failureReason) {
+        try {
+            $validatedCheckpoint = Assert-CheckpointUpdate `
+                $candidateCheckpoint `
+                $chunkTarget
+        } catch {
+            $failureReason = $_.Exception.Message
+        }
     }
-    if ($newUpd -le $currentUpd) {
-        Write-Host "[chunked_resume:$Tag] Chunk exited 0 but no new checkpoint past upd$currentUpd. Aborting."
-        $manifest.aborted_at      = (Get-Date).ToString("o")
-        $manifest.aborted_reason  = "no progress (chunk exit_code=0 but no checkpoint past upd$currentUpd)"
-        $manifest | ConvertTo-Json -Depth 10 | Set-Content -Path $manifestPath
-        exit 2
+    $newUpdate = if ($validatedCheckpoint) {
+        $chunkTarget
+    } else {
+        $currentUpdate
+    }
+    $metricsCopy = $null
+    $metricsLine = Select-String `
+        -LiteralPath $log `
+        -Pattern "Metrics file:\s+(.+)$" |
+        Select-Object -First 1
+    if ($metricsLine -and $metricsLine.Matches.Count) {
+        $metricsPath = $metricsLine.Matches[0].Groups[1].Value.Trim()
+        if (-not [System.IO.Path]::IsPathRooted($metricsPath)) {
+            $metricsPath = Join-Path $WorkingDir $metricsPath
+        }
+        if (Test-Path -LiteralPath $metricsPath -PathType Leaf) {
+            $metricsCopy = Join-Path $LogsDir (
+                "metrics_upd${currentUpdate}_to_${newUpdate}_$timestamp.jsonl"
+            )
+            Copy-Item -LiteralPath $metricsPath -Destination $metricsCopy
+        }
     }
 
-    Write-Host "[chunked_resume:$Tag] chunk done: upd$currentUpd → upd$newUpd (exit=0)"
-    $currentCkpt = $newCkptPath
-    $currentUpd  = $newUpd
+    $chunkRecord = [PSCustomObject]@{
+        state = if ($failureReason) { "failed" } else { "complete" }
+        from_update = $currentUpdate
+        target_update = $chunkTarget
+        actual_update = $newUpdate
+        from_checkpoint = $currentCheckpoint
+        candidate_checkpoint = $candidateCheckpoint
+        new_checkpoint = $validatedCheckpoint
+        log = $log
+        error_log = $errorLog
+        metrics = $metricsCopy
+        exit_code = $exitCode
+        started_at = $startedAt.ToString("o")
+        finished_at = (Get-Date).ToString("o")
+    }
+    $manifest.chunks = @($manifest.chunks) + @($chunkRecord)
+    $manifest.current_chunk = $null
+
+    if ($failureReason) {
+        $manifest.state = "failed"
+        $manifest.finished_at = (Get-Date).ToString("o")
+        $manifest.failure = $failureReason
+        Save-Manifest $manifest $manifestPath
+        throw $manifest.failure
+    }
+
+    $currentCheckpoint = $validatedCheckpoint
+    $currentUpdate = $chunkTarget
+    $manifest.current_checkpoint = $currentCheckpoint
+    $manifest.current_update = $currentUpdate
+    Save-Manifest $manifest $manifestPath
+    Write-Host "[chunked_resume:$Tag] chunk complete: update $currentUpdate"
 }
 
-$manifest.completed_at = (Get-Date).ToString("o")
-$manifest.final_ckpt   = $currentCkpt
-$manifest | ConvertTo-Json -Depth 10 | Set-Content -Path $manifestPath
-Write-Host "[chunked_resume:$Tag] DONE. final=$currentCkpt"
+$manifest.state = "complete"
+$manifest.finished_at = (Get-Date).ToString("o")
+$manifest.source_final_checkpoint = $currentCheckpoint
+$manifest.final_checkpoint = Join-Path $LogsDir "final_checkpoint.pth"
+Copy-Item `
+    -LiteralPath $currentCheckpoint `
+    -Destination $manifest.final_checkpoint `
+    -Force
+$manifest.final_checkpoint = Assert-CheckpointUpdate `
+    $manifest.final_checkpoint `
+    $TargetUpdate
+Save-Manifest $manifest $manifestPath
+Write-Host "[chunked_resume:$Tag] complete: $currentCheckpoint"
