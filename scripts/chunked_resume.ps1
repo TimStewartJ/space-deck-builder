@@ -21,6 +21,8 @@ param(
     [Parameter(Mandatory = $true)] [int] $TargetUpdate,
     [Parameter(Mandatory = $true)] [string] $Tag,
     [int] $ChunkSize = 25,
+    [int] $LrHorizon = 0,
+    [int] $SelfPlayHorizon = 0,
     [string[]] $ExtraArgs = @(),
     [int] $InterimEvalGames = 6,
     [string] $LogsDir = "",
@@ -56,6 +58,18 @@ if ($TargetUpdate -le 0) {
 }
 if ($InterimEvalGames -le 0) {
     throw "InterimEvalGames must be positive, got $InterimEvalGames"
+}
+if ($LrHorizon -eq 0) {
+    $LrHorizon = $TargetUpdate
+}
+if ($SelfPlayHorizon -eq 0) {
+    $SelfPlayHorizon = $TargetUpdate
+}
+if ($LrHorizon -lt $TargetUpdate) {
+    throw "LrHorizon must be at least TargetUpdate"
+}
+if ($SelfPlayHorizon -lt $TargetUpdate) {
+    throw "SelfPlayHorizon must be at least TargetUpdate"
 }
 foreach (
     $reserved in @(
@@ -196,6 +210,20 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     $actualExtraArgs = ConvertTo-Json `
         -InputObject @($manifest.extra_args) `
         -Compress
+    $manifestLrHorizon = if (
+        $manifest.PSObject.Properties["lr_horizon"]
+    ) {
+        [int]$manifest.lr_horizon
+    } else {
+        [int]$manifest.target_update
+    }
+    $manifestSelfPlayHorizon = if (
+        $manifest.PSObject.Properties["self_play_horizon"]
+    ) {
+        [int]$manifest.self_play_horizon
+    } else {
+        [int]$manifest.target_update
+    }
     $manifestStart = [System.IO.Path]::GetFullPath(
         [string]$manifest.start_checkpoint
     )
@@ -215,6 +243,12 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     }
     if ([int]$manifest.interim_eval_games -ne $InterimEvalGames) {
         $mismatches += "interim_eval_games"
+    }
+    if ($manifestLrHorizon -ne $LrHorizon) {
+        $mismatches += "lr_horizon"
+    }
+    if ($manifestSelfPlayHorizon -ne $SelfPlayHorizon) {
+        $mismatches += "self_play_horizon"
     }
     if ($manifestStart -ne $expectedStart) {
         $mismatches += "start_checkpoint"
@@ -242,6 +276,11 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
             ($mismatches -join ", ")
         )
     }
+    Set-ManifestProperty $manifest "lr_horizon" $manifestLrHorizon
+    Set-ManifestProperty `
+        $manifest `
+        "self_play_horizon" `
+        $manifestSelfPlayHorizon
     if ([string]$manifest.state -eq "complete") {
         $finalCheckpoint = Assert-CheckpointUpdate `
             ([string]$manifest.final_checkpoint) `
@@ -295,6 +334,8 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
         target_update = $TargetUpdate
         chunk_size = $ChunkSize
         interim_eval_games = $InterimEvalGames
+        lr_horizon = $LrHorizon
+        self_play_horizon = $SelfPlayHorizon
         start_checkpoint = $currentCheckpoint
         current_checkpoint = $currentCheckpoint
         current_update = $currentUpdate
@@ -333,8 +374,8 @@ while ($currentUpdate -lt $TargetUpdate) {
         "--models-dir", $ModelsDir,
         "--resume", $currentCheckpoint,
         "--updates", [string]$thisChunk,
-        "--lr-horizon", [string]$TargetUpdate,
-        "--self-play-horizon", [string]$TargetUpdate
+        "--lr-horizon", [string]$LrHorizon,
+        "--self-play-horizon", [string]$SelfPlayHorizon
     )
     if (-not $isFinalChunk) {
         $arguments += @("--eval-games", [string]$InterimEvalGames)

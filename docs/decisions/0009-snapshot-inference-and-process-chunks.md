@@ -45,7 +45,8 @@ orchestrator:
   manifest;
 - restores Python, NumPy, Torch CPU, and accelerator RNG streams at the exact
   post-update boundary;
-- pins every process to one final learning-rate and self-play horizon;
+- pins every process to explicit learning-rate and self-play horizons, which
+  may extend beyond a shorter experiment stop update;
 - writes an atomic durable manifest before and after each chunk;
 - preserves each chunk's log and metrics;
 - uses cheap evaluation between chunks and the requested evaluation on the
