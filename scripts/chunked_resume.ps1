@@ -25,6 +25,7 @@ param(
     [int] $SelfPlayHorizon = 0,
     [string[]] $ExtraArgs = @(),
     [int] $InterimEvalGames = 6,
+    [int] $InterimNumWorkers = 1,
     [string] $LogsDir = "",
     [string] $WorkingDir = "",
     [string] $Python = ""
@@ -58,6 +59,9 @@ if ($TargetUpdate -le 0) {
 }
 if ($InterimEvalGames -le 0) {
     throw "InterimEvalGames must be positive, got $InterimEvalGames"
+}
+if ($InterimNumWorkers -le 0) {
+    throw "InterimNumWorkers must be positive, got $InterimNumWorkers"
 }
 if ($LrHorizon -eq 0) {
     $LrHorizon = $TargetUpdate
@@ -224,6 +228,13 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     } else {
         [int]$manifest.target_update
     }
+    $manifestInterimWorkers = if (
+        $manifest.PSObject.Properties["interim_num_workers"]
+    ) {
+        [int]$manifest.interim_num_workers
+    } else {
+        1
+    }
     $manifestStart = [System.IO.Path]::GetFullPath(
         [string]$manifest.start_checkpoint
     )
@@ -243,6 +254,9 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     }
     if ([int]$manifest.interim_eval_games -ne $InterimEvalGames) {
         $mismatches += "interim_eval_games"
+    }
+    if ($manifestInterimWorkers -ne $InterimNumWorkers) {
+        $mismatches += "interim_num_workers"
     }
     if ($manifestLrHorizon -ne $LrHorizon) {
         $mismatches += "lr_horizon"
@@ -277,6 +291,10 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
         )
     }
     Set-ManifestProperty $manifest "lr_horizon" $manifestLrHorizon
+    Set-ManifestProperty `
+        $manifest `
+        "interim_num_workers" `
+        $manifestInterimWorkers
     Set-ManifestProperty `
         $manifest `
         "self_play_horizon" `
@@ -334,6 +352,7 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
         target_update = $TargetUpdate
         chunk_size = $ChunkSize
         interim_eval_games = $InterimEvalGames
+        interim_num_workers = $InterimNumWorkers
         lr_horizon = $LrHorizon
         self_play_horizon = $SelfPlayHorizon
         start_checkpoint = $currentCheckpoint
@@ -378,7 +397,10 @@ while ($currentUpdate -lt $TargetUpdate) {
         "--self-play-horizon", [string]$SelfPlayHorizon
     )
     if (-not $isFinalChunk) {
-        $arguments += @("--eval-games", [string]$InterimEvalGames)
+        $arguments += @(
+            "--eval-games", [string]$InterimEvalGames,
+            "--num-workers", [string]$InterimNumWorkers
+        )
     }
 
     Write-Host (

@@ -49,8 +49,8 @@ orchestrator:
   may extend beyond a shorter experiment stop update;
 - writes an atomic durable manifest before and after each chunk;
 - preserves each chunk's log and metrics;
-- uses cheap evaluation between chunks and the requested evaluation on the
-  final chunk;
+- uses a single-process cheap evaluation between chunks and the requested
+  worker topology on the final evaluation;
 - aborts unless the process exits successfully and creates exactly the
   expected checkpoint.
 
