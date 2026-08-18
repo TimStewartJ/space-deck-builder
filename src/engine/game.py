@@ -44,10 +44,10 @@ class Game:
         self.stats = GameStats()
         self.first_player_name = None
 
-    def start_game(self):
+    def start_game(self, first_player_name: str | None = None):
         if not self.trade_deck:
             raise ValueError("Cannot start game without cards")
-        self.setup_players()
+        self.setup_players(first_player_name=first_player_name)
         self.setup_trade_row()
         self.setup_explorer_pile()
         self.is_game_over = False
@@ -86,10 +86,28 @@ class Game:
         import random
         random.shuffle(self.trade_deck)
 
-    def setup_players(self):
-        # Shuffle players to randomize turn order
-        import random
-        random.shuffle(self.players)
+    def setup_players(self, first_player_name: str | None = None):
+        if first_player_name is None:
+            # Regular games randomize turn order; locked evaluations pass an
+            # explicit name so each participant receives exactly half the seats.
+            import random
+            random.shuffle(self.players)
+        else:
+            matches = [
+                player
+                for player in self.players
+                if player.name == first_player_name
+            ]
+            if len(matches) != 1:
+                raise ValueError(
+                    "first_player_name must identify exactly one player, got "
+                    f"{first_player_name!r}"
+                )
+            first = matches[0]
+            self.players = [
+                first,
+                *(player for player in self.players if player is not first),
+            ]
 
         is_first_player = True
 

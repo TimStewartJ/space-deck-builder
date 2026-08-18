@@ -1,0 +1,251 @@
+{
+  "stack": {
+    "python": "3.11.11 (main, Feb  5 2025, 19:14:43) [MSC v.1942 64 bit (AMD64)]",
+    "torch": "2.12.0+rocm7.15.0a20260728",
+    "hip": "7.15.26290",
+    "triton": "3.7.0",
+    "device": "AMD Radeon RX 9070"
+  },
+  "mode": "eager",
+  "rollout": {
+    "loaded_snapshots": 10,
+    "runs": [
+      {
+        "repeat": 0,
+        "elapsed_s": 12.811768000014126,
+        "samples": 289324,
+        "opponent_results": {
+          "Heuristic": [
+            257,
+            295
+          ],
+          "Random": [
+            344,
+            344
+          ],
+          "Simple": [
+            352,
+            362
+          ],
+          "PPO_1": [
+            0,
+            0
+          ],
+          "PPO_117": [
+            0,
+            0
+          ],
+          "PPO_149": [
+            0,
+            0
+          ],
+          "PPO_173": [
+            0,
+            0
+          ],
+          "PPO_185": [
+            0,
+            0
+          ],
+          "PPO_199": [
+            86,
+            167
+          ],
+          "PPO_207": [
+            74,
+            156
+          ],
+          "PPO_209": [
+            0,
+            0
+          ],
+          "PPO_211": [
+            0,
+            0
+          ],
+          "PPO_213": [
+            334,
+            676
+          ]
+        },
+        "peak_allocated_mb": 790.486328125,
+        "peak_reserved_mb": 996.0
+      },
+      {
+        "repeat": 1,
+        "elapsed_s": 7.193319599988172,
+        "samples": 292624,
+        "opponent_results": {
+          "Heuristic": [
+            269,
+            319
+          ],
+          "Random": [
+            340,
+            340
+          ],
+          "Simple": [
+            326,
+            333
+          ],
+          "PPO_1": [
+            0,
+            0
+          ],
+          "PPO_117": [
+            183,
+            342
+          ],
+          "PPO_149": [
+            180,
+            337
+          ],
+          "PPO_173": [
+            173,
+            329
+          ],
+          "PPO_185": [
+            0,
+            0
+          ],
+          "PPO_199": [
+            0,
+            0
+          ],
+          "PPO_207": [
+            0,
+            0
+          ],
+          "PPO_209": [
+            0,
+            0
+          ],
+          "PPO_211": [
+            0,
+            0
+          ],
+          "PPO_213": [
+            0,
+            0
+          ]
+        },
+        "peak_allocated_mb": 795.98095703125,
+        "peak_reserved_mb": 1000.0
+      },
+      {
+        "repeat": 2,
+        "elapsed_s": 7.406361800007289,
+        "samples": 289659,
+        "opponent_results": {
+          "Heuristic": [
+            280,
+            324
+          ],
+          "Random": [
+            343,
+            344
+          ],
+          "Simple": [
+            355,
+            360
+          ],
+          "PPO_1": [
+            0,
+            0
+          ],
+          "PPO_117": [
+            0,
+            0
+          ],
+          "PPO_149": [
+            0,
+            0
+          ],
+          "PPO_173": [
+            0,
+            0
+          ],
+          "PPO_185": [
+            157,
+            329
+          ],
+          "PPO_199": [
+            0,
+            0
+          ],
+          "PPO_207": [
+            171,
+            322
+          ],
+          "PPO_209": [
+            159,
+            321
+          ],
+          "PPO_211": [
+            0,
+            0
+          ],
+          "PPO_213": [
+            0,
+            0
+          ]
+        },
+        "peak_allocated_mb": 789.42724609375,
+        "peak_reserved_mb": 998.0
+      }
+    ]
+  },
+  "ppo": {
+    "samples": 262144,
+    "epochs": 4,
+    "batch_size": 8192,
+    "runs": [
+      {
+        "repeat": 0,
+        "elapsed_s": 8.936426400003256,
+        "metrics": {
+          "actor_loss": 18.28016423319059,
+          "critic_loss": 0.511768837692216,
+          "mean_ratio": 7.592347810626961,
+          "entropy": 1.2525247382000089,
+          "approx_kl": 10.899078046223622,
+          "clip_fraction": 0.7782068252563477,
+          "total_grad_norm": 144.69538759440184,
+          "explained_variance": -10.144933700561523,
+          "nan_detected": false
+        }
+      },
+      {
+        "repeat": 1,
+        "elapsed_s": 7.2010720999969635,
+        "metrics": {
+          "actor_loss": 0.1787027670070529,
+          "critic_loss": 0.36094171833246946,
+          "mean_ratio": 0.561631929827854,
+          "entropy": 1.3009741082787514,
+          "approx_kl": 5.58064891025424,
+          "clip_fraction": 0.7120590209960938,
+          "total_grad_norm": 11.461129762232304,
+          "explained_variance": -0.09888231754302979,
+          "nan_detected": false
+        }
+      },
+      {
+        "repeat": 2,
+        "elapsed_s": 7.142850999982329,
+        "metrics": {
+          "actor_loss": 0.14989478391362354,
+          "critic_loss": 0.355393513571471,
+          "mean_ratio": 0.7638892559334636,
+          "entropy": 1.3193737994879484,
+          "approx_kl": 1.4485626961686648,
+          "clip_fraction": 0.6577529907226562,
+          "total_grad_norm": 22.709573974832892,
+          "explained_variance": -0.06329083442687988,
+          "nan_detected": false
+        }
+      }
+    ]
+  },
+  "dynamo_counters": {}
+}

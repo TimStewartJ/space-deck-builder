@@ -83,9 +83,12 @@ class TestEvalResultDataclasses:
 
     def test_opponent_result(self):
         r = OpponentResult(opponent="random", wins=80, games=100,
-                           win_rate=0.8, avg_steps=42.5)
+                           win_rate=0.8, avg_steps=42.5,
+                           first_player_games=50,
+                           second_player_games=50)
         assert r.opponent == "random"
         assert r.win_rate == 0.8
+        assert r.first_player_games == r.second_player_games == 50
 
     def test_eval_result(self):
         opp = OpponentResult("random", 80, 100, 0.8, 42.5)

@@ -1,0 +1,344 @@
+{
+  "stack": {
+    "python": "3.11.11 (main, Feb  5 2025, 19:14:43) [MSC v.1942 64 bit (AMD64)]",
+    "torch": "2.12.0+rocm7.15.0a20260728",
+    "hip": "7.15.26290",
+    "triton": "3.7.0",
+    "device": "AMD Radeon RX 9070"
+  },
+  "mode": "inductor",
+  "rollout": {
+    "loaded_snapshots": 10,
+    "runs": [
+      {
+        "repeat": 0,
+        "elapsed_s": 137.4202343999932,
+        "samples": 289324,
+        "opponent_results": {
+          "Heuristic": [
+            257,
+            295
+          ],
+          "Random": [
+            344,
+            344
+          ],
+          "Simple": [
+            352,
+            362
+          ],
+          "PPO_1": [
+            0,
+            0
+          ],
+          "PPO_117": [
+            0,
+            0
+          ],
+          "PPO_149": [
+            0,
+            0
+          ],
+          "PPO_173": [
+            0,
+            0
+          ],
+          "PPO_185": [
+            0,
+            0
+          ],
+          "PPO_199": [
+            86,
+            167
+          ],
+          "PPO_207": [
+            74,
+            156
+          ],
+          "PPO_209": [
+            0,
+            0
+          ],
+          "PPO_211": [
+            0,
+            0
+          ],
+          "PPO_213": [
+            334,
+            676
+          ]
+        },
+        "peak_allocated_mb": 790.486328125,
+        "peak_reserved_mb": 1070.0
+      },
+      {
+        "repeat": 1,
+        "elapsed_s": 5.849687599984463,
+        "samples": 292624,
+        "opponent_results": {
+          "Heuristic": [
+            269,
+            319
+          ],
+          "Random": [
+            340,
+            340
+          ],
+          "Simple": [
+            326,
+            333
+          ],
+          "PPO_1": [
+            0,
+            0
+          ],
+          "PPO_117": [
+            183,
+            342
+          ],
+          "PPO_149": [
+            180,
+            337
+          ],
+          "PPO_173": [
+            173,
+            329
+          ],
+          "PPO_185": [
+            0,
+            0
+          ],
+          "PPO_199": [
+            0,
+            0
+          ],
+          "PPO_207": [
+            0,
+            0
+          ],
+          "PPO_209": [
+            0,
+            0
+          ],
+          "PPO_211": [
+            0,
+            0
+          ],
+          "PPO_213": [
+            0,
+            0
+          ]
+        },
+        "peak_allocated_mb": 795.98095703125,
+        "peak_reserved_mb": 1012.0
+      },
+      {
+        "repeat": 2,
+        "elapsed_s": 5.79135490002227,
+        "samples": 289659,
+        "opponent_results": {
+          "Heuristic": [
+            280,
+            324
+          ],
+          "Random": [
+            343,
+            344
+          ],
+          "Simple": [
+            355,
+            360
+          ],
+          "PPO_1": [
+            0,
+            0
+          ],
+          "PPO_117": [
+            0,
+            0
+          ],
+          "PPO_149": [
+            0,
+            0
+          ],
+          "PPO_173": [
+            0,
+            0
+          ],
+          "PPO_185": [
+            157,
+            329
+          ],
+          "PPO_199": [
+            0,
+            0
+          ],
+          "PPO_207": [
+            171,
+            322
+          ],
+          "PPO_209": [
+            159,
+            321
+          ],
+          "PPO_211": [
+            0,
+            0
+          ],
+          "PPO_213": [
+            0,
+            0
+          ]
+        },
+        "peak_allocated_mb": 789.42724609375,
+        "peak_reserved_mb": 944.0
+      }
+    ]
+  },
+  "ppo": {
+    "samples": 262144,
+    "epochs": 4,
+    "batch_size": 8192,
+    "runs": [
+      {
+        "repeat": 0,
+        "elapsed_s": 22.601717100013047,
+        "metrics": {
+          "actor_loss": 17.695822225810844,
+          "critic_loss": 0.5145577902439982,
+          "mean_ratio": 7.340309682069346,
+          "entropy": 1.259467919357121,
+          "approx_kl": 10.038847701619034,
+          "clip_fraction": 0.7744359970092773,
+          "total_grad_norm": 369.4913276117295,
+          "explained_variance": -10.144933700561523,
+          "nan_detected": false
+        }
+      },
+      {
+        "repeat": 1,
+        "elapsed_s": 2.8812857000157237,
+        "metrics": {
+          "actor_loss": 0.1727867474546656,
+          "critic_loss": 0.3619573903270066,
+          "mean_ratio": 0.5942654476966709,
+          "entropy": 1.3093357924371958,
+          "approx_kl": 3.598075496032834,
+          "clip_fraction": 0.7042007446289062,
+          "total_grad_norm": 11.555324416607618,
+          "explained_variance": -0.08632147312164307,
+          "nan_detected": false
+        }
+      },
+      {
+        "repeat": 2,
+        "elapsed_s": 2.8989679999940563,
+        "metrics": {
+          "actor_loss": 0.13958787196315825,
+          "critic_loss": 0.3563947039656341,
+          "mean_ratio": 0.8286177758127451,
+          "entropy": 1.3234321232885122,
+          "approx_kl": 1.1034661476733163,
+          "clip_fraction": 0.6381454467773438,
+          "total_grad_norm": 30.143702829256654,
+          "explained_variance": -0.06564986705780029,
+          "nan_detected": false
+        }
+      }
+    ]
+  },
+  "dynamo_counters": {
+    "frames": {
+      "total": 13,
+      "ok": 12
+    },
+    "stats": {
+      "calls_captured": 572,
+      "unique_graphs": 12
+    },
+    "aot_autograd": {
+      "total": 12,
+      "autograd_cache_miss": 12,
+      "autograd_cache_saved": 12,
+      "ok": 12
+    },
+    "inductor": {
+      "pattern_matcher_count": 275,
+      "pattern_matcher_nodes": 327,
+      "benchmarking.InductorBenchmarker.benchmark_gpu": 688,
+      "pad_mm_bench": 44,
+      "fxgraph_cache_miss": 13,
+      "pad_rewritten_as_cat": 34,
+      "extern_calls": 79,
+      "async_compile_cache_miss": 142,
+      "triton_bundler_save_kernel": 5008,
+      "triton_bundler_save_static_autotuner": 13,
+      "benchmarking.InductorBenchmarker.benchmark": 600,
+      "decompose_mm": 1
+    },
+    "aten_mm_info": {
+      "aten.bmm_10*s83_1_32_49": 1,
+      "aten.mm_s83_256_336": 1,
+      "aten.mm_s83_256_256": 1,
+      "aten.mm_s83_128_256": 2,
+      "aten.addmm_s83_494_128": 1,
+      "aten.addmm_s83_1_128": 1,
+      "aten.bmm_9960_1_32_49": 1,
+      "aten.bmm_3_332_s73_335": 1,
+      "aten.bmm_3_332_s73_s73": 1,
+      "aten.bmm_3_332_s56_s73": 1,
+      "aten.bmm_3_332_s82_s56": 1,
+      "aten.bmm_10*s77_1_32_52": 2,
+      "aten.mm_s77_256_335": 2,
+      "aten.mm_s77_256_256": 3,
+      "aten.mm_s77_128_256": 4,
+      "aten.addmm_s77_494_128": 2,
+      "aten.addmm_s77_1_128": 2,
+      "aten.bmm_10140_1_32_52": 1,
+      "aten.bmm_3_340_s73_336": 2,
+      "aten.bmm_3_340_s73_s73": 2,
+      "aten.bmm_3_340_s56_s73": 2,
+      "aten.bmm_3_340_s82_s56": 2,
+      "aten.bmm_10050_1_32_52": 1,
+      "aten.bmm_3_336_s73_336": 1,
+      "aten.bmm_3_335_s73_s73": 1,
+      "aten.bmm_3_336_s56_s73": 1,
+      "aten.bmm_3_336_s82_s56": 2,
+      "aten.bmm_10320_1_32_52": 1,
+      "aten.bmm_3_344_s73_336": 1,
+      "aten.bmm_3_344_s73_s73": 2,
+      "aten.bmm_3_344_s56_s73": 2,
+      "aten.bmm_3_344_s82_s56": 1,
+      "aten.bmm_10260_1_32_49": 1,
+      "aten.bmm_3_342_s73_335": 1,
+      "aten.bmm_3_342_s82_s56": 1,
+      "aten.bmm_10020_1_32_49": 1,
+      "aten.bmm_3_334_s73_335": 1,
+      "aten.bmm_3_334_s73_s73": 1,
+      "aten.bmm_3_334_s56_s73": 1,
+      "aten.bmm_9720_1_32_49": 1,
+      "aten.bmm_3_324_s73_336": 1,
+      "aten.bmm_3_324_s73_s73": 1,
+      "aten.bmm_3_324_s56_s73": 1,
+      "aten.bmm_3_324_s82_s56": 1,
+      "aten.bmm_10170_1_32_52": 1,
+      "aten.bmm_10_1_32_49": 1,
+      "aten.mm_1_256_335": 1,
+      "aten.mm_1_256_256": 1,
+      "aten.mm_1_128_256": 2,
+      "aten.addmm_1_494_128": 1,
+      "aten.addmm_1_1_128": 1,
+      "aten.mm_1_128_s77": 1,
+      "aten.mm_s77_256_128": 2,
+      "aten.mm_128_256_s77": 2,
+      "aten.mm_s77_128_494": 1,
+      "aten.mm_494_128_s77": 1,
+      "aten.mm_256_256_s77": 1,
+      "aten.mm_s77_336_256": 1,
+      "aten.mm_256_336_s77": 1
+    },
+    "unimplemented": {
+      "Dynamo recompile limit exceeded\n  Explanation: Dynamo attempted to recompile the code object too many times, exceeding the recompile_limit cache size limit (currently set to 8). Excessive recompilations can degrade performance due to the compilation overhead of each recompilation.\n  Hint: To monitor recompilations, enable TORCH_LOGS=recompiles. If recompilations are expected, consider increasing torch._dynamo.config.recompile_limit to an appropriate value.\n  Hint: See https://docs.pytorch.org/docs/main/user_guide/torch_compiler/compile/programming_model.recompilation.html for tips on dealing with recompilations.\n\n  Developer debug context: Limit type: recompile_limit\n\n For more details about this graph break, please visit: https://meta-pytorch.github.io/compile-graph-break-site/gb/gb0039.html": 1
+    }
+  }
+}

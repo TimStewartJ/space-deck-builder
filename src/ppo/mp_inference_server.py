@@ -143,6 +143,8 @@ class EvalWorkerResult:
     wins: int
     losses: int
     total_steps: int
+    first_player_games: int = 0
+    second_player_games: int = 0
 
 
 # Small timeout on blocking queue ops so the server thread re-checks _shutdown.

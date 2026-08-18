@@ -1,0 +1,35 @@
+{
+  "per_opponent": [
+    {
+      "opponent": "random",
+      "wins": 4990,
+      "games": 5000,
+      "win_rate": 0.998,
+      "avg_steps": 151.8548,
+      "first_player_games": 2500,
+      "second_player_games": 2500
+    },
+    {
+      "opponent": "heuristic",
+      "wins": 4348,
+      "games": 5000,
+      "win_rate": 0.8696,
+      "avg_steps": 147.3466,
+      "first_player_games": 2500,
+      "second_player_games": 2500
+    },
+    {
+      "opponent": "simple",
+      "wins": 4863,
+      "games": 5000,
+      "win_rate": 0.9726,
+      "avg_steps": 146.7308,
+      "first_player_games": 2500,
+      "second_player_games": 2500
+    }
+  ],
+  "total_wins": 14201,
+  "total_games": 15000,
+  "overall_win_rate": 0.9467333333333333,
+  "elapsed_seconds": 60.4604674000002
+}

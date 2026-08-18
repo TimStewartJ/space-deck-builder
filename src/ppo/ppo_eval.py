@@ -28,6 +28,8 @@ class OpponentResult:
     games: int
     win_rate: float
     avg_steps: float
+    first_player_games: int = 0
+    second_player_games: int = 0
 
 
 @dataclass
@@ -152,12 +154,30 @@ def evaluate(
                 registry=registry,
             )
 
-        wins, losses, eval_steps = runner.run_eval(num_games)
+        wins, losses, eval_steps = runner.run_eval(
+            num_games,
+            alternate_seats=True,
+        )
+        seat_counts = getattr(
+            runner,
+            "eval_seat_counts",
+            {"first": 0, "second": 0},
+        )
+        if (
+            seat_counts["first"] + seat_counts["second"]
+            != num_games
+        ):
+            raise RuntimeError(
+                f"Evaluation seat accounting mismatch for {opp_type}: "
+                f"{seat_counts}"
+            )
         win_rate = wins / num_games
         avg_steps = eval_steps / num_games if num_games > 0 else 0
 
         emit(f"  vs {opp_type}: {wins}/{num_games} wins "
-             f"({win_rate:.0%}), avg {avg_steps:.0f} steps/game")
+             f"({win_rate:.0%}), avg {avg_steps:.0f} steps/game "
+             f"(first={seat_counts['first']}, "
+             f"second={seat_counts['second']})")
 
         per_opponent.append(OpponentResult(
             opponent=opp_type,
@@ -165,6 +185,8 @@ def evaluate(
             games=num_games,
             win_rate=win_rate,
             avg_steps=avg_steps,
+            first_player_games=seat_counts["first"],
+            second_player_games=seat_counts["second"],
         ))
         total_wins += wins
         total_games += num_games

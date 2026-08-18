@@ -18,10 +18,13 @@ cuda = [
     "triton>=3.0.0 ; sys_platform == 'linux'",
 ]
 rocm = [
-    "torch>=2.6.0",
-    "rocm",
-    "rocm-sdk-core",
-    "rocm-sdk-libraries-gfx120x-all",
+    # The July 2026 multi-arch stack passed compatibility tests but regressed
+    # the production 30-update workload by 67%, so this measured-fast stack is
+    # intentionally exact-pinned.
+    "torch==2.11.0+rocm7.13.0a20260408",
+    "rocm==7.13.0a20260408",
+    "rocm-sdk-core==7.13.0a20260408",
+    "rocm-sdk-libraries-gfx120x-all==7.13.0a20260408",
 ]
 
 [tool.uv]

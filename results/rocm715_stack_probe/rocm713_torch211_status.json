@@ -1,0 +1,7 @@
+﻿{
+    "started_at":  "2026-08-18T08:33:56.2944480-07:00",
+    "stack":  "rocm713_torch211",
+    "finished_at":  "2026-08-18T08:38:39.6346696-07:00",
+    "exit_code":  0,
+    "state":  "complete"
+}

@@ -22,6 +22,15 @@ pwsh -File scripts\<name>.ps1
 |---|---|
 | `setup_gpu.py` | Wrapper around `uv sync --extra <backend>` (rocm / cuda / cpu / detect) plus an install verification step. Because `torch` lives only in extras, a bare `uv sync` uninstalls it — always go through this script or pass `--extra` yourself. |
 
+## Launching training
+
+| Script | Purpose |
+|---|---|
+| `launch_training.ps1` | Launches `python -m src train` through Windows Task Scheduler at Normal priority, outside the caller's process tree. Each launch has a unique identity and owns a kill-on-close Windows Job Object so every descendant is cleaned up atomically. On the project's i7-12700K host, its Auto affinity uses logical CPUs 0-15 so training runs on P-cores. `-ProcessorAffinityMask None` explicitly restores all logical CPUs; explicit hexadecimal/decimal masks are also supported. |
+| `stop_training.ps1` | Stops one exact launcher-owned task instance after verifying its launch manifest and action-process identity. Closing the launcher's Job Object terminates its full process tree without process-id ancestry races. Use this instead of `Stop-ScheduledTask`, which can orphan Python workers. |
+| `training_process_placement.ps1` | Shared priority/affinity helper used by launch and chunk orchestration. Auto is deliberately hardware-safe: it applies `0xFFFF` only to the known 20-thread i7-12700K layout. |
+| `training_task_lock.ps1` | Shared exclusive task-transaction lock used to serialize registration/startup against stopping the same scheduled task name. |
+
 ## Inspection
 
 | Script | Purpose |
@@ -70,7 +79,7 @@ resources are released before the next launch.
 | `hp_sweep_attn.ps1` | Hyperparameter sweep for attention pool+actor (lr / epochs / clip-eps variants). |
 | `hp3_full_resume.ps1` | Two-phase fresh-then-`--resume` run, written to validate `--resume` under real conditions. |
 | `run_pool_comparison.ps1` | Quick A/B pool-type comparison (smaller scale than `overnight_sweep.ps1`). |
-| `chunked_resume.ps1` | Runs a resumed training arc in fixed-size fresh-process chunks, with a durable manifest, fixed overall LR/curriculum horizons, restored RNG streams, RNG-neutral cheap interim evaluations, and a full final evaluation. Launch it outside the Bridge process tree to avoid long-process ROCm latency drift. |
+| `chunked_resume.ps1` | Runs a resumed training arc in fixed-size fresh-process chunks, with a durable manifest, fixed overall LR/curriculum horizons, restored RNG streams, RNG-neutral cheap interim evaluations, production process placement, and a full final evaluation. Launch it through Task Scheduler to avoid both inherited execution-context slowdown and long-process ROCm latency drift. |
 
 Each orchestrator is **resumable**: it reads its own manifest JSON in
 `logs/` and skips entries already marked `completed` so you can rerun safely

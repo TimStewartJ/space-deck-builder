@@ -37,12 +37,13 @@ print(torch.cuda.is_available())        # True
 print(torch.cuda.get_device_name(0))    # e.g., AMD Radeon RX 9070 or NVIDIA GeForce RTX 4090
 ```
 
-> **Pinned torch on Windows/ROCm.** The lockfile pins
-> `torch 2.11.0+rocm7.13.0a20260408`. That is the highest torch version AMD
-> publishes for `win_amd64` on the gfx120X nightly index — newer nightly
-> *dates* only ship torch 2.10.0 for Windows, so "upgrading" by date is a
-> downgrade. Refresh non-torch dependencies with
-> `uv lock --upgrade-package <name>` rather than a blanket `uv lock --upgrade`.
+> **Pinned torch on Windows/ROCm.** `pyproject.toml` and the lockfile pin
+> `torch 2.11.0+rocm7.13.0a20260408` and its matching ROCm packages. AMD now
+> publishes newer multi-arch Windows nightlies, but the tested July 28
+> torch 2.12/ROCm 7.15/gfx1201 stack regressed the 30-update workload by 67%
+> and did not remove process-age degradation. Upgrade the complete stack only
+> through an isolated A/B experiment; refresh unrelated dependencies with
+> `uv lock --upgrade-package <name>`.
 
 ### Running code
 

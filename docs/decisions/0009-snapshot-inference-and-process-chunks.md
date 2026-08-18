@@ -135,3 +135,12 @@ to 8.47 s. This is a 2.29x rollout speedup and 1.92x end-to-end update speedup.
   long-process ROCm drift is bounded.
 - Cap 3 remains the default because it preserved the strongest fixed-opponent
   result at the same throughput as cap 2.
+
+## Three-seed follow-up
+
+The protocol-compliant 400×2,000 follow-up retained cap 3 and 25-update process
+chunks. Across seeds 0, 1, and 2 it measured 5.22s warm rollout and 8.18s total
+warm update time. Fixed-opponent performance was statistically tied with the
+fixed-only control, while all three self-play seeds ranked above all three
+control seeds in cross-play Elo. The result and preserved artifacts live in
+[`results/optimized_selfplay_baseline.md`](../../results/optimized_selfplay_baseline.md).

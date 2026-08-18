@@ -43,6 +43,10 @@ sizes seen from architecture changes in deep RL.
   opponent.
 - First-player advantage is real in Star Realms; without alternation,
   win rate measures seat luck as much as skill.
+- Evaluation runners deterministically alternate the requested model's seat
+  by global game index and record both seat counts. A locked 5000-game
+  opponent result is invalid unless both counts equal 2500. Elo pairings
+  alternate side A and side B in the same way.
 
 ## 4. Training seeds
 

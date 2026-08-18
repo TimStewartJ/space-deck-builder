@@ -10,6 +10,8 @@ only on the machine that produced it.
 
 | Date | Writeup | Question | Outcome |
 |---|---|---|---|
+| 2026-08-18 | [`rocm715_stack_probe.md`](rocm715_stack_probe.md) | Does the July torch 2.12/ROCm 7.15/gfx1201/Triton stack improve training or eliminate runtime degradation? | **No.** It passed all compatibility gates but made the matched 30-update workload 66.9% slower and retained process-age degradation. Production remains exact-pinned to torch 2.11/ROCm 7.13. |
+| 2026-08-18 | [`optimized_selfplay_baseline.md`](optimized_selfplay_baseline.md) | Does optimized snapshot self-play improve the selected 400×2,000 fixed-opponent baseline across three seeds? | **Yes in cross-play, tied overall on scripted opponents.** Under exact 50/50 seating, self-play occupies the top three Elo positions and wins 67.9% against fixed-baseline checkpoints. Its fixed gauntlet is 94.40% overall vs. 94.71% for the control. |
 | 2026-08-17 | [`snapshot_inference_optimization.md`](snapshot_inference_optimization.md) | Can vector PFSP self-play avoid fragmented snapshot inference and long-process ROCm drift? | **Yes.** Actor-only stacked inference plus 25-update process chunks cuts degraded cap-3 rollout from 12.41s to 5.42s (2.29x). A paired seed-0 selection pilot keeps cap 3 as the conservative default; cap 1 is an optional 3.27s fast path. |
 | 2026-08-14 | [`vector_engine_gate.md`](vector_engine_gate.md) | Is a struct-of-arrays compiler engine fast enough and rules-exact end to end? | **Yes.** All 49 cards compile and match scalar state/masks/observations. The full engine runs at 5.88M/s, the actual-policy path at 587k/s, and `train --engine vec --opponents random` completes rollout, PPO update, scalar eval, and checkpoint save. |
 | 2026-04-28 | [`curriculum_v02.md`](curriculum_v02.md) | Should the default training curriculum be the fixed mixed pool, or self-play? | Mixed fixed opponents became the default (+6.8pp gauntlet, +136 Elo vs random-only). Self-play is stronger still (+203 Elo, 59.7% head-to-head) but ~1.8x the wall time, so it stays opt-in. |
@@ -27,6 +29,9 @@ only on the machine that produced it.
 - **The fixed gauntlet is saturating.** `random` (~99.9%) and `simple`
   (~98.9%) no longer separate strong checkpoints; `heuristic` carries almost
   all the discriminating signal. Cross-play Elo is the more sensitive metric.
+- **Snapshot self-play is the stronger checkpoint league.** Its three seeds
+  occupy the top three positions against the fixed-baseline seeds even though
+  the scripted gauntlet is statistically tied.
 - **There is no absolute strength anchor.** Every number here is relative to
   weak scripted opponents or to other checkpoints. Nothing establishes how
   well these agents actually play Star Realms.

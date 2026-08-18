@@ -169,6 +169,11 @@ The same rollout measured about 3.7x slower as a child of the agent runtime
 despite Normal process priority. The Task Scheduler launchers under `scripts/`
 avoid that inherited execution context.
 
+For training, use `scripts/launch_training.ps1`. It also applies the measured
+P-core affinity on the project's i7-12700K host. Long self-play arcs should use
+25-update `scripts/chunked_resume.ps1` processes so ROCm latency cannot
+accumulate inside one Python runtime.
+
 ### Project Structure
 
 ```

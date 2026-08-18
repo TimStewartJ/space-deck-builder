@@ -780,6 +780,8 @@ def sim_worker_eval(
     self_play_ratio: float = 0.5,
     pfsp_weights: list[float] | None = None,
     shared_io_spec=None,
+    eval_game_offset: int = 0,
+    alternate_seats: bool = True,
 ):
     """Entry point for an evaluation worker process.
 
@@ -800,6 +802,8 @@ def sim_worker_eval(
             self_play_ratio=self_play_ratio,
             pfsp_weights=pfsp_weights,
             shared_io=shared_io,
+            eval_game_offset=eval_game_offset,
+            alternate_seats=alternate_seats,
         )
     except Exception:
         result_queue.put(WorkerError(
@@ -817,6 +821,7 @@ def _sim_worker_eval_inner(
     opponent_spec, seed, request_queue, response_queue, result_queue,
     snapshot_names=None, self_play_ratio=0.5, pfsp_weights=None,
     shared_io=None,
+    eval_game_offset=0, alternate_seats=True,
 ):
     """Core eval worker logic.
 
@@ -866,15 +871,40 @@ def _sim_worker_eval_inner(
     games_started = 0
     games_completed = 0
     request_id = 0
+    first_player_games = 0
+    second_player_games = 0
+
+    def new_game(game_number: int) -> Game:
+        nonlocal first_player_games, second_player_games
+        opponent = opponent_factory()
+        game = Game(cards, card_index_map=card_index_map)
+        game.add_player(
+            training_agent_name,
+            _DummyAgent(training_agent_name),
+        )
+        game.add_player(opponent.name, opponent)
+        if alternate_seats:
+            training_starts = (
+                (eval_game_offset + game_number) % 2 == 0
+            )
+            game.start_game(
+                first_player_name=(
+                    training_agent_name
+                    if training_starts
+                    else opponent.name
+                )
+            )
+            if training_starts:
+                first_player_games += 1
+            else:
+                second_player_games += 1
+        else:
+            game.start_game()
+        return game
 
     active_count = min(num_concurrent, num_games)
     for i in range(active_count):
-        opponent = opponent_factory()
-        game = Game(cards, card_index_map=card_index_map)
-        game.add_player(training_agent_name, _DummyAgent(training_agent_name))
-        game.add_player(opponent.name, opponent)
-        game.start_game()
-        games[i] = game
+        games[i] = new_game(games_started)
         step_counts[i] = 0
         games_started += 1
 
@@ -894,12 +924,7 @@ def _sim_worker_eval_inner(
             total_steps += step_counts[i]
             games_completed += 1
             if games_started < num_games:
-                opponent = opponent_factory()
-                game = Game(cards, card_index_map=card_index_map)
-                game.add_player(training_agent_name, _DummyAgent(training_agent_name))
-                game.add_player(opponent.name, opponent)
-                game.start_game()
-                games[i] = game
+                games[i] = new_game(games_started)
                 step_counts[i] = 0
                 games_started += 1
                 _advance_non_ppo(games[i], training_agent_name)
@@ -1034,6 +1059,8 @@ def _sim_worker_eval_inner(
         wins=wins,
         losses=losses,
         total_steps=total_steps,
+        first_player_games=first_player_games,
+        second_player_games=second_player_games,
     ))
 
 
@@ -1164,7 +1191,11 @@ def _play_pairing(
         g = Game(cards, card_index_map=card_index_map)
         g.add_player(name_a, _build_slot(task.side_a_kind, task.side_a_id, name_a))
         g.add_player(name_b, _build_slot(task.side_b_kind, task.side_b_id, name_b))
-        g.start_game()
+        g.start_game(
+            first_player_name=(
+                name_a if games_started % 2 == 0 else name_b
+            )
+        )
         if collector is not None:
             collector.start_game(slot)
         return g
@@ -1411,8 +1442,6 @@ def tournament_worker_main(
             ))
         except Exception:
             pass
-
-
 
 
 

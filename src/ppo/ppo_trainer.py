@@ -555,7 +555,13 @@ def train(
                 "total_wins": eval_result.total_wins,
                 "total_games": eval_result.total_games,
                 "per_opponent": {
-                    r.opponent: {"wins": r.wins, "games": r.games, "win_rate": round(r.win_rate, 4)}
+                    r.opponent: {
+                        "wins": r.wins,
+                        "games": r.games,
+                        "win_rate": round(r.win_rate, 4),
+                        "first_player_games": r.first_player_games,
+                        "second_player_games": r.second_player_games,
+                    }
                     for r in eval_result.per_opponent
                 },
             }

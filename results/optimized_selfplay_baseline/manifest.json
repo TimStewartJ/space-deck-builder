@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "state": "complete",
+  "commit": "fe1d2a5",
+  "current_stage": null,
+  "started_at": "2026-08-17T23:03:19.6465780-07:00",
+  "finished_at": "2026-08-18T02:14:53.3250326-07:00",
+  "failure": null,
+  "config": {
+    "updates": 400,
+    "episodes": 2000,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "self_play_ratio": 0.5,
+    "self_play_schedule": "constant",
+    "pfsp": "variance",
+    "active_snapshot_cap": 3,
+    "persistent_snapshot_cap": 10,
+    "chunk_size": 25,
+    "interim_eval_games": 3200,
+    "interim_eval_cadence": 25,
+    "final_eval_games": 15000,
+    "num_workers": 16
+  },
+  "fixed_baseline_manifest": null,
+  "seeds": [
+    {
+      "seed": 0,
+      "status": "complete",
+      "manifest": null,
+      "final_checkpoint": "results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth"
+    },
+    {
+      "seed": 1,
+      "status": "complete",
+      "manifest": null,
+      "final_checkpoint": "results/optimized_selfplay_baseline/checkpoints/selfplay_seed1.pth"
+    },
+    {
+      "seed": 2,
+      "status": "complete",
+      "manifest": null,
+      "final_checkpoint": "results/optimized_selfplay_baseline/checkpoints/selfplay_seed2.pth"
+    }
+  ],
+  "elo": {
+    "status": "complete",
+    "log": "results/optimized_selfplay_baseline/elo.log",
+    "error_log": null,
+    "output_dir": null,
+    "checkpoints_dir": "results/optimized_selfplay_baseline/checkpoints",
+    "labels": [
+      {
+        "value": [
+          "fixed_seed0",
+          "fixed_seed1",
+          "fixed_seed2",
+          "selfplay_seed0",
+          "selfplay_seed1",
+          "selfplay_seed2"
+        ],
+        "Count": 6
+      }
+    ]
+  },
+  "analysis": {
+    "status": "complete",
+    "summary_json": "results/optimized_selfplay_baseline/summary.json",
+    "summary_markdown": "results/optimized_selfplay_baseline.md"
+  },
+  "published_artifact_root": "results/optimized_selfplay_baseline",
+  "fixed_baseline_source": "summary.json#fixed_baseline",
+  "published_evaluation": {
+    "seat_protocol": {
+      "mode": "deterministic-alternation",
+      "games_per_opponent_per_seed": 5000,
+      "first_player_games": 2500,
+      "second_player_games": 2500,
+      "elo_games_per_pair": 1000,
+      "elo_games_per_seat": 500
+    },
+    "results_dir": "results/optimized_selfplay_baseline/balanced_eval",
+    "summary": "results/optimized_selfplay_baseline/summary.json",
+    "elo_log": "results/optimized_selfplay_baseline/elo.log"
+  }
+}

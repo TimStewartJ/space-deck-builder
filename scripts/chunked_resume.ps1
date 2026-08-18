@@ -28,10 +28,17 @@ param(
     [int] $InterimNumWorkers = 1,
     [string] $LogsDir = "",
     [string] $WorkingDir = "",
-    [string] $Python = ""
+    [string] $Python = "",
+    [ValidateSet("Normal", "AboveNormal", "High")]
+    [string] $ProcessPriority = "Normal",
+    [string] $ProcessorAffinityMask = "Auto"
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "training_process_placement.ps1")
+$placement = Set-TrainingProcessPlacement `
+    -ProcessPriority $ProcessPriority `
+    -ProcessorAffinityMask $ProcessorAffinityMask
 
 if (-not $WorkingDir) {
     $WorkingDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
@@ -228,6 +235,40 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     } else {
         [int]$manifest.target_update
     }
+    $manifestPriority = if (
+        $manifest.PSObject.Properties["process_priority"]
+    ) {
+        [string]$manifest.process_priority
+    } else {
+        "unknown"
+    }
+    $manifestAffinity = if (
+        $manifest.PSObject.Properties["processor_affinity"]
+    ) {
+        [string]$manifest.processor_affinity
+    } else {
+        "unknown"
+    }
+    $placementHistory = if (
+        $manifest.PSObject.Properties["placement_history"]
+    ) {
+        @($manifest.placement_history)
+    } else {
+        @()
+    }
+    $effectivePlacement = if (
+        $manifestPriority -ne "unknown" -and
+        $manifestAffinity -ne "unknown"
+    ) {
+        [PSCustomObject]@{
+            priority = $manifestPriority
+            affinity = $manifestAffinity
+        }
+    } elseif ($placementHistory.Count) {
+        $placementHistory[-1]
+    } else {
+        $null
+    }
     $manifestInterimWorkers = if (
         $manifest.PSObject.Properties["interim_num_workers"]
     ) {
@@ -264,6 +305,19 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     if ($manifestSelfPlayHorizon -ne $SelfPlayHorizon) {
         $mismatches += "self_play_horizon"
     }
+    if (
+        $null -ne $effectivePlacement -and
+        [string]$effectivePlacement.priority -ne $placement.Priority
+    ) {
+        $mismatches += "process_priority"
+    }
+    if (
+        $null -ne $effectivePlacement -and
+        [string]$effectivePlacement.affinity -ne
+            [string]$placement.AffinityMask
+    ) {
+        $mismatches += "processor_affinity"
+    }
     if ($manifestStart -ne $expectedStart) {
         $mismatches += "start_checkpoint"
     }
@@ -299,6 +353,8 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
         $manifest `
         "self_play_horizon" `
         $manifestSelfPlayHorizon
+    Set-ManifestProperty $manifest "process_priority" $manifestPriority
+    Set-ManifestProperty $manifest "processor_affinity" $manifestAffinity
     if ([string]$manifest.state -eq "complete") {
         $finalCheckpoint = Assert-CheckpointUpdate `
             ([string]$manifest.final_checkpoint) `
@@ -311,6 +367,28 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     $currentUpdate = [int]$manifest.current_update
     if ($currentUpdate -lt $startUpdate -or $currentUpdate -gt $TargetUpdate) {
         throw "Manifest current update is invalid: $currentUpdate"
+    }
+    if ($null -eq $effectivePlacement) {
+        $placementHistory += [PSCustomObject]@{
+            effective_from_update = $currentUpdate + 1
+            priority = $placement.Priority
+            affinity = $placement.AffinityMask
+            reason = "placement tracking introduced on resume"
+        }
+        Set-ManifestProperty `
+            $manifest `
+            "placement_history" `
+            $placementHistory
+    } elseif (-not $manifest.PSObject.Properties["placement_history"]) {
+        Set-ManifestProperty `
+            $manifest `
+            "placement_history" `
+            @([PSCustomObject]@{
+                effective_from_update = $startUpdate + 1
+                priority = $placement.Priority
+                affinity = $placement.AffinityMask
+                reason = "placement reconstructed from existing manifest"
+            })
     }
     $currentCheckpoint = Assert-CheckpointUpdate `
         ([string]$manifest.current_checkpoint) `
@@ -355,6 +433,14 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
         interim_num_workers = $InterimNumWorkers
         lr_horizon = $LrHorizon
         self_play_horizon = $SelfPlayHorizon
+        process_priority = $placement.Priority
+        processor_affinity = $placement.AffinityMask
+        placement_history = @([PSCustomObject]@{
+            effective_from_update = $startUpdate + 1
+            priority = $placement.Priority
+            affinity = $placement.AffinityMask
+            reason = "initial process placement"
+        })
         start_checkpoint = $currentCheckpoint
         current_checkpoint = $currentCheckpoint
         current_update = $currentUpdate

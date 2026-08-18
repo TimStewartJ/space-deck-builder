@@ -291,11 +291,15 @@ def _play_builtin_games(
     wins_a = 0
     wins_b = 0
 
-    for _ in range(num_games):
+    for game_index in range(num_games):
         game = Game(cards, card_index_map=card_index_map)
         game.add_player(name_a, factory_a(name_a))
         game.add_player(name_b, factory_b(name_b))
-        game.start_game()
+        game.start_game(
+            first_player_name=(
+                name_a if game_index % 2 == 0 else name_b
+            )
+        )
 
         while not game.is_game_over:
             player = game.current_player
@@ -374,8 +378,8 @@ def run_tournament(
     whenever ``num_workers > 1``. Built-in vs. built-in pairings skip the
     server and run inline in the coordinator.
 
-    Game.start_game() randomizes player order, so both sides get fair
-    first/second player distribution.
+    Every pairing alternates its first player by game index, giving each side
+    exactly half the seats whenever games_per_pair is even.
 
     Returns a list of EloResult sorted by Elo descending.
     """
@@ -464,8 +468,10 @@ def run_tournament(
         games_total[j] += actual_games
         pairings_done += 1
         wr_a = wins_a / actual_games * 100 if actual_games > 0 else 0
+        set_disabled(False)
         log(f"  [{pairings_done}/{total_pairings}] {labels[i]} vs {labels[j]}: "
             f"{wins_a}/{actual_games} ({wr_a:.0f}%)  ({pair_elapsed:.1f}s)")
+        set_disabled(True)
     set_disabled(False)
 
     # Dispatch PPO-involving pairings through a parallel worker fleet.

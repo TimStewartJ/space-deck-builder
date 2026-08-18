@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "decision": "reject-upgrade",
+  "production_stack": {
+    "torch": "2.11.0+rocm7.13.0a20260408",
+    "rocm": "7.13.0a20260408",
+    "triton": null
+  },
+  "candidate_stack": {
+    "torch": "2.12.0+rocm7.15.0a20260728",
+    "rocm": "7.15.0a20260728",
+    "triton_windows": "3.7.0.post26",
+    "device_package": "gfx1201"
+  },
+  "validation": {
+    "tests_passed": 548,
+    "checkpoint_load": "passed",
+    "gpu_gfx1201": "passed",
+    "triton_inductor": "passed",
+    "production_venv_modified": false
+  },
+  "interleaved_eager": {
+    "pairs": 4,
+    "warm_rollout_old_median_s": 5.8296,
+    "warm_rollout_new_median_s": 5.6904,
+    "paired_rollout_delta_percent": [
+      -5.4,
+      19.98,
+      -0.52,
+      -4.24
+    ],
+    "conclusion": "no reliable rollout improvement",
+    "warm_ppo_old_median_s": 2.8796,
+    "warm_ppo_new_median_s": 3.2973,
+    "conclusion_ppo": "candidate noisy and median slower"
+  },
+  "inductor": {
+    "fresh_first_rollout_s": 137.42,
+    "warm_rollout_mean_s": 5.8205,
+    "fresh_first_ppo_s": 22.6,
+    "warm_ppo_mean_s": 2.8901,
+    "conclusion": "compile overhead extreme; warm performance not better than eager"
+  },
+  "decay_30_updates": {
+    "production_wall_s": 280.4,
+    "candidate_wall_s": 467.9,
+    "candidate_wall_regression_percent": 66.9,
+    "production_rollout_mean_s": 5.91,
+    "candidate_rollout_mean_s": 7.5967,
+    "production_ppo_mean_s": 3.33,
+    "candidate_ppo_mean_s": 7.8867,
+    "production_early_rollout_s": 5.51,
+    "production_late_rollout_s": 5.84,
+    "candidate_early_rollout_s": 7.06,
+    "candidate_late_rollout_s": 7.92,
+    "conclusion": "candidate slower and does not cure process-age degradation"
+  },
+  "evidence": {
+    "decay_root": "results/rocm715_stack_probe",
+    "microbench": "results/rocm715_stack_probe/microbench"
+  }
+}

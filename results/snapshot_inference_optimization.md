@@ -9,6 +9,9 @@
 > gauntlet and Elo sample counts, but it is not a three-independent-training-
 > seed result and must not be reported as one.
 
+The three-independent-seed follow-up is now complete; see
+[`optimized_selfplay_baseline.md`](optimized_selfplay_baseline.md).
+
 ## Result
 
 The production choice is:

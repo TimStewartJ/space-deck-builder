@@ -1,0 +1,813 @@
+{
+  "schema_version": 1,
+  "protocol": "docs/eval_protocol.md",
+  "config": {
+    "updates": 400,
+    "episodes": 2000,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "self_play_ratio": 0.5,
+    "self_play_schedule": "constant",
+    "pfsp": "variance",
+    "active_snapshot_cap": 3,
+    "persistent_snapshot_cap": 10,
+    "chunk_size": 25,
+    "interim_eval_games": 3200,
+    "interim_eval_cadence": 25,
+    "final_eval_games": 15000,
+    "num_workers": 16
+  },
+  "seeds": [
+    {
+      "seed": 0,
+      "checkpoint": "results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth",
+      "eval": {
+        "random": 0.9972,
+        "heuristic": 0.873,
+        "simple": 0.9716
+      },
+      "overall_win_rate": 0.9472666666666667,
+      "first_update_70pct_heuristic": 50,
+      "timing": {
+        "warm_rollout_s": 5.522532637075718,
+        "warm_ppo_s": 3.096527415143603,
+        "warm_total_update_s": 8.619060052219321,
+        "warm_throughput_eps": 371.981409921671
+      },
+      "seat_counts": {
+        "random": {
+          "first": 2500,
+          "second": 2500
+        },
+        "heuristic": {
+          "first": 2500,
+          "second": 2500
+        },
+        "simple": {
+          "first": 2500,
+          "second": 2500
+        }
+      }
+    },
+    {
+      "seed": 1,
+      "checkpoint": "results/optimized_selfplay_baseline/checkpoints/selfplay_seed1.pth",
+      "eval": {
+        "random": 0.998,
+        "heuristic": 0.858,
+        "simple": 0.9742
+      },
+      "overall_win_rate": 0.9434,
+      "first_update_70pct_heuristic": 50,
+      "timing": {
+        "warm_rollout_s": 5.141614583333333,
+        "warm_ppo_s": 2.856614583333333,
+        "warm_total_update_s": 7.9982291666666665,
+        "warm_throughput_eps": 392.2134375
+      },
+      "seat_counts": {
+        "random": {
+          "first": 2500,
+          "second": 2500
+        },
+        "heuristic": {
+          "first": 2500,
+          "second": 2500
+        },
+        "simple": {
+          "first": 2500,
+          "second": 2500
+        }
+      }
+    },
+    {
+      "seed": 2,
+      "checkpoint": "results/optimized_selfplay_baseline/checkpoints/selfplay_seed2.pth",
+      "eval": {
+        "random": 0.9984,
+        "heuristic": 0.8598,
+        "simple": 0.966
+      },
+      "overall_win_rate": 0.9414,
+      "first_update_70pct_heuristic": 50,
+      "timing": {
+        "warm_rollout_s": 4.983385416666667,
+        "warm_ppo_s": 2.942734375,
+        "warm_total_update_s": 7.926119791666666,
+        "warm_throughput_eps": 403.52023437500003
+      },
+      "seat_counts": {
+        "random": {
+          "first": 2500,
+          "second": 2500
+        },
+        "heuristic": {
+          "first": 2500,
+          "second": 2500
+        },
+        "simple": {
+          "first": 2500,
+          "second": 2500
+        }
+      }
+    }
+  ],
+  "aggregate": {
+    "random": {
+      "mean": 0.9978666666666667,
+      "ci95_half_width": 0.0015178332134957694,
+      "values": [
+        0.9972,
+        0.998,
+        0.9984
+      ]
+    },
+    "heuristic": {
+      "mean": 0.8636,
+      "ci95_half_width": 0.020345679312763234,
+      "values": [
+        0.873,
+        0.858,
+        0.8598
+      ]
+    },
+    "simple": {
+      "mean": 0.9706,
+      "ci95_half_width": 0.01040969305070326,
+      "values": [
+        0.9716,
+        0.9742,
+        0.966
+      ]
+    },
+    "overall": {
+      "mean": 0.9440222222222222,
+      "ci95_half_width": 0.0074087360634553165,
+      "values": [
+        0.9472666666666667,
+        0.9434,
+        0.9414
+      ]
+    }
+  },
+  "sample_efficiency_25_update_cadence": {
+    "mean": 50,
+    "ci95_half_width": 0.0,
+    "values": [
+      50,
+      50,
+      50
+    ],
+    "seat_protocol": "legacy-randomized",
+    "note": "Retained training diagnostic; locked final gauntlets and Elo use deterministic balanced seats."
+  },
+  "timing": {
+    "warm_rollout_s": {
+      "mean": 5.215844212358573,
+      "ci95_half_width": 0.6884354608450932,
+      "values": [
+        5.522532637075718,
+        5.141614583333333,
+        4.983385416666667
+      ]
+    },
+    "warm_ppo_s": {
+      "mean": 2.9652921244923123,
+      "ci95_half_width": 0.30191401549462504,
+      "values": [
+        3.096527415143603,
+        2.856614583333333,
+        2.942734375
+      ]
+    },
+    "warm_total_update_s": {
+      "mean": 8.181136336850885,
+      "ci95_half_width": 0.9463646153789509,
+      "values": [
+        8.619060052219321,
+        7.9982291666666665,
+        7.926119791666666
+      ]
+    },
+    "warm_throughput_eps": {
+      "mean": 389.2383605988903,
+      "ci95_half_width": 39.69281088105074,
+      "values": [
+        371.981409921671,
+        392.2134375,
+        403.52023437500003
+      ]
+    }
+  },
+  "fixed_baseline": {
+    "runId": "pilot_20260815_223359",
+    "generatedAt": "2026-08-16T17:34:50.7508951-07:00",
+    "selectedBudget": {
+      "updates": 400,
+      "episodes": 2000,
+      "arm": "C"
+    },
+    "seeds": {
+      "0": {
+        "random": {
+          "wins": 4984,
+          "games": 5000,
+          "winRate": 0.9968
+        },
+        "heuristic": {
+          "wins": 4341,
+          "games": 5000,
+          "winRate": 0.8682
+        },
+        "simple": {
+          "wins": 4866,
+          "games": 5000,
+          "winRate": 0.9732
+        }
+      },
+      "1": {
+        "random": {
+          "wins": 4991,
+          "games": 5000,
+          "winRate": 0.9982
+        },
+        "heuristic": {
+          "wins": 4345,
+          "games": 5000,
+          "winRate": 0.869
+        },
+        "simple": {
+          "wins": 4870,
+          "games": 5000,
+          "winRate": 0.974
+        }
+      },
+      "2": {
+        "random": {
+          "wins": 4985,
+          "games": 5000,
+          "winRate": 0.997
+        },
+        "heuristic": {
+          "wins": 4391,
+          "games": 5000,
+          "winRate": 0.8782
+        },
+        "simple": {
+          "wins": 4888,
+          "games": 5000,
+          "winRate": 0.9776
+        }
+      }
+    },
+    "aggregate": {
+      "random": {
+        "wins": 14960,
+        "games": 15000,
+        "winRate": 0.9973333333333333
+      },
+      "heuristic": {
+        "wins": 13077,
+        "games": 15000,
+        "winRate": 0.8718
+      },
+      "simple": {
+        "wins": 14624,
+        "games": 15000,
+        "winRate": 0.9749333333333333
+      },
+      "overall": {
+        "wins": 42661,
+        "games": 45000,
+        "winRate": 0.9480222222222222
+      }
+    },
+    "historical": {
+      "fixedMixThreeSeed": {
+        "random": 0.9994666666666666,
+        "heuristic": 0.8622666666666666,
+        "simple": 0.989,
+        "overall": 0.9502444444444444
+      },
+      "selfPlayThreeSeed": {
+        "random": 0.9995333333333334,
+        "heuristic": 0.8736666666666667,
+        "simple": 0.9889333333333333,
+        "overall": 0.9540444444444445
+      },
+      "bestCheckpoint0428_1249": {
+        "random": 1,
+        "heuristic": 0.8744,
+        "simple": 0.9894,
+        "overall": 0.9546
+      },
+      "source": "results/curriculum_v02.md"
+    },
+    "deltasPercentagePoints": {
+      "random": {
+        "versusHistoricalFixedPp": -0.21333333333333204,
+        "versusHistoricalSelfPlayPp": -0.22000000000000908,
+        "versusHistoricalBestPp": -0.2666666666666706
+      },
+      "heuristic": {
+        "versusHistoricalFixedPp": 0.9533333333333394,
+        "versusHistoricalSelfPlayPp": -0.1866666666666683,
+        "versusHistoricalBestPp": -0.25999999999999357
+      },
+      "simple": {
+        "versusHistoricalFixedPp": -1.4066666666666672,
+        "versusHistoricalSelfPlayPp": -1.4000000000000012,
+        "versusHistoricalBestPp": -1.4466666666666628
+      },
+      "overall": {
+        "versusHistoricalFixedPp": -0.22222222222222365,
+        "versusHistoricalSelfPlayPp": -0.6022222222222262,
+        "versusHistoricalBestPp": -0.6577777777777793
+      }
+    },
+    "elo": {
+      "status": "unavailable",
+      "reason": "The April reference checkpoint has 8 zone embeddings; current checkpoints have 10. Strict tournament loading correctly rejects cross-encoding inference. Historical Elo remains available in results/curriculum_v02.md."
+    }
+  },
+  "fixed_baseline_seed_results": [
+    {
+      "seed": 0,
+      "eval": {
+        "random": 0.9982,
+        "heuristic": 0.8676,
+        "simple": 0.9768
+      },
+      "overall_win_rate": 0.9475333333333333,
+      "seat_counts": {
+        "random": {
+          "first": 2500,
+          "second": 2500
+        },
+        "heuristic": {
+          "first": 2500,
+          "second": 2500
+        },
+        "simple": {
+          "first": 2500,
+          "second": 2500
+        }
+      }
+    },
+    {
+      "seed": 1,
+      "eval": {
+        "random": 0.9976,
+        "heuristic": 0.866,
+        "simple": 0.9772
+      },
+      "overall_win_rate": 0.9469333333333333,
+      "seat_counts": {
+        "random": {
+          "first": 2500,
+          "second": 2500
+        },
+        "heuristic": {
+          "first": 2500,
+          "second": 2500
+        },
+        "simple": {
+          "first": 2500,
+          "second": 2500
+        }
+      }
+    },
+    {
+      "seed": 2,
+      "eval": {
+        "random": 0.998,
+        "heuristic": 0.8696,
+        "simple": 0.9726
+      },
+      "overall_win_rate": 0.9467333333333333,
+      "seat_counts": {
+        "random": {
+          "first": 2500,
+          "second": 2500
+        },
+        "heuristic": {
+          "first": 2500,
+          "second": 2500
+        },
+        "simple": {
+          "first": 2500,
+          "second": 2500
+        }
+      }
+    }
+  ],
+  "fixed_baseline_aggregate": {
+    "random": {
+      "mean": 0.9979333333333333,
+      "ci95_half_width": 0.0007589166067478095,
+      "values": [
+        0.9982,
+        0.9976,
+        0.998
+      ]
+    },
+    "heuristic": {
+      "mean": 0.8677333333333334,
+      "ci95_half_width": 0.004480638945243845,
+      "values": [
+        0.8676,
+        0.866,
+        0.8696
+      ]
+    },
+    "simple": {
+      "mean": 0.9755333333333334,
+      "ci95_half_width": 0.006330084637110674,
+      "values": [
+        0.9768,
+        0.9772,
+        0.9726
+      ]
+    },
+    "overall": {
+      "mean": 0.9470666666666666,
+      "ci95_half_width": 0.001034229002547388,
+      "values": [
+        0.9475333333333333,
+        0.9469333333333333,
+        0.9467333333333333
+      ]
+    }
+  },
+  "paired_delta_selfplay_minus_fixed": {
+    "random": {
+      "mean": -6.666666666669634e-05,
+      "ci95_half_width": 0.0020079046072918666,
+      "values": [
+        -0.0010000000000000009,
+        0.00039999999999995595,
+        0.00039999999999995595
+      ]
+    },
+    "heuristic": {
+      "mean": -0.0041333333333333595,
+      "ci95_half_width": 0.020630809810143806,
+      "values": [
+        0.00539999999999996,
+        -0.008000000000000007,
+        -0.009800000000000031
+      ]
+    },
+    "simple": {
+      "mean": -0.004933333333333345,
+      "ci95_half_width": 0.0045080997065828085,
+      "values": [
+        -0.005199999999999982,
+        -0.0030000000000000027,
+        -0.00660000000000005
+      ]
+    },
+    "overall": {
+      "mean": -0.003044444444444405,
+      "ci95_half_width": 0.006380432654929745,
+      "values": [
+        -0.0002666666666666373,
+        -0.0035333333333332773,
+        -0.005333333333333301
+      ]
+    }
+  },
+  "elo": [
+    {
+      "rank": 1,
+      "name": "selfplay_seed0",
+      "elo": 1149,
+      "wins": 6077,
+      "losses": 1923,
+      "win_rate": 0.76
+    },
+    {
+      "rank": 2,
+      "name": "selfplay_seed2",
+      "elo": 1130,
+      "wins": 5911,
+      "losses": 2089,
+      "win_rate": 0.7390000000000001
+    },
+    {
+      "rank": 3,
+      "name": "selfplay_seed1",
+      "elo": 1097,
+      "wins": 5626,
+      "losses": 2374,
+      "win_rate": 0.703
+    },
+    {
+      "rank": 4,
+      "name": "fixed_seed1",
+      "elo": 1022,
+      "wins": 4942,
+      "losses": 3058,
+      "win_rate": 0.618
+    },
+    {
+      "rank": 5,
+      "name": "fixed_seed2",
+      "elo": 1005,
+      "wins": 4778,
+      "losses": 3222,
+      "win_rate": 0.597
+    },
+    {
+      "rank": 6,
+      "name": "fixed_seed0",
+      "elo": 1000,
+      "wins": 4737,
+      "losses": 3263,
+      "win_rate": 0.5920000000000001
+    },
+    {
+      "rank": 7,
+      "name": "heuristic",
+      "elo": 725,
+      "wins": 2599,
+      "losses": 5401,
+      "win_rate": 0.325
+    },
+    {
+      "rank": 8,
+      "name": "simple",
+      "elo": 423,
+      "wins": 1220,
+      "losses": 6780,
+      "win_rate": 0.152
+    },
+    {
+      "rank": 9,
+      "name": "random",
+      "elo": 1,
+      "wins": 110,
+      "losses": 7890,
+      "win_rate": 0.013999999999999999
+    }
+  ],
+  "legacy_random_seat_evaluation": {
+    "seeds": [
+      {
+        "seed": 0,
+        "eval": {
+          "random": 0.9988,
+          "heuristic": 0.8602,
+          "simple": 0.9736
+        },
+        "overall_win_rate": 0.9442
+      },
+      {
+        "seed": 1,
+        "eval": {
+          "random": 0.9976,
+          "heuristic": 0.8478,
+          "simple": 0.9766
+        },
+        "overall_win_rate": 0.9407
+      },
+      {
+        "seed": 2,
+        "eval": {
+          "random": 0.9984,
+          "heuristic": 0.8632,
+          "simple": 0.9654
+        },
+        "overall_win_rate": 0.9423
+      }
+    ],
+    "aggregate": {
+      "random": {
+        "mean": 0.9982666666666666,
+        "ci95_half_width": 0.0015178332134957392,
+        "values": [
+          0.9988,
+          0.9976,
+          0.9984
+        ]
+      },
+      "heuristic": {
+        "mean": 0.8570666666666666,
+        "ci95_half_width": 0.020280871091367527,
+        "values": [
+          0.8602,
+          0.8478,
+          0.8632
+        ]
+      },
+      "simple": {
+        "mean": 0.9718666666666667,
+        "ci95_half_width": 0.014402286935117973,
+        "values": [
+          0.9736,
+          0.9766,
+          0.9654
+        ]
+      },
+      "overall": {
+        "mean": 0.9424,
+        "ci95_half_width": 0.004352560892878108,
+        "values": [
+          0.9442,
+          0.9407,
+          0.9423
+        ]
+      }
+    },
+    "fixed_baseline_seed_results": [
+      {
+        "seed": 0,
+        "eval": {
+          "random": 0.9968,
+          "heuristic": 0.8682,
+          "simple": 0.9732
+        },
+        "overall_win_rate": 0.9460666666666666
+      },
+      {
+        "seed": 1,
+        "eval": {
+          "random": 0.9982,
+          "heuristic": 0.869,
+          "simple": 0.974
+        },
+        "overall_win_rate": 0.9470666666666666
+      },
+      {
+        "seed": 2,
+        "eval": {
+          "random": 0.997,
+          "heuristic": 0.8782,
+          "simple": 0.9776
+        },
+        "overall_win_rate": 0.9509333333333333
+      }
+    ],
+    "fixed_baseline_aggregate": {
+      "random": {
+        "mean": 0.9973333333333333,
+        "ci95_half_width": 0.001880958717854175,
+        "values": [
+          0.9968,
+          0.9982,
+          0.997
+        ]
+      },
+      "heuristic": {
+        "mean": 0.8718,
+        "ci95_half_width": 0.013804297609547732,
+        "values": [
+          0.8682,
+          0.869,
+          0.8782
+        ]
+      },
+      "simple": {
+        "mean": 0.9749333333333333,
+        "ci95_half_width": 0.005822287466415762,
+        "values": [
+          0.9732,
+          0.974,
+          0.9776
+        ]
+      },
+      "overall": {
+        "mean": 0.9480222222222222,
+        "ci95_half_width": 0.0063847297253382534,
+        "values": [
+          0.9460666666666666,
+          0.9470666666666666,
+          0.9509333333333333
+        ]
+      }
+    },
+    "paired_delta_selfplay_minus_fixed": {
+      "random": {
+        "mean": 0.0009333333333333416,
+        "ci95_half_width": 0.003381835170091617,
+        "values": [
+          0.0020000000000000018,
+          -0.0005999999999999339,
+          0.0013999999999999568
+        ]
+      },
+      "heuristic": {
+        "mean": -0.01473333333333334,
+        "ci95_half_width": 0.01640534274788287,
+        "values": [
+          -0.008000000000000007,
+          -0.021199999999999997,
+          -0.015000000000000013
+        ]
+      },
+      "simple": {
+        "mean": -0.003066666666666625,
+        "ci95_half_width": 0.019837878528991625,
+        "values": [
+          0.00040000000000006697,
+          0.0026000000000000467,
+          -0.012199999999999989
+        ]
+      },
+      "overall": {
+        "mean": -0.005622222222222158,
+        "ci95_half_width": 0.00855589557946062,
+        "values": [
+          -0.001866666666666572,
+          -0.006366666666666632,
+          -0.00863333333333327
+        ]
+      }
+    },
+    "elo": [
+      {
+        "rank": 1,
+        "name": "selfplay_seed0",
+        "elo": 1137,
+        "wins": 6013,
+        "losses": 1987,
+        "win_rate": 0.752
+      },
+      {
+        "rank": 2,
+        "name": "selfplay_seed2",
+        "elo": 1130,
+        "wins": 5948,
+        "losses": 2052,
+        "win_rate": 0.7440000000000001
+      },
+      {
+        "rank": 3,
+        "name": "selfplay_seed1",
+        "elo": 1099,
+        "wins": 5678,
+        "losses": 2322,
+        "win_rate": 0.71
+      },
+      {
+        "rank": 4,
+        "name": "fixed_seed1",
+        "elo": 1011,
+        "wins": 4871,
+        "losses": 3129,
+        "win_rate": 0.609
+      },
+      {
+        "rank": 5,
+        "name": "fixed_seed0",
+        "elo": 1000,
+        "wins": 4773,
+        "losses": 3227,
+        "win_rate": 0.597
+      },
+      {
+        "rank": 6,
+        "name": "fixed_seed2",
+        "elo": 997,
+        "wins": 4747,
+        "losses": 3253,
+        "win_rate": 0.593
+      },
+      {
+        "rank": 7,
+        "name": "heuristic",
+        "elo": 730,
+        "wins": 2640,
+        "losses": 5360,
+        "win_rate": 0.33
+      },
+      {
+        "rank": 8,
+        "name": "simple",
+        "elo": 425,
+        "wins": 1239,
+        "losses": 6761,
+        "win_rate": 0.155
+      },
+      {
+        "rank": 9,
+        "name": "random",
+        "elo": -32,
+        "wins": 91,
+        "losses": 7909,
+        "win_rate": 0.011000000000000001
+      }
+    ]
+  },
+  "seat_protocol": {
+    "mode": "deterministic-alternation",
+    "games_per_opponent_per_seed": 5000,
+    "first_player_games": 2500,
+    "second_player_games": 2500,
+    "elo_games_per_pair": 1000,
+    "elo_games_per_seat": 500
+  }
+}

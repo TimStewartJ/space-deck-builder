@@ -264,7 +264,12 @@ class BatchRunner:
             action = player.make_decision(game)
             game.apply_decision(action)
 
-    def run_eval(self, num_games: int) -> tuple[int, int, int]:
+    def run_eval(
+        self,
+        num_games: int,
+        *,
+        alternate_seats: bool = True,
+    ) -> tuple[int, int, int]:
         """Run num_games evaluation games. Returns (wins, losses, total_steps).
         
         Same batched inference loop as run_episodes but without rollout storage.
@@ -280,10 +285,17 @@ class BatchRunner:
         total_steps = 0
         games_started = 0
         games_completed = 0
+        self.eval_seat_counts = {"first": 0, "second": 0}
 
         active_count = min(self.num_concurrent, num_games)
         for i in range(active_count):
-            games[i] = self._start_eval_game()
+            games[i] = self._start_eval_game(
+                training_starts=(
+                    games_started % 2 == 0
+                    if alternate_seats
+                    else None
+                )
+            )
             step_counts[i] = 0
             games_started += 1
 
@@ -306,7 +318,13 @@ class BatchRunner:
                 total_steps += step_counts[i]
                 games_completed += 1
                 if games_started < num_games:
-                    games[i] = self._start_eval_game()
+                    games[i] = self._start_eval_game(
+                        training_starts=(
+                            games_started % 2 == 0
+                            if alternate_seats
+                            else None
+                        )
+                    )
                     step_counts[i] = 0
                     games_started += 1
                     self._advance_non_ppo(games[i])
@@ -532,13 +550,25 @@ class BatchRunner:
 
         return wins, losses, total_steps
 
-    def _start_eval_game(self):
+    def _start_eval_game(self, training_starts: bool | None = None):
         """Initialize a new game for evaluation (no rollout buffer needed)."""
         opponent = self.opponent_factory()
         game = Game(self.cards, card_index_map=self.card_index_map)
         game.add_player(self.training_agent_name, _DummyAgent(self.training_agent_name))
         game.add_player(opponent.name, opponent)
-        game.start_game()
+        first_player_name = (
+            None
+            if training_starts is None
+            else (
+                self.training_agent_name
+                if training_starts
+                else opponent.name
+            )
+        )
+        game.start_game(first_player_name=first_player_name)
+        if training_starts is not None:
+            key = "first" if training_starts else "second"
+            self.eval_seat_counts[key] += 1
         return game
 
 

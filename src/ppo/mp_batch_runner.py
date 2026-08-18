@@ -117,8 +117,8 @@ class MultiProcessBatchRunner:
             use_snapshots: Load opponent snapshots into InferenceServer
             extra_args_fn: Optional callable(worker_id) -> tuple of extra
                 positional args inserted after the common args
-            extra_kwargs_fn: Optional callable(snapshot_names) -> dict of
-                extra kwargs merged into the snapshot kwargs
+            extra_kwargs_fn: Optional callable(worker_id, snapshot_names) ->
+                dict of extra kwargs merged into each worker's snapshot kwargs
 
         Returns: (server, processes, result_queue)
         """
@@ -184,7 +184,7 @@ class MultiProcessBatchRunner:
         result_queue = self._mp_ctx.Queue()
         seeds = [random.randint(0, 1_000_000_000) for _ in range(actual_workers)]
 
-        # Snapshot kwargs forwarded to workers
+        # Base snapshot kwargs forwarded to every worker.
         snapshot_kwargs = {
             "snapshot_names": snapshot_names,
             "self_play_ratio": self.self_play_ratio,
@@ -192,9 +192,6 @@ class MultiProcessBatchRunner:
         }
         if shared_io is not None:
             snapshot_kwargs["shared_io_spec"] = shared_io.spec
-        if extra_kwargs_fn:
-            snapshot_kwargs.update(extra_kwargs_fn(snapshot_names))
-
         processes = []
         for i in range(actual_workers):
             if items_per_worker[i] == 0:
@@ -223,10 +220,15 @@ class MultiProcessBatchRunner:
                 result_queue,
             )
 
+            worker_kwargs = dict(snapshot_kwargs)
+            if extra_kwargs_fn:
+                worker_kwargs.update(
+                    extra_kwargs_fn(i, snapshot_names)
+                )
             p = self._mp_ctx.Process(
                 target=target_fn,
                 args=common_args + extra + tail_args,
-                kwargs=snapshot_kwargs,
+                kwargs=worker_kwargs,
             )
             p.start()
             processes.append(p)
@@ -350,7 +352,12 @@ class MultiProcessBatchRunner:
                 iters, pending, self.num_concurrent,
             )
 
-    def run_eval(self, num_games: int) -> tuple[int, int, int]:
+    def run_eval(
+        self,
+        num_games: int,
+        *,
+        alternate_seats: bool = True,
+    ) -> tuple[int, int, int]:
         """Run evaluation games across workers. Returns (wins, losses, total_steps).
 
         Supports PPO snapshot opponents when snapshot_state_dicts is set —
@@ -365,18 +372,29 @@ class MultiProcessBatchRunner:
             return 0, 0, 0
 
         games_per_worker = _divide_work(num_games, actual_workers)
+        worker_offsets = []
+        offset = 0
+        for count in games_per_worker:
+            worker_offsets.append(offset)
+            offset += count
 
         server, processes, result_queue = self._spawn_workers(
             sim_worker_eval,
             num_games,
             games_per_worker,
             use_snapshots=bool(self.snapshot_state_dicts),
+            extra_kwargs_fn=lambda worker_id, _snapshot_names: {
+                "eval_game_offset": worker_offsets[worker_id],
+                "alternate_seats": alternate_seats,
+            },
         )
 
         # Collect eval results with cleanup guaranteed
         total_wins = 0
         total_losses = 0
         total_steps = 0
+        first_player_games = 0
+        second_player_games = 0
         errors = []
 
         try:
@@ -404,6 +422,8 @@ class MultiProcessBatchRunner:
                 total_wins += result.wins
                 total_losses += result.losses
                 total_steps += result.total_steps
+                first_player_games += result.first_player_games
+                second_player_games += result.second_player_games
                 results_collected += 1
         finally:
             server.stop()
@@ -415,6 +435,10 @@ class MultiProcessBatchRunner:
             print(f"WARNING: Eval incomplete ({actual_games}/{num_games} games). "
                   f"Errors: {'; '.join(errors)}")
 
+        self.eval_seat_counts = {
+            "first": first_player_games,
+            "second": second_player_games,
+        }
         return total_wins, total_losses, total_steps
 
     def _release_shared_io(self) -> None:
@@ -498,4 +522,3 @@ class MultiProcessBatchRunner:
             deadline = time.monotonic() + timeout_per_result
 
         return results
-
