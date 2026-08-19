@@ -180,9 +180,10 @@ def _scrap_source(game, player, card):
         player.played_cards.remove(card)
     if card in player.bases:
         player.bases.remove(card)
+    player.remove_owned_card(card)
     player.invalidate_faction_cache()
     if card.name == "Explorer":
-        game.explorer_pile.append(card)
+        game._return_explorer_to_pile(card)
 
 
 def apply_effect(

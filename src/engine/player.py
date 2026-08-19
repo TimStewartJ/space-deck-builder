@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import List, Optional
 from src.cards.card import Card
 from src.cards.factions import Faction, parse_faction
@@ -38,6 +39,54 @@ class Player:
         self._faction_counts: dict[Faction, int] = {}
         self._faction_counts_dirty: bool = True
         self._faction_counts_card_count: int = 0  # track card count for staleness detection
+        self.public_owned_cards: Counter[int] = Counter()
+        self.public_owned_card_instances: List[Card] = []
+        self.public_known_hand: List[Card] = []
+        self.public_ownership_initialized = False
+        self.rng = None
+
+    def initialize_public_ownership(self, cards: List[Card]):
+        """Initialize the publicly known multiset of cards this player owns."""
+        self.public_owned_cards = Counter(card.index for card in cards)
+        self.public_owned_card_instances = list(cards)
+        self.public_known_hand.clear()
+        self.public_ownership_initialized = True
+
+    def add_owned_card(self, card: Card):
+        if card in self.public_owned_card_instances:
+            raise RuntimeError(
+                f"{card.name} is already owned by {self.name}"
+            )
+        self.public_owned_cards[card.index] += 1
+        self.public_owned_card_instances.append(card)
+
+    def remove_owned_card(self, card: Card):
+        count = self.public_owned_cards[card.index]
+        if count <= 0:
+            if self.public_ownership_initialized:
+                raise RuntimeError(
+                    f"public ownership has no {card.name} for {self.name}"
+                )
+            return
+        if card not in self.public_owned_card_instances:
+            if self.public_ownership_initialized:
+                raise RuntimeError(
+                    f"public ownership has no {card.name} instance for "
+                    f"{self.name}"
+                )
+            return
+        if count == 1:
+            del self.public_owned_cards[card.index]
+        else:
+            self.public_owned_cards[card.index] = count - 1
+        self.public_owned_card_instances.remove(card)
+
+    def _mark_public_hand_card(self, card: Card):
+        self.public_known_hand.append(card)
+
+    def _consume_public_hand_card(self, card: Card):
+        if card in self.public_known_hand:
+            self.public_known_hand.remove(card)
         
     def draw_card(self):
         if not self.deck:
@@ -45,6 +94,8 @@ class Player:
             if self.discard_pile:
                 self.deck = self.discard_pile.copy()
                 self.discard_pile = []
+                for card in self.deck:
+                    card.reset_effects()
                 self.shuffle_deck()
             else:
                 return None  # No cards to draw
@@ -55,6 +106,7 @@ class Player:
                 expected = self.ordered_top.pop()
                 if expected is not card:
                     raise RuntimeError("ordered top-deck state is inconsistent")
+                self._mark_public_hand_card(card)
             self.hand.append(card)
             return card
         return None
@@ -63,6 +115,7 @@ class Player:
         """Play a card from hand"""
         if card in self.hand:
             self.hand.remove(card)
+            self._consume_public_hand_card(card)
             self.played_cards.append(card)
             if card.is_base():
                 self.bases.append(card)
@@ -154,8 +207,11 @@ class Player:
             base.reset_effects()
         
         # Move hand to discard pile
+        for card in self.hand:
+            card.reset_effects()
         self.discard_pile.extend(self.hand)
         self.hand = []
+        self.public_known_hand.clear()
         
         # Draw a new hand
         for _ in range(self.hand_size):
@@ -169,7 +225,7 @@ class Player:
     def shuffle_deck(self):
         import random
         self.ordered_top = []
-        random.shuffle(self.deck)
+        (self.rng or random).shuffle(self.deck)
     
     def add_pending_actions(self, actions: List[Action], decisions_left: int, mandatory: bool,
                            on_complete_draw: bool = False):

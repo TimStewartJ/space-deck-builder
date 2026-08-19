@@ -1,3 +1,4 @@
+from collections import Counter
 from typing import List
 from src.ai.agent import Agent
 from src.cards.effects import CardEffectType
@@ -30,12 +31,21 @@ class Game:
                  game_config: GameConfig | None = None,
                  card_index_map: dict[str, int] | None = None):
         self.config = game_config or GameConfig()
+        source_cards = cards or []
         self.players: List[Player] = []
         self.current_turn = 0
         self.is_game_over = False
-        self.trade_deck = [card.clone() for card in cards] if cards else []
+        self.trade_deck = [card.clone() for card in source_cards]
         self.card_names = card_names if card_names else []
         self.card_index_map = card_index_map
+        self.card_templates = {}
+        self.card_template_conflicts: dict[int, set[str]] = {}
+        for card in source_cards:
+            self._register_card_template(card, clone=False)
+        self.public_trade_supply: Counter[int] = Counter(
+            card.index for card in source_cards
+        )
+        self.public_trade_supply_initialized = bool(source_cards)
         self.trade_row: List[Card] = []
         self.explorer_pile: List[Card] = []
         self.is_running = False
@@ -43,6 +53,41 @@ class Game:
                                              game_config=self.config)
         self.stats = GameStats()
         self.first_player_name = None
+        self.rng = None
+
+    def _register_card_template(self, card: Card, *, clone: bool = True):
+        existing = self.card_templates.get(card.index)
+        if existing is None:
+            self.card_templates[card.index] = card.clone() if clone else card
+            return
+        if existing.name != card.name:
+            self.card_template_conflicts.setdefault(
+                card.index,
+                {existing.name},
+            ).add(card.name)
+
+    def _remove_public_trade_card(self, card: Card):
+        count = self.public_trade_supply[card.index]
+        if count <= 0:
+            if self.public_trade_supply_initialized:
+                raise RuntimeError(
+                    f"public trade supply has no {card.name}"
+                )
+            return
+        if count == 1:
+            del self.public_trade_supply[card.index]
+        else:
+            self.public_trade_supply[card.index] = count - 1
+
+    def _record_acquisition(self, card: Card, *, from_trade_supply: bool):
+        self._register_card_template(card)
+        if from_trade_supply:
+            self._remove_public_trade_card(card)
+        self.current_player.add_owned_card(card)
+
+    def _return_explorer_to_pile(self, card: Card):
+        card.reset_effects()
+        self.explorer_pile.append(card)
 
     def start_game(self, first_player_name: str | None = None):
         if not self.trade_deck:
@@ -74,6 +119,7 @@ class Game:
                 ],
                 CardType.SHIP,
             )
+            self._register_card_template(explorer_card)
             self.explorer_pile.append(explorer_card)
     def fill_trade_row(self):
         while len(self.trade_row) < self.config.trade_row_size and self.trade_deck:
@@ -84,14 +130,14 @@ class Game:
 
     def shuffle_trade_deck(self):
         import random
-        random.shuffle(self.trade_deck)
+        (self.rng or random).shuffle(self.trade_deck)
 
     def setup_players(self, first_player_name: str | None = None):
         if first_player_name is None:
             # Regular games randomize turn order; locked evaluations pass an
             # explicit name so each participant receives exactly half the seats.
             import random
-            random.shuffle(self.players)
+            (self.rng or random).shuffle(self.players)
         else:
             matches = [
                 player
@@ -112,11 +158,13 @@ class Game:
         is_first_player = True
 
         for player in self.players:
+            player.rng = self.rng
             # Initialize statistics for this player
             self.stats.add_player(player.name)
             # Initialize each player's starting deck with 8 Scouts and 2 Vipers
             starting_deck = self.create_starting_deck()
             player.deck.extend(starting_deck)
+            player.initialize_public_ownership(starting_deck)
             player.shuffle_deck()
             # Draw initial hand
             starting_hand_size = (self.config.first_player_hand_size
@@ -138,6 +186,8 @@ class Game:
             starting_deck.append(Card("Scout", scout_idx, 0, [Effect(CardEffectType.TRADE, 1)], CardType.SHIP))
         for _ in range(self.config.num_vipers):
             starting_deck.append(Card("Viper", viper_idx, 0, [Effect(CardEffectType.COMBAT, 1)], CardType.SHIP))
+        for card in starting_deck:
+            self._register_card_template(card)
         return starting_deck
     
     def step(self, action: Action | None = None):
@@ -303,6 +353,9 @@ class Game:
                     self.explorer_pile.pop()
                     if not free:
                         self.current_player.trade -= card.cost
+                    self._record_acquisition(
+                        card, from_trade_supply=False
+                    )
                     self._place_acquired_card(card, force_top)
                     self.stats.record_card_buy(self.current_player.name)
                     if _log_enabled:
@@ -315,6 +368,9 @@ class Game:
                             continue
                         if not free:
                             self.current_player.trade -= card.cost
+                        self._record_acquisition(
+                            card, from_trade_supply=True
+                        )
                         self._place_acquired_card(card, force_top)
                         self.stats.record_card_buy(self.current_player.name)
                         if _log_enabled:
@@ -342,6 +398,9 @@ class Game:
                         return False
                     if not free:
                         self.current_player.trade -= card.cost
+                    self._record_acquisition(
+                        card, from_trade_supply=False
+                    )
                     self._place_acquired_card(card, force_top)
                     self.stats.record_card_buy(self.current_player.name)
                     if _log_enabled:
@@ -354,6 +413,9 @@ class Game:
                     ):
                         if not free:
                             self.current_player.trade -= card.cost
+                        self._record_acquisition(
+                            card, from_trade_supply=True
+                        )
                         self._place_acquired_card(card, force_top)
                         self.stats.record_card_buy(self.current_player.name)
                         if _log_enabled:
@@ -461,20 +523,28 @@ class Game:
 
         elif action.type == ActionType.SCRAP_CARD and action.card_source is not None:
             self.stats.record_card_scrap(self.current_player.name, action.card_source.value)
-            target_card = action.card
+            candidate = action.card
+            target_card = None
             if action.card_source == CardSource.HAND:
-                if target_card is not None and target_card in self.current_player.hand:
+                if candidate is not None and candidate in self.current_player.hand:
+                    target_card = candidate
                     self.current_player.hand.remove(target_card)
+                    self.current_player._consume_public_hand_card(target_card)
                 else:
                     for card in self.current_player.hand:
                         if card.index == action.card_id:
                             target_card = card
                             self.current_player.hand.remove(card)
+                            self.current_player._consume_public_hand_card(card)
                             break
                 if _log_enabled and target_card:
                     log(f"{self.current_player.name} scrapped {target_card.name} from hand", v=True)
             elif action.card_source == CardSource.DISCARD:
-                if target_card is not None and target_card in self.current_player.discard_pile:
+                if (
+                    candidate is not None
+                    and candidate in self.current_player.discard_pile
+                ):
+                    target_card = candidate
                     self.current_player.discard_pile.remove(target_card)
                 else:
                     for card in self.current_player.discard_pile:
@@ -485,17 +555,23 @@ class Game:
                 if _log_enabled and target_card:
                     log(f"{self.current_player.name} scrapped {target_card.name} from discard pile", v=True)
             elif action.card_source == CardSource.TRADE:
-                if target_card is not None:
+                removed_from_trade = False
+                if candidate is not None:
                     for i, card in enumerate(self.trade_row):
-                        if card is target_card:
+                        if card is candidate:
+                            target_card = candidate
                             self.trade_row.pop(i)
+                            removed_from_trade = True
                             break
                 else:
                     for i, card in enumerate(self.trade_row):
                         if card.index == action.card_id:
                             target_card = card
                             self.trade_row.pop(i)
+                            removed_from_trade = True
                             break
+                if removed_from_trade and target_card is not None:
+                    self._remove_public_trade_card(target_card)
                 if _log_enabled and target_card:
                     log(f"{self.current_player.name} scrapped {target_card.name} from trade row", v=True)
                 # Refill trade row after all scraps from the pending set are done
@@ -503,7 +579,15 @@ class Game:
                     self.fill_trade_row()
             # Return explorers to the explorer pile
             if target_card and target_card.name == "Explorer":
-                self.explorer_pile.append(target_card)
+                self._return_explorer_to_pile(target_card)
+            if (
+                target_card
+                and action.card_source in {
+                    CardSource.HAND,
+                    CardSource.DISCARD,
+                }
+            ):
+                self.current_player.remove_owned_card(target_card)
 
         elif action.type == ActionType.DISCARD_CARDS:
             # Determine target: opponent's hand if forced discard, else current player
@@ -521,12 +605,20 @@ class Game:
             target_card = action.card
             if target_card is not None and target_card in target_hand:
                 target_hand.remove(target_card)
+                if action.card_source != CardSource.OPPONENT:
+                    self.current_player._consume_public_hand_card(target_card)
+                else:
+                    opponent._consume_public_hand_card(target_card)
                 target_discard.append(target_card)
             else:
                 for card in target_hand:
                     if card.index == action.card_id:
                         target_card = card
                         target_hand.remove(card)
+                        if action.card_source != CardSource.OPPONENT:
+                            self.current_player._consume_public_hand_card(card)
+                        else:
+                            opponent._consume_public_hand_card(card)
                         target_discard.append(card)
                         break
             if _log_enabled and target_card:
@@ -577,6 +669,7 @@ class Game:
                     self.current_player.combat += effect.value
 
     def _place_acquired_card(self, card, force_top=False):
+        card.reset_effects()
         top = force_top
         if (
             not top
@@ -659,6 +752,7 @@ class Game:
             raise ValueError("Maximum number of players reached")
         from src.engine.player import Player
         player = Player(name, agent, game_config=self.config)
+        player.rng = self.rng
         self.players.append(player)
         return player
         

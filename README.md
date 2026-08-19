@@ -153,6 +153,15 @@ and [`docs/decisions/0006-vector-fixed-opponents.md`](docs/decisions/0006-vector
 and [`docs/decisions/0008-vector-snapshot-self-play.md`](docs/decisions/0008-vector-snapshot-self-play.md)
 and [`results/vector_engine_gate.md`](results/vector_engine_gate.md).
 
+### Information-safe search state
+
+`src/search/information_set.py` projects a live scalar decision into only the
+facts available to the acting player, then samples seeded hidden hand/deck and
+trade-deck arrangements from public ownership ledgers. Determinization never
+uses the simulator's true hidden allocation, preserves publicly known hand and
+top-deck constraints, and returns independent scalar states that convert
+directly into the vector engine for search.
+
 ### Measuring rollout performance
 
 `scripts/bench_rollout.py` runs a short training and prints decisions/sec
@@ -186,6 +195,7 @@ src/
 ├── encoding/            # State and action tensor encoding
 ├── engine/              # Game engine (Game, Player, actions)
 ├── ppo/                 # PPO training (trainer, runners, shared-memory IO, opponent pool, Elo)
+├── search/              # Information-set projection and determinization
 ├── ui/                  # CLI and pygame interfaces
 └── utils/               # Logging utilities
 docs/
