@@ -401,6 +401,52 @@ def test_search_buys_the_card_the_critic_values(card_data):
     assert values[buy_supply_bot] == pytest.approx(0.0)
 
 
+def test_rows_passing_on_the_last_allowed_step_use_the_opponent_value(card_data):
+    cards, registry, rules = card_data
+    game = _tactical_game(cards, registry)
+    game.current_player.trade = 3
+    assert_public_knowledge_consistent(game)
+    names = registry.card_names
+    model = ScriptedPolicy(
+        get_action_space_size(names), {END_TURN_INDEX: 5.0},
+        lambda states: torch.full((states.shape[0],), 0.8),
+    )
+    search = TurnSearch(model, rules, registry.card_index_map, device="cpu",
+                        config=TurnSearchConfig(budget=16, max_candidates=4, seed=1, max_turn_steps=1))
+
+    result = search.choose(game)
+
+    assert len(result.candidates) > 1
+    assert all(c.value == pytest.approx(-0.8) for c in result.candidates)
+    assert result.action == END_TURN_INDEX
+
+
+def test_rows_still_in_turn_at_the_step_cap_use_the_searcher_value(card_data):
+    cards, registry, rules = card_data
+    game = _tactical_game(cards, registry)
+    _place_in_trade_row(game, ("Trade Bot", "Imperial Fighter"))
+    game.current_player.trade = 2
+    assert_public_knowledge_consistent(game)
+    names = registry.card_names
+    _, groups = _layout(registry)
+    buy_trade_bot = groups["buy_card"] + registry.card_index_map["Trade Bot"]
+    buy_fighter = groups["buy_card"] + registry.card_index_map["Imperial Fighter"]
+    model = ScriptedPolicy(
+        get_action_space_size(names), {buy_trade_bot: 5.0, buy_fighter: 4.0},
+        lambda states: torch.full((states.shape[0],), 0.8),
+    )
+    search = TurnSearch(model, rules, registry.card_index_map, device="cpu",
+                        config=TurnSearchConfig(budget=8, max_candidates=2, seed=1, max_turn_steps=1))
+
+    result = search.choose(game)
+
+    values = {c.action: c.value for c in result.candidates}
+    # Each purchase leaves one trade for the other card, bought on the only
+    # allowed continuation step; the turn is still the searcher's at the cap.
+    assert values[buy_trade_bot] == pytest.approx(0.8)
+    assert values[buy_fighter] == pytest.approx(0.8)
+
+
 def test_search_agent_completes_games_with_legal_actions(card_data, policy):
     cards, registry, rules = card_data
     search = TurnSearch(policy, rules, registry.card_index_map, device="cpu",

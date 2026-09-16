@@ -261,7 +261,9 @@ class TurnSearch:
         leaf_rows: list[np.ndarray] = []
         leaf_observations: list[np.ndarray] = []
         step_actions = np.full(rows, END_TURN_INDEX, dtype=np.int32)
-        for _ in range(self.config.max_turn_steps):
+        # The final pass only classifies rows after the last allowed step, so
+        # a row that finishes or passes on that step is scored like any other.
+        for step_index in range(self.config.max_turn_steps + 1):
             finished = active & state.done
             if finished.any():
                 winners = state.winner[finished]
@@ -280,7 +282,7 @@ class TurnSearch:
                 )
                 state.done[passed_rows] = True
                 active &= ~passed
-            if not active.any():
+            if not active.any() or step_index == self.config.max_turn_steps:
                 break
             active_rows = np.flatnonzero(active)
             observations = engine.materialize_current_player_observations(active_rows)
@@ -289,13 +291,13 @@ class TurnSearch:
             step_actions[:] = END_TURN_INDEX
             step_actions[active_rows] = greedy_actions(logits)
             engine.step(step_actions)
-        else:
-            if active.any():
-                capped = np.flatnonzero(active)
-                engine.build_masks()
-                returns[capped] = self.evaluator.values(
-                    engine.materialize_current_player_observations(capped).copy()
-                )
+        if active.any():
+            # Rows still inside the searcher's turn at the step cap are scored
+            # from the searcher's own perspective.
+            capped = np.flatnonzero(active)
+            returns[capped] = self.evaluator.values(
+                engine.materialize_current_player_observations(capped).copy()
+            )
         if leaf_rows:
             rows_index = np.concatenate(leaf_rows)
             opponent_values = self.evaluator.values(np.concatenate(leaf_observations))

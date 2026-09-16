@@ -190,7 +190,12 @@ def _tasks(config: UpliftConfig, completed: set[tuple[int, int]]) -> list[tuple[
 
 def _worker_main(worker_id: int, config_dict: dict, tasks: list, results) -> None:
     try:
+        import torch
+
         config = UpliftConfig(**{**config_dict, "budgets": tuple(config_dict["budgets"])})
+        # Worker processes share the host; keep CPU-side torch work within
+        # the same thread budget as the Numba kernels.
+        torch.set_num_threads(config.numba_threads)
         arena = _Arena(config)
         for budget, index in tasks:
             results.put(("result", worker_id, arena.play(budget, index)))
