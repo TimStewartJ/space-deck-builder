@@ -100,3 +100,11 @@ searches. A tree remains a follow-up if uplift saturates.
 - complete games with legal actions and budget accounting;
 - `search-eval` summaries with Wilson intervals, Elo deltas, and an SPRT
   log-likelihood ratio.
+
+## Result
+
+At 64 rollouts per decision the searcher beats the same checkpoint playing
+greedily on 56.4% of 2,000 paired deals across three seeds (+44 Elo). On
+`selfplay_seed0`, 256 rollouts showed no detectable gain over 64 (paired 95%
+CI −2.8 to +2.4pp), consistent with saturation but not proof of it. See
+[`results/search_uplift.md`](../../results/search_uplift.md).

@@ -12,6 +12,7 @@ as verified GitHub release bundles on the result's tag (see
 
 | Date | Writeup | Question | Outcome |
 |---|---|---|---|
+| 2026-09-16 | [`search_uplift.md`](search_uplift.md) | Does turn-bounded information-set search beat the same checkpoint playing greedily, and how does it scale with rollouts? | **Yes, modestly.** At 64 rollouts per decision search wins 56.4% of 2,000 paired deals across three seeds (+44 Elo, McNemar p = 8 × 10⁻¹⁰). On one checkpoint, 256 rollouts showed no detectable gain over 64. |
 | 2026-09-16 | [`greedy_inference.md`](greedy_inference.md) | Do the published checkpoints play better when they choose their highest-probability action instead of sampling? | **Yes.** Temperature 0 raises win rate against Heuristic by +6.15pp (self-play) and +6.18pp (fixed), removing about 45% of those losses, and each checkpoint beats its sampled self (+43 and +72 Elo). Self-play still leads cross-play. Greedy play is the baseline search must beat. |
 | 2026-08-18 | [`rocm715_stack_probe.md`](rocm715_stack_probe.md) | Does the July torch 2.12/ROCm 7.15/gfx1201/Triton stack improve training or eliminate runtime degradation? | **No.** It passed all compatibility gates but made the matched 30-update workload 66.9% slower and retained process-age degradation. Production remains exact-pinned to torch 2.11/ROCm 7.13. |
 | 2026-08-18 | [`optimized_selfplay_baseline.md`](optimized_selfplay_baseline.md) | Does optimized snapshot self-play improve the selected 400×2,000 fixed-opponent baseline across three seeds? | **Yes in cross-play, tied overall on scripted opponents.** Under exact 50/50 seating, self-play occupies the top three Elo positions and wins 67.9% against fixed-baseline checkpoints. Its fixed gauntlet is 94.40% overall vs. 94.71% for the control. |
@@ -39,6 +40,11 @@ as verified GitHub release bundles on the result's tag (see
 - **Sampled evaluation understates the policies.** The locked protocol samples
   each checkpoint's policy; greedy decoding of the same checkpoints is a
   separate, stronger variant ([`greedy_inference.md`](greedy_inference.md)).
+- **Search adds strength on top of greedy play.** Turn-bounded search gains
+  about +44 Elo over the greedy policy at 64 rollouts. On one checkpoint, 256
+  rollouts showed no detectable gain over 64. That is consistent with leaf
+  evaluation limiting search, but the experiments do not isolate the cause
+  ([`search_uplift.md`](search_uplift.md)).
 - **There is no absolute strength anchor.** Every number here is relative to
   weak scripted opponents or to other checkpoints. Nothing establishes how
   well these agents actually play Star Realms.

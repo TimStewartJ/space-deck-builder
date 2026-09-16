@@ -206,6 +206,8 @@ continued greedily, and each world is scored by the exact outcome or by the
 negated critic value of the opponent's first decision. Sequential halving
 spends a fixed rollout budget. Results depend only on public information; see
 [`docs/decisions/0010-turn-bounded-search.md`](docs/decisions/0010-turn-bounded-search.md).
+At 64 rollouts per decision it beats the same checkpoint playing greedily on
+56.4% of paired deals (+44 Elo; [`results/search_uplift.md`](results/search_uplift.md)).
 
 ```bash
 # Search at several budgets against the same checkpoint playing greedily
