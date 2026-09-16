@@ -73,6 +73,11 @@ shares = ", ".join(
     for key in ("policy_s", "engine_s", "populate_s", "roots_s", "values_s")
 )
 print(f"- decision benchmark phase shares at batch 1024: {shares}")
+per_step = ", ".join(
+    f"batch {row['batch_size']} {row['timings_per_call_ms']['policy_s'] / row['rollout_steps_per_call']:.1f} ms"
+    for row in decisions
+)
+print(f"- rollout policy time per step: {per_step}")
 before = json.loads((ROOT / "bench_games_512.json").read_text(encoding="utf-8"))["result"]["rows"][0]
 print(f"- games at batch 512 before vectorized dealing: {before['games_per_min']:.0f} games/min; "
       f"populate {before['search_timings']['populate_s']:.0f} s, roots {before['search_timings']['roots_s']:.0f} s "

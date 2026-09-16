@@ -61,9 +61,10 @@ like-for-like comparison.
 
 At batch 1,024 a search call spends 39% of its time in rollout policy calls,
 21% in the vector engine, 15% populating rollout rows, 13% building roots,
-and 8% in critic calls. Each rollout step still pays a fixed ROCm call
-overhead of about 2.6 ms, which larger concurrent batches amortize. Batch
-2,048 was slower per decision than 1,024.
+and 8% in critic calls. Rollout policy time per step grows with the rows
+evaluated (3.0, 6.7, and 12.1 ms per step at batches 256, 1,024, and 2,048), so
+larger batches amortize only part of each call. Batch 2,048 was slower per
+decision than 1,024.
 
 Before world dealing was vectorized and digest dtype labels cached, batch 512
 measured 156 games/min, and populating rows and building roots took 40 s and
@@ -107,9 +108,9 @@ equal; the decision-relevant comparison is statistically identical.
   outcomes on 2,000 paired deals, evaluation of fixed positions, and the
   control all agree within noise, and losses larger than about two points are
   excluded.
-- The largest remaining costs are per-step rollout policy calls and Python
-  root building; further gains need fewer GPU calls per decision or native
-  root construction.
+- The largest remaining costs are rollout policy calls, which grow with the
+  rows evaluated per step, and Python root building; further gains need fewer
+  or cheaper policy evaluations per decision, or native root construction.
 
 ## Artifacts
 
