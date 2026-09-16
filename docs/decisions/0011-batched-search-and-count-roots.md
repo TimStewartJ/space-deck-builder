@@ -83,12 +83,17 @@ against the greedy policy (game mode):
 
 | Mode | Batch | Throughput | Per searched decision |
 |---|---:|---:|---:|
-| Previous search, 8 workers | — | 1,000 budget-64 games in 1,420 s | 86.5 ms |
+| Previous search, 8 workers, games | — | 1,000 budget-64 games in 1,420 s | 86.5 ms |
+| Batched, 2 workers, same games | 1024 each | 1,000 budget-64 games in 186 s | 2.6 ms |
 | Decisions, 1 process | 256 | 494 decisions/s | 2.0 ms |
 | Decisions, 1 process | 1024 | 611 decisions/s | 1.6 ms |
 | Games, 1 process | 512 | 190 games/min, 387 searched decisions/s | — |
 | Games, 1 process | 1024 | 235 games/min, 489 searched decisions/s | — |
-| Games, 2 workers | 1024 each | 382 games/min; 1,000 budget-64 games in 186 s | — |
+| Games, 2 workers | 1024 each | 382 games/min | — |
+
+On identical deals the batched search takes 34× less time per searched
+decision, 30× less process time, and 7.6× less wall time. The decision
+benchmark's 1.6 ms is a single-process figure without GPU sharing.
 
 At batch 1024 a search call spends 39% of its time in rollout policy calls, 21%
 in the vector engine, 15% populating rows, 13% building roots, and 8% in critic
@@ -97,9 +102,9 @@ calls. Batch 2048 was slower than 1024 per decision.
 Search worlds are seeded from the root digest and dealt by the hash deal, so
 the same seeds sample different worlds than the implementation that produced
 [`results/search_uplift.md`](../../results/search_uplift.md). Reproducing those
-exact games requires commit `1849b19`. Playing strength is unchanged: against
-the previous implementation on 2,000 paired deals the batched search differs
-by −0.8pp (95% CI −2.1 to +0.5), and the greedy control reproduced all 1,000
+exact games requires commit `1849b19`. Against the previous implementation on
+2,000 paired deals the batched search shows no detectable strength difference
+(−0.8pp, 95% CI −2.1 to +0.5), and the greedy control reproduced all 1,000
 published control games
 ([`results/batched_search.md`](../../results/batched_search.md)).
 

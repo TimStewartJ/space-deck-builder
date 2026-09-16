@@ -56,7 +56,27 @@ print(f"- two workers x batch 1024: {60 * workers2['summary'][0]['games'] / work
       f"{workers2['summary'][0]['games']} games ({workers2['elapsed_s']:.0f} s)")
 for label, name in (("old implementation, 8 workers", "strength_seed7_budget64_old"), ("new implementation, 2 workers", "strength_seed7_budget64_new")):
     payload = json.loads((ROOT / f"{name}.json").read_text(encoding="utf-8"))
-    print(f"- {label}: 1,000 budget-64 games in {payload['elapsed_s']:.0f} s")
+    summary = payload["summary"][0]
+    workers = payload["config"]["workers"]
+    print(f"- {label}: 1,000 budget-64 games in {payload['elapsed_s']:.0f} s "
+          f"({workers * payload['elapsed_s']:.0f} process-seconds), "
+          f"{summary['mean_search_ms']:.1f} ms per searched decision")
+old = json.loads((ROOT / "strength_seed7_budget64_old.json").read_text(encoding="utf-8"))
+new = json.loads((ROOT / "strength_seed7_budget64_new.json").read_text(encoding="utf-8"))
+print(f"- like-for-like speedup on identical deals: {old['summary'][0]['mean_search_ms'] / new['summary'][0]['mean_search_ms']:.0f}x per searched decision, "
+      f"{old['config']['workers'] * old['elapsed_s'] / (new['config']['workers'] * new['elapsed_s']):.0f}x in process-seconds, "
+      f"{old['elapsed_s'] / new['elapsed_s']:.1f}x in wall time")
+decisions = json.loads((ROOT / "bench_decisions_v2.json").read_text(encoding="utf-8"))["result"]["rows"]
+at_1024 = next(row for row in decisions if row["batch_size"] == 1024)["timings_per_call_ms"]
+shares = ", ".join(
+    f"{key[:-2]} {100 * at_1024[key] / at_1024['total_s']:.0f}%"
+    for key in ("policy_s", "engine_s", "populate_s", "roots_s", "values_s")
+)
+print(f"- decision benchmark phase shares at batch 1024: {shares}")
+before = json.loads((ROOT / "bench_games_512.json").read_text(encoding="utf-8"))["result"]["rows"][0]
+print(f"- games at batch 512 before vectorized dealing: {before['games_per_min']:.0f} games/min; "
+      f"populate {before['search_timings']['populate_s']:.0f} s, roots {before['search_timings']['roots_s']:.0f} s "
+      f"of {before['search_timings']['total_s']:.0f} s search")
 
 print()
 print("## Strength")

@@ -35,20 +35,29 @@ public counts instead of deep copies, without changing how strongly it plays?
 
 ## Throughput
 
-| Implementation | Topology | Result |
-|---|---|---|
-| Previous | 8 workers, one decision at a time | 1,000 budget-64 games in 1,420 s; 86.5 ms per searched decision |
-| New | 1 process, decisions at batch 256 | 494 decisions/s, 2.0 ms per searched decision |
-| New | 1 process, decisions at batch 1,024 | 611 decisions/s, 1.6 ms per searched decision |
-| New | 1 process, decisions at batch 2,048 | 573 decisions/s, 1.7 ms per searched decision |
-| New | 1 process, games at batch 512 | 190 games/min, 387 searched decisions/s |
-| New | 1 process, games at batch 1,024 | 235 games/min, 489 searched decisions/s |
-| New | 2 workers × 1,024 games | 382 games/min (2,048 games in 322 s) |
-| New | 2 workers × 1,024 games | 1,000 budget-64 games in 186 s |
+Like-for-like on the same 1,000 seed-7 deals through `search-eval`, both
+through Task Scheduler:
 
-The same 1,000-game workload finished 7.6× faster in wall time, from two
-processes instead of eight. Per searched decision the cost fell from about
-86 ms to about 1.6 ms.
+| Implementation | Topology | Wall time | Process-seconds | Mean search per searched decision |
+|---|---|---:|---:|---:|
+| Previous | 8 workers, one decision at a time | 1,420 s | 11,358 | 86.5 ms |
+| Batched | 2 workers × 1,024 games | 186 s | 373 | 2.6 ms |
+| **Speedup** | | **7.6×** | **30×** | **34×** |
+
+Per-process benchmarks of the batched implementation:
+
+| Benchmark | Setting | Result |
+|---|---|---|
+| Decisions on fixed positions | batch 256 | 494 decisions/s, 2.0 ms per searched decision |
+| Decisions on fixed positions | batch 1,024 | 611 decisions/s, 1.6 ms per searched decision |
+| Decisions on fixed positions | batch 2,048 | 573 decisions/s, 1.7 ms per searched decision |
+| Complete games, 1 process | batch 512 | 190 games/min, 387 searched decisions/s |
+| Complete games, 1 process | batch 1,024 | 235 games/min, 489 searched decisions/s |
+| Complete games, 2 workers | 1,024 each | 382 games/min (2,048 games in 322 s) |
+
+Search times in games include sharing the GPU with the other worker processes,
+so the decision benchmark's 1.6 ms is a single-process lower bound, not the
+like-for-like comparison.
 
 At batch 1,024 a search call spends 39% of its time in rollout policy calls,
 21% in the vector engine, 15% populating rollout rows, 13% building roots,
@@ -72,8 +81,9 @@ The seed-0 greedy control (budget 0) reproduced the published run game by
 game: the same winner on all 1,000 deals, 501 searcher wins in both. The
 batched policy path, game seeding, and seat alternation are unchanged.
 
-The seed-0 difference did not replicate on fresh deals. The pooled interval
-includes zero and excludes a loss larger than about two points.
+The seed-0 difference did not replicate on fresh deals. Over both deal sets
+there is no detectable difference; the pooled interval excludes a loss larger
+than about two points, roughly a third of the published budget-64 uplift.
 
 ## Candidate evaluation
 
@@ -89,12 +99,14 @@ equal; the decision-relevant comparison is statistically identical.
 
 ## Conclusions
 
-- Search is about 50× cheaper per searched decision. It generates about 380
-  searched games per minute from two processes, enough for training data at
-  scale.
-- The batched implementation plays with the same strength as the published
-  search. Game outcomes, evaluation of fixed positions, and the control all
-  agree within noise.
+- On identical workloads, search costs 34× less per searched decision and 30×
+  less process time, and finishes 7.6× faster from two processes instead of
+  eight. The batched implementation plays about 380 games per minute, enough
+  to generate training data at scale.
+- There is no detectable strength difference from the published search. Game
+  outcomes on 2,000 paired deals, evaluation of fixed positions, and the
+  control all agree within noise, and losses larger than about two points are
+  excluded.
 - The largest remaining costs are per-step rollout policy calls and Python
   root building; further gains need fewer GPU calls per decision or native
   root construction.
