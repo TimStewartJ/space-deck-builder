@@ -52,8 +52,9 @@ def test_evaluate_records_balanced_seats(monkeypatch):
         def __init__(self, **kwargs):
             self.eval_seat_counts = {}
 
-        def run_eval(self, num_games, *, alternate_seats):
+        def run_eval(self, num_games, *, alternate_seats, temperature):
             captured["alternate_seats"] = alternate_seats
+            captured["temperature"] = temperature
             self.eval_seat_counts = {"first": 2, "second": 2}
             return 3, 1, 40
 
@@ -69,6 +70,7 @@ def test_evaluate_records_balanced_seats(monkeypatch):
     )
 
     assert captured["alternate_seats"] is True
+    assert captured["temperature"] == 1.0
     assert result.per_opponent[0].first_player_games == 2
     assert result.per_opponent[0].second_player_games == 2
 

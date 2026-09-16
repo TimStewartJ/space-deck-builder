@@ -15,6 +15,7 @@ from src.encoding.state_encoder import encode_state, get_state_size
 from src.encoding.action_encoder import encode_action, get_action_space_size, END_TURN_INDEX
 from src.encoding.action_context import build_action_context, ActionContext
 from src.ppo.rollout_buffer import RolloutBuffer
+from src.ppo.action_selection import select_actions, validate_temperature
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.utils.logger import log, set_disabled
 
@@ -269,11 +270,15 @@ class BatchRunner:
         num_games: int,
         *,
         alternate_seats: bool = True,
+        temperature: float = 1.0,
     ) -> tuple[int, int, int]:
         """Run num_games evaluation games. Returns (wins, losses, total_steps).
         
-        Same batched inference loop as run_episodes but without rollout storage.
+        Same batched inference loop as run_episodes but without rollout
+        storage. The evaluated model selects actions at ``temperature``
+        (0 = highest-probability legal action).
         """
+        temperature = validate_temperature(temperature)
         self.model.to(self.device)
         self.model.eval()
 
@@ -389,8 +394,7 @@ class BatchRunner:
                 logits_batch, values_batch = self.model(states_batch)
 
             logits_batch = logits_batch.masked_fill(masks_batch == 0, float('-inf'))
-            dist = torch.distributions.Categorical(logits=logits_batch, validate_args=False)
-            act_indices = dist.sample()
+            act_indices, _ = select_actions(logits_batch, temperature)
 
             act_indices_cpu = act_indices.tolist()
             for j, i in enumerate(pending_indices):

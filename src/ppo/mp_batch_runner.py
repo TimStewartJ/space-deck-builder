@@ -24,6 +24,7 @@ from src.cards.registry import CardRegistry
 from src.encoding.state_encoder import get_state_size
 from src.encoding.action_encoder import get_action_space_size
 from src.ppo.ppo_actor_critic import PPOActorCritic
+from src.ppo.action_selection import validate_temperature
 from src.ppo.mp_inference_server import (
     InferenceServer, WorkerResult, WorkerError, EvalWorkerResult,
 )
@@ -103,6 +104,7 @@ class MultiProcessBatchRunner:
         use_snapshots: bool = False,
         extra_args_fn=None,
         extra_kwargs_fn=None,
+        temperatures: dict[str, float] | None = None,
     ):
         """Spawn worker processes with a centralized InferenceServer.
 
@@ -119,6 +121,7 @@ class MultiProcessBatchRunner:
                 positional args inserted after the common args
             extra_kwargs_fn: Optional callable(worker_id, snapshot_names) ->
                 dict of extra kwargs merged into each worker's snapshot kwargs
+            temperatures: Optional inference temperature per server model id
 
         Returns: (server, processes, result_queue)
         """
@@ -172,6 +175,7 @@ class MultiProcessBatchRunner:
             num_workers=actual_workers,
             ctx=self._mp_ctx,
             shared_io=shared_io,
+            temperatures=temperatures,
         )
         server.start()
 
@@ -357,13 +361,16 @@ class MultiProcessBatchRunner:
         num_games: int,
         *,
         alternate_seats: bool = True,
+        temperature: float = 1.0,
     ) -> tuple[int, int, int]:
         """Run evaluation games across workers. Returns (wins, losses, total_steps).
 
         Supports PPO snapshot opponents when snapshot_state_dicts is set —
         both training agent and opponent get batched GPU inference through
-        the InferenceServer.
+        the InferenceServer. ``temperature`` applies only to the evaluated
+        model; snapshot opponents keep sampling their policies.
         """
+        temperature = validate_temperature(temperature)
         self.model.to(self.device)
         self.model.eval()
 
@@ -387,6 +394,7 @@ class MultiProcessBatchRunner:
                 "eval_game_offset": worker_offsets[worker_id],
                 "alternate_seats": alternate_seats,
             },
+            temperatures={"training": temperature},
         )
 
         # Collect eval results with cleanup guaranteed

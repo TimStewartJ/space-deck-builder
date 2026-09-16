@@ -41,6 +41,7 @@ import torch
 import multiprocessing as mp
 
 from src.ppo.ppo_actor_critic import PPOActorCritic
+from src.ppo.action_selection import select_actions, validate_temperature
 from src.encoding.action_encoder import END_TURN_INDEX
 
 import logging
@@ -245,7 +246,9 @@ class InferenceServer:
 
     Public API: ``start()`` / ``stop()``, ``request_queue`` +
     ``response_queues`` for worker IPC, and ``register_model`` /
-    ``unregister_model`` for the model registry.
+    ``unregister_model`` for the model registry. Each model id may carry an
+    inference temperature (default 1, the training distribution) used when
+    selecting actions for its requests.
     """
 
     def __init__(
@@ -255,11 +258,22 @@ class InferenceServer:
         num_workers: int,
         ctx: mp.context.BaseContext | None = None,
         shared_io: "SharedInferenceBuffers | None" = None,
+        temperatures: dict[str, float] | None = None,
     ):
         if not models:
             raise ValueError("InferenceServer requires at least one model at startup")
+        temperatures = dict(temperatures or {})
+        unknown = set(temperatures) - set(models)
+        if unknown:
+            raise ValueError(
+                f"temperatures given for unknown model ids: {sorted(unknown)}"
+            )
 
         self._initial_models = dict(models)
+        self._temperatures = {
+            model_id: validate_temperature(value)
+            for model_id, value in temperatures.items()
+        }
         self.device = device
         # When present, requests carry shared-memory coordinates instead of
         # arrays and results are written back in place. Falls back to inline
@@ -352,14 +366,21 @@ class InferenceServer:
     # ------------------------------------------------------------------
     # Control plane — synchronous register / unregister
     # ------------------------------------------------------------------
-    def register_model(self, model_id: str, model: PPOActorCritic) -> None:
+    def register_model(
+        self,
+        model_id: str,
+        model: PPOActorCritic,
+        temperature: float = 1.0,
+    ) -> None:
         """Add a model to the server. Blocks until the server thread has
         moved it to device and made it queryable.
         """
+        temperature = validate_temperature(temperature)
         with self._known_lock:
             if model_id in self._known_model_ids:
                 raise ValueError(f"model_id already registered: {model_id!r}")
             self._known_model_ids.add(model_id)
+            self._temperatures[model_id] = temperature
         try:
             self._submit_control("register", model_id, model)
         except Exception:
@@ -368,6 +389,7 @@ class InferenceServer:
             # so a retry with the same model_id is not falsely rejected.
             with self._known_lock:
                 self._known_model_ids.discard(model_id)
+                self._temperatures.pop(model_id, None)
             raise
 
     def unregister_model(self, model_id: str) -> None:
@@ -379,6 +401,14 @@ class InferenceServer:
                 raise ValueError(f"model_id not registered: {model_id!r}")
             self._known_model_ids.discard(model_id)
         self._submit_control("unregister", model_id, None)
+        with self._known_lock:
+            if model_id not in self._known_model_ids:
+                self._temperatures.pop(model_id, None)
+
+    def temperature_for(self, model_id: str) -> float:
+        """Inference temperature applied to *model_id*'s requests."""
+        with self._known_lock:
+            return self._temperatures.get(model_id, 1.0)
 
     def _submit_control(self, op: str, model_id: str, model: PPOActorCritic | None) -> None:
         if self._thread is None:
@@ -506,6 +536,7 @@ class InferenceServer:
                     self._serve_group(
                         model, model_reqs, buffers,
                         compute_start, compute_end,
+                        temperature=self.temperature_for(model_id),
                     )
 
             self._stats["wall_s"] = time.perf_counter() - loop_start
@@ -530,9 +561,12 @@ class InferenceServer:
         buffers: _Buffers,
         compute_start,
         compute_end,
+        *,
+        temperature: float = 1.0,
     ) -> None:
-        """Stage one model's requests into ``buffers``, run forward+sample,
-        and write results back for each request.
+        """Stage one model's requests into ``buffers``, run forward and
+        action selection at the model's temperature, and write results back
+        for each request.
 
         When a shared block is attached the payload is already resident and
         staging is a copy out of it rather than out of freshly-unpickled
@@ -582,6 +616,7 @@ class InferenceServer:
                 compute_start.record()
                 actions, log_probs, values, masked_logits = _forward_and_sample(
                     model, buffers.dev_states[:n], buffers.dev_masks[:n],
+                    temperature,
                 )
                 compute_end.record()
                 buffers.host_actions[:n].copy_(actions)
@@ -600,6 +635,7 @@ class InferenceServer:
                 t0 = time.perf_counter()
                 actions, log_probs, values, masked_logits = _forward_and_sample(
                     model, buffers.host_states[:n], buffers.host_masks[:n],
+                    temperature,
                 )
                 buffers.host_actions[:n].copy_(actions)
                 buffers.host_logprobs[:n].copy_(log_probs)
@@ -734,12 +770,18 @@ class InferenceServer:
         )
 
 
-def _forward_and_sample(model: PPOActorCritic, states: torch.Tensor, masks: torch.Tensor):
-    """Run forward + masked categorical sample.
+def _forward_and_sample(
+    model: PPOActorCritic,
+    states: torch.Tensor,
+    masks: torch.Tensor,
+    temperature: float = 1.0,
+):
+    """Run forward + masked action selection.
 
     Returns ``(actions, log_probs, values, masked_logits)``. ``masked_logits``
-    is the post-mask, post-no-valid-row-fix logits tensor used for sampling;
-    callers that don't need it can ignore it.
+    is the post-mask, post-no-valid-row-fix logits tensor; callers that don't
+    need it can ignore it. Training always uses temperature 1; evaluation may
+    select at another temperature (0 = highest-probability legal action).
     """
     logits, values = model(states)
     logits = logits.masked_fill(masks == 0, float('-inf'))
@@ -749,7 +791,5 @@ def _forward_and_sample(model: PPOActorCritic, states: torch.Tensor, masks: torc
     no_valid = (masks > 0).sum(dim=-1) == 0
     end_col = logits[:, END_TURN_INDEX]
     logits[:, END_TURN_INDEX] = torch.where(no_valid, torch.zeros_like(end_col), end_col)
-    dist = torch.distributions.Categorical(logits=logits, validate_args=False)
-    actions = dist.sample()
-    log_probs = dist.log_prob(actions)
+    actions, log_probs = select_actions(logits, temperature)
     return actions, log_probs, values.reshape(-1), logits

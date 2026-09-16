@@ -40,6 +40,7 @@ class EvalResult:
     total_games: int
     overall_win_rate: float
     elapsed_seconds: float
+    temperature: float = 1.0
 
 
 def _distribute_games(total: int, num_buckets: int, *, min_per_bucket: int = 0) -> list[int]:
@@ -69,6 +70,7 @@ def evaluate(
     label: str | None = None,
     min_games_per_opponent: int = 0,
     log_fn=None,
+    temperature: float = 1.0,
 ) -> EvalResult:
     """Run evaluation games against each opponent type and return results.
 
@@ -87,10 +89,16 @@ def evaluate(
             effective total may exceed *eval_games* to ensure coverage.
         log_fn: Optional callable for output (e.g. ``logger.info``).  Falls
             back to :func:`print` when ``None``.
+        temperature: Inference temperature for the evaluated model. 1 samples
+            the policy (the locked protocol default); 0 selects the
+            highest-probability legal action.
 
     Returns:
         An :class:`EvalResult` with per-opponent and aggregate statistics.
     """
+    from src.ppo.action_selection import validate_temperature
+
+    temperature = validate_temperature(temperature)
     emit = log_fn or print
     cards = data_cfg.load_cards()
     registry = data_cfg.build_registry(cards)
@@ -113,6 +121,8 @@ def evaluate(
     if label:
         header += f" ({label})"
     header += f" — {eval_games} games × {len(opp_types)} opponent types"
+    if temperature != 1.0:
+        header += f" at temperature {temperature:g}"
     emit(header)
 
     use_mp = num_workers > 1
@@ -157,6 +167,7 @@ def evaluate(
         wins, losses, eval_steps = runner.run_eval(
             num_games,
             alternate_seats=True,
+            temperature=temperature,
         )
         seat_counts = getattr(
             runner,
@@ -202,6 +213,7 @@ def evaluate(
         total_games=total_games,
         overall_win_rate=overall_rate,
         elapsed_seconds=elapsed,
+        temperature=temperature,
     )
 
 
@@ -216,6 +228,8 @@ def load_and_evaluate(
     num_concurrent: int | None = None,
     num_workers: int = 20,
     seed: int | None = None,
+    temperature: float = 1.0,
+    output_json: str | None = None,
 ) -> EvalResult:
     """Load a checkpoint and run evaluation — convenience wrapper for CLI use.
 
@@ -228,7 +242,13 @@ def load_and_evaluate(
     list via ``random.randint``. This makes a full eval gauntlet
     reproducible up to the limits of GPU non-determinism.
     See ``docs/eval_protocol.md``.
+
+    When *output_json* is given, the complete result plus the model path,
+    seed, opponents, and temperature are written there atomically.
     """
+    from src.ppo.action_selection import validate_temperature
+
+    temperature = validate_temperature(temperature)
     if seed is not None:
         import random as _random
         import numpy as _np
@@ -262,6 +282,7 @@ def load_and_evaluate(
     print(f"Device: {device}")
     if seed is not None:
         print(f"Seed: {seed}")
+    print(f"Temperature: {temperature:g}")
 
     # Load checkpoint and reconstruct model
     ckpt = load_checkpoint(model_path, map_location=device)
@@ -282,7 +303,7 @@ def load_and_evaluate(
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
 
-    return evaluate(
+    result = evaluate(
         model,
         data_cfg=data_cfg,
         device=device,
@@ -290,4 +311,40 @@ def load_and_evaluate(
         eval_games=eval_games,
         num_concurrent=num_concurrent,
         num_workers=num_workers,
+        temperature=temperature,
     )
+    if output_json:
+        write_eval_json(
+            output_json,
+            result,
+            model_path=model_path,
+            seed=seed,
+            opponents=opponents,
+        )
+    return result
+
+
+def write_eval_json(
+    path: str,
+    result: EvalResult,
+    *,
+    model_path: str,
+    seed: int | None,
+    opponents: str,
+) -> None:
+    """Write an evaluation result and its provenance as JSON, atomically."""
+    import json
+    import os
+    from dataclasses import asdict
+
+    payload = asdict(result)
+    payload["model"] = model_path
+    payload["seed"] = seed
+    payload["opponents"] = opponents
+    directory = os.path.dirname(os.path.abspath(path))
+    os.makedirs(directory, exist_ok=True)
+    temporary = f"{path}.tmp"
+    with open(temporary, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2)
+        fh.write("\n")
+    os.replace(temporary, path)

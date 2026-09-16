@@ -107,11 +107,16 @@ class EloResult:
 
 @dataclass
 class CheckpointParticipant:
-    """A PPO checkpoint participant in the tournament."""
+    """A PPO checkpoint participant in the tournament.
+
+    ``temperature`` is the inference temperature the checkpoint plays at:
+    1 samples its policy, 0 selects the highest-probability legal action.
+    """
     label: str
     path: str
     state_dict: dict
     model_config: ModelConfig
+    temperature: float = 1.0
 
 
 @dataclass
@@ -315,15 +320,32 @@ def _play_builtin_games(
     return wins_a, wins_b
 
 
+def temperature_label(label: str, temperature: float) -> str:
+    """Participant label for a checkpoint played at *temperature*."""
+    return label if temperature == 1.0 else f"{label}@T{temperature:g}"
+
+
 def build_participants(
     checkpoint_paths: list[str],
     agent_types: list[str] | None = None,
+    checkpoint_temperatures: list[float] | None = None,
 ) -> list[Participant]:
     """Build participant list from checkpoint paths and/or agent type names.
 
     Loads and validates checkpoints, creates BuiltinParticipant entries for
-    each requested agent type.
+    each requested agent type. Every checkpoint participates once per entry
+    of *checkpoint_temperatures* (default: sampled play only), in path order
+    then temperature order, so the first path at the first temperature is
+    the rating anchor.
     """
+    from src.ppo.action_selection import validate_temperature
+
+    temperatures = [
+        validate_temperature(value)
+        for value in (checkpoint_temperatures or [1.0])
+    ]
+    if len(set(temperatures)) != len(temperatures):
+        raise ValueError(f"duplicate checkpoint temperatures: {temperatures}")
     participants: list[Participant] = []
 
     # Load checkpoint participants
@@ -333,13 +355,23 @@ def build_participants(
         label = _extract_label(path)
         saved_cfg = ckpt.get("config", {}).get("model")
         model_config = ModelConfig.from_dict(saved_cfg) if saved_cfg else ModelConfig()
-        cp = CheckpointParticipant(
-            label=label, path=path,
-            state_dict=ckpt["model_state_dict"],
-            model_config=model_config,
+        for temperature in temperatures:
+            cp = CheckpointParticipant(
+                label=temperature_label(label, temperature), path=path,
+                state_dict=ckpt["model_state_dict"],
+                model_config=model_config,
+                temperature=temperature,
+            )
+            checkpoint_participants.append(cp)
+            participants.append(cp)
+
+    labels = [participant.label for participant in checkpoint_participants]
+    duplicates = sorted({label for label in labels if labels.count(label) > 1})
+    if duplicates:
+        raise ValueError(
+            f"checkpoint participants share labels {duplicates}; rename the "
+            "checkpoint files so every participant has a unique label"
         )
-        checkpoint_participants.append(cp)
-        participants.append(cp)
 
     # Validate checkpoint compatibility
     _validate_checkpoints(checkpoint_participants)
@@ -368,6 +400,8 @@ def run_tournament(
     num_workers: int = 1,
     collect_replays: bool = False,
     replay_output_dir: str | None = None,
+    checkpoint_temperatures: list[float] | None = None,
+    output_json: str | None = None,
 ) -> list[EloResult]:
     """Run a round-robin Elo tournament between checkpoints and/or agents.
 
@@ -379,7 +413,10 @@ def run_tournament(
     server and run inline in the coordinator.
 
     Every pairing alternates its first player by game index, giving each side
-    exactly half the seats whenever games_per_pair is even.
+    exactly half the seats whenever games_per_pair is even. Each checkpoint
+    plays once per entry of ``checkpoint_temperatures``. When
+    ``output_json`` is given, participants, ratings, and pairing results are
+    written there.
 
     Returns a list of EloResult sorted by Elo descending.
     """
@@ -397,7 +434,9 @@ def run_tournament(
         raise ValueError(f"num_workers must be positive, got {num_workers}")
 
     # Build participant list
-    participants = build_participants(checkpoint_paths, agent_types)
+    participants = build_participants(
+        checkpoint_paths, agent_types, checkpoint_temperatures
+    )
     n = len(participants)
     if n < 2:
         raise ValueError(
@@ -530,6 +569,19 @@ def run_tournament(
             f"{r.win_rate * 100:>5.1f}%")
     log("=" * 60)
 
+    if output_json:
+        _write_tournament_json(
+            output_json,
+            participants=participants,
+            ratings=ratings,
+            match_wins=match_wins,
+            match_games=match_games,
+            games_per_pair=games_per_pair,
+            wins_total=wins_total,
+            losses_total=losses_total,
+            games_total=games_total,
+        )
+
     # Collect replays and generate comparative dashboard if requested.
     # Runs a second pass over all PPO pairings using run_analysis to
     # collect per-decision data. This is separate from the main
@@ -576,6 +628,73 @@ def run_tournament(
     return results
 
 
+def _participant_temperatures(participants: list) -> dict[str, float]:
+    """Inference temperature per checkpoint participant label."""
+    return {
+        p.label: p.temperature
+        for p in participants
+        if isinstance(p, CheckpointParticipant)
+    }
+
+
+def _write_tournament_json(
+    path: str,
+    *,
+    participants: list,
+    ratings: list[float],
+    match_wins: dict[tuple[int, int], int],
+    match_games: dict[tuple[int, int], int],
+    games_per_pair: int,
+    wins_total: list[int],
+    losses_total: list[int],
+    games_total: list[int],
+) -> None:
+    """Write tournament participants, ratings, and pairings as JSON atomically."""
+    import json
+
+    payload = {
+        "anchor": participants[0].label,
+        "anchor_elo": INITIAL_ELO,
+        "games_per_pair": games_per_pair,
+        "participants": [
+            {
+                "index": index,
+                "label": participant.label,
+                "kind": (
+                    "checkpoint"
+                    if isinstance(participant, CheckpointParticipant)
+                    else "builtin"
+                ),
+                "path": participant.path,
+                "temperature": getattr(participant, "temperature", None),
+                "elo": ratings[index],
+                "wins": wins_total[index],
+                "losses": losses_total[index],
+                "games": games_total[index],
+            }
+            for index, participant in enumerate(participants)
+        ],
+        "pairings": [
+            {
+                "i": i,
+                "j": j,
+                "label_i": participants[i].label,
+                "label_j": participants[j].label,
+                "wins_i": match_wins[(i, j)],
+                "games": match_games[(i, j)],
+            }
+            for (i, j) in sorted(match_games)
+        ],
+    }
+    directory = os.path.dirname(os.path.abspath(path))
+    os.makedirs(directory, exist_ok=True)
+    temporary = f"{path}.tmp"
+    with open(temporary, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, indent=2)
+        fh.write("\n")
+    os.replace(temporary, path)
+
+
 def _dispatch_parallel_pairings(
     *,
     tasks: list,
@@ -588,6 +707,7 @@ def _dispatch_parallel_pairings(
     action_dim: int,
     state_dim: int,
     device: str,
+    temperatures: dict[str, float] | None = None,
 ):
     """Run a list of ``PairingTask``s through one shared
     :class:`InferenceServer` and a fleet of tournament workers, yielding
@@ -615,6 +735,7 @@ def _dispatch_parallel_pairings(
     server = InferenceServer(
         models=model_registry, device=torch.device(device),
         num_workers=actual_workers, ctx=ctx,
+        temperatures=temperatures,
     )
     server.start()
 
@@ -778,6 +899,7 @@ def _collect_tournament_replays(
         action_dim=action_dim,
         state_dim=state_dim,
         device=device,
+        temperatures=_participant_temperatures(participants),
     ):
         n_done += 1
         actual_games = result.wins_a + result.wins_b
@@ -859,6 +981,7 @@ def _run_parallel_pairings(
         action_dim=action_dim,
         state_dim=state_dim,
         device=device,
+        temperatures=_participant_temperatures(participants),
     ):
         i, j = result.i, result.j
         wins_a, wins_b = result.wins_a, result.wins_b

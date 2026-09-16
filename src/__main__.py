@@ -229,6 +229,14 @@ def _build_elo_parser(sub: argparse._SubParsersAction):
                    help="Collect replays and generate comparative dashboard")
     p.add_argument("--output-dir", type=str, default=None,
                    help="Directory for replay files (default: analysis/elo_<timestamp>/)")
+    p.add_argument("--checkpoint-temperatures", type=_temperature_list_arg,
+                   default=[1.0],
+                   help="Comma-separated inference temperatures. Every "
+                        "checkpoint participates once per temperature; "
+                        "labels gain an '@T<temperature>' suffix when the "
+                        "temperature is not 1 (default: 1)")
+    p.add_argument("--output-json", type=str, default=None,
+                   help="Write participants, ratings, and pairing results to this JSON file")
     return p
 
 
@@ -260,6 +268,31 @@ def _build_eval_parser(sub: argparse._SubParsersAction):
                    help="Master RNG seed for reproducible eval. Seeds "
                         "Python random, numpy, and torch (CPU+CUDA). When "
                         "omitted, eval uses non-reproducible OS entropy.")
+    p.add_argument("--temperature", type=_temperature_arg, default=1.0,
+                   help="Inference temperature for the evaluated model: 1 "
+                        "samples the policy (protocol default), 0 selects "
+                        "the highest-probability legal action")
+    p.add_argument("--output-json", type=str, default=None,
+                   help="Write per-opponent results and provenance to this JSON file")
+
+
+def _temperature_arg(value: str) -> float:
+    from src.ppo.action_selection import validate_temperature
+
+    try:
+        return validate_temperature(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from None
+
+
+def _temperature_list_arg(value: str) -> list[float]:
+    items = [item.strip() for item in value.split(",") if item.strip()]
+    if not items:
+        raise argparse.ArgumentTypeError("expected at least one temperature")
+    temperatures = [_temperature_arg(item) for item in items]
+    if len(set(temperatures)) != len(temperatures):
+        raise argparse.ArgumentTypeError(f"duplicate temperatures in {value!r}")
+    return temperatures
 
 
 def _build_analyze_parser(sub: argparse._SubParsersAction):
@@ -463,6 +496,8 @@ def _run_elo(args):
         num_workers=args.num_workers,
         collect_replays=args.analyze,
         replay_output_dir=getattr(args, 'output_dir', None),
+        checkpoint_temperatures=args.checkpoint_temperatures,
+        output_json=args.output_json,
     )
 
 
@@ -483,6 +518,8 @@ def _run_eval(args):
             num_concurrent=args.num_concurrent,
             num_workers=args.num_workers,
             seed=args.seed,
+            temperature=args.temperature,
+            output_json=args.output_json,
         )
     except FileNotFoundError as e:
         print(f"Error: {e}")

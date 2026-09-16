@@ -45,7 +45,10 @@ Run `python -m src <command> --help` for full option details.
 
 `eval` and `elo` are the reporting tools defined by
 [`docs/eval_protocol.md`](docs/eval_protocol.md) — that document is the
-contract every result in `results/` is measured against.
+contract every result in `results/` is measured against. Both sample each
+checkpoint's policy by default; `eval --temperature 0` and
+`elo --checkpoint-temperatures 1,0` evaluate the highest-probability action
+as a separate variant, and `--output-json` writes machine-readable results.
 
 ### Reference Training Recipe
 

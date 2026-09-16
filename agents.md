@@ -233,6 +233,14 @@ python -m src eval --model models/ppo_agent_XXXX.pth \
 python -m src elo --checkpoints <ckpt-a> <ckpt-b> \
     --agents random,heuristic,simple --games-per-pair 1000 --num-workers 16
 
+# Evaluate the highest-probability action instead of sampling, and write JSON
+python -m src eval --model models/ppo_agent_XXXX.pth --temperature 0 \
+    --games 15000 --seed 0 --num-workers 16 --output-json eval.json
+
+# Include every checkpoint both sampled and greedy in one tournament
+python -m src elo --checkpoints <ckpt-a> <ckpt-b> --checkpoint-temperatures 1,0 \
+    --agents random,heuristic,simple --games-per-pair 1000 --output-json elo.json
+
 # Watch a model play, or collect replays for behavioral analysis
 python -m src simulate --model models/ppo_agent_XXXX.pth --games 100
 python -m src analyze --model models/ppo_agent_XXXX.pth

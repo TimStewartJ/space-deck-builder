@@ -90,6 +90,17 @@ For each opponent ∈ {random, heuristic, simple}:
   cadence). Reported as mean across the 3 seeds, or "not reached" if
   no seed crossed the threshold within the training budget.
 
+### Inference temperature
+- Checkpoints play at **temperature 1** (sampling their policy) unless a
+  result names another temperature. Every published result before
+  `v0.1.3` used temperature 1.
+- Temperature is part of a variant's identity: `eval --temperature T` and
+  `elo --checkpoint-temperatures ...` evaluate the same checkpoint as a
+  different player. Temperature 0 selects the highest-probability legal
+  action. Results at different temperatures are compared as paired
+  variants of the same seeds, never pooled.
+- Built-in opponents and training rollouts are unaffected.
+
 ## 6. Reporting format
 
 Every post in the series reports its results in **exactly this table
@@ -178,3 +189,6 @@ a version bump.
 - `v0.1.2` — storage policy only; **no result is invalidated**.
   - Checkpoints and snapshot pools are published as verified GitHub release
     bundles on the result's tag instead of being committed.
+- `v0.1.3` — adds inference temperature as an explicit variant attribute;
+  **no result is invalidated**.
+  - Temperature 1 remains the default and describes every prior result.
