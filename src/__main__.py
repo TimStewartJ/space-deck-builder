@@ -357,6 +357,66 @@ def _build_search_eval_parser(sub: argparse._SubParsersAction):
     return p
 
 
+def _build_search_selfplay_parser(sub: argparse._SubParsersAction):
+    from src.config import DeviceConfig
+    from src.search.selfplay_data import SelfPlayConfig
+
+    defaults = SelfPlayConfig(model_path="", games=1)
+    p = sub.add_parser(
+        "search-selfplay",
+        help="Record search-versus-search games as training shards",
+    )
+    p.add_argument("--model", type=str, required=True,
+                   help="Checkpoint whose policy and critic guide both searching seats")
+    p.add_argument("--games", type=int, required=True, help="Games to record")
+    p.add_argument("--budget", type=int, default=defaults.budget,
+                   help="Rollouts per searched decision")
+    p.add_argument("--max-candidates", type=int, default=defaults.max_candidates,
+                   help="Highest-prior root actions compared by rollouts")
+    p.add_argument("--seed", type=int, default=defaults.seed,
+                   help="Master seed for game deals and search worlds")
+    p.add_argument("--workers", type=int, default=defaults.workers,
+                   help="Worker processes, each with its own policy copy and game batch")
+    p.add_argument("--numba-threads", type=int, default=defaults.numba_threads,
+                   help="Numba threads per worker")
+    p.add_argument("--batch-size", type=int, default=defaults.batch_size,
+                   help="Games played concurrently per worker")
+    p.add_argument("--shard-positions", type=int, default=defaults.shard_positions,
+                   help="Positions buffered before a worker writes a shard")
+    p.add_argument("--simulation-device", type=str, default=DeviceConfig().simulation_device,
+                   help="Device for policy and critic inference")
+    p.add_argument("--output-dir", type=str, required=True,
+                   help="Directory for shards; an existing directory with the same configuration resumes")
+    return p
+
+
+def _build_distill_parser(sub: argparse._SubParsersAction):
+    from src.search.distill import DistillConfig
+
+    defaults = DistillConfig(model_path="", data_dir="", output_path="")
+    p = sub.add_parser(
+        "distill",
+        help="Train a checkpoint on search self-play targets",
+    )
+    p.add_argument("--model", type=str, required=True,
+                   help="Checkpoint to start from (the one that guided the search)")
+    p.add_argument("--data", type=str, required=True, help="search-selfplay output directory")
+    p.add_argument("--output", type=str, required=True, help="Checkpoint path to write")
+    p.add_argument("--lr", type=float, default=defaults.lr)
+    p.add_argument("--batch-size", type=int, default=defaults.batch_size)
+    p.add_argument("--epochs", type=int, default=defaults.max_epochs,
+                   help="Maximum training epochs")
+    p.add_argument("--patience", type=int, default=defaults.patience,
+                   help="Epochs without validation improvement before stopping")
+    p.add_argument("--value-coef", type=float, default=defaults.value_coef)
+    p.add_argument("--grad-clip", type=float, default=defaults.grad_clip)
+    p.add_argument("--validation-modulus", type=int, default=defaults.validation_modulus,
+                   help="Games with index %% modulus == 0 are held out for validation")
+    p.add_argument("--seed", type=int, default=defaults.seed)
+    p.add_argument("--device", type=str, default=defaults.device)
+    return p
+
+
 def build_cli_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     """Build the unified CLI parser and return it with the train subparser."""
     parser = argparse.ArgumentParser(
@@ -371,6 +431,8 @@ def build_cli_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser
     _build_eval_parser(sub)
     _build_analyze_parser(sub)
     _build_search_eval_parser(sub)
+    _build_search_selfplay_parser(sub)
+    _build_distill_parser(sub)
     return parser, train_parser
 
 
@@ -413,6 +475,58 @@ def main(argv=None):
         _run_analyze(args)
     elif args.command == "search-eval":
         _run_search_eval(args)
+    elif args.command == "search-selfplay":
+        _run_search_selfplay(args)
+    elif args.command == "distill":
+        _run_distill(args)
+
+
+def _run_search_selfplay(args):
+    """Record search self-play shards."""
+    from src.search.selfplay_data import SelfPlayConfig, generate_selfplay
+
+    try:
+        config = SelfPlayConfig(
+            model_path=args.model,
+            games=args.games,
+            budget=args.budget,
+            max_candidates=args.max_candidates,
+            seed=args.seed,
+            device=args.simulation_device,
+            workers=args.workers,
+            numba_threads=args.numba_threads,
+            batch_size=args.batch_size,
+            shard_positions=args.shard_positions,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
+    generate_selfplay(config, args.output_dir)
+
+
+def _run_distill(args):
+    """Distill search self-play targets into a checkpoint."""
+    from src.search.distill import DistillConfig, distill
+
+    try:
+        config = DistillConfig(
+            model_path=args.model,
+            data_dir=args.data,
+            output_path=args.output,
+            lr=args.lr,
+            batch_size=args.batch_size,
+            max_epochs=args.epochs,
+            patience=args.patience,
+            value_coef=args.value_coef,
+            grad_clip=args.grad_clip,
+            validation_modulus=args.validation_modulus,
+            seed=args.seed,
+            device=args.device,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
+    distill(config)
 
 
 def _run_search_eval(args):

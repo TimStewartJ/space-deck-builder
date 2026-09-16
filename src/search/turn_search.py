@@ -88,13 +88,34 @@ class CandidateStatistics:
 
 
 @dataclass(frozen=True)
+class SearchTargets:
+    """Training targets for one searched decision.
+
+    ``observation`` and ``mask`` are the acting player's policy input and legal
+    actions with production END_TURN suppression. ``policy`` is the completed-Q
+    improved policy ``softmax(logits + sigma(completedQ))`` over legal actions
+    (Danihelka et al., 2022): evaluated candidates use their rollout mean,
+    unevaluated actions use the mixed value ``v_mix`` of the critic root value
+    and the prior-weighted candidate values, and ``sigma`` is the same
+    transform search uses to select actions. A forced decision targets its only
+    legal action. ``root_value`` is the critic's estimate at the root.
+    """
+
+    observation: np.ndarray
+    mask: np.ndarray
+    policy: np.ndarray
+    root_value: float
+
+
+@dataclass(frozen=True)
 class SearchResult:
     """One searched decision.
 
     ``fingerprint`` is the public root digest that seeds the search.
     ``elapsed_s`` attributes the wall time of the batch that searched this
     decision: root work is shared equally by the batch's decisions, and
-    rollout work is shared in proportion to rollouts.
+    rollout work is shared in proportion to rollouts. ``targets`` is present
+    when :meth:`TurnSearch.choose_many` is asked for training targets.
     """
 
     action: int
@@ -104,6 +125,7 @@ class SearchResult:
     candidates: tuple[CandidateStatistics, ...]
     fingerprint: str
     elapsed_s: float
+    targets: SearchTargets | None = None
 
 
 @dataclass
@@ -259,13 +281,16 @@ class TurnSearch:
         *,
         budgets: Sequence[int] | None = None,
         contexts: Sequence[ActionContext] | None = None,
+        return_targets: bool = False,
     ) -> list[SearchResult]:
         """Search the current decision of every game together.
 
         *budgets* gives each decision its own rollout budget (default: the
         configured budget). *contexts* are the scalar action contexts of the
         games' current decisions; they are computed when omitted, and each
-        must match the vector root's legal actions.
+        must match the vector root's legal actions. With *return_targets*,
+        every result carries :class:`SearchTargets`; search decisions are the
+        same either way.
         """
         started = time.perf_counter()
         count = len(games)
@@ -302,6 +327,9 @@ class TurnSearch:
         masks = suppress_redundant_end_turn(raw_masks)
         observations = engine.materialize_current_player_observations().copy()
         root_logits = self.evaluator.logits(observations, masks)
+        root_values = (
+            self.evaluator.values(observations) if return_targets else None
+        )
         self.timings.root_policy_s += time.perf_counter() - phase
         root_elapsed = time.perf_counter() - started
 
@@ -378,6 +406,16 @@ class TurnSearch:
         rollout_elapsed = max(0.0, elapsed - root_elapsed)
         results: list[SearchResult | None] = [None] * count
         for decision, (action, greedy) in forced.items():
+            targets = None
+            if return_targets:
+                policy = np.zeros(self.action_dim, dtype=np.float32)
+                policy[action] = 1.0
+                targets = SearchTargets(
+                    observation=observations[decision],
+                    mask=masks[decision],
+                    policy=policy,
+                    root_value=float(root_values[decision]),
+                )
             results[decision] = SearchResult(
                 action=action,
                 greedy_action=greedy,
@@ -386,6 +424,7 @@ class TurnSearch:
                 candidates=(),
                 fingerprint=roots[decision].digest,
                 elapsed_s=root_share,
+                targets=targets,
             )
         for plan in plans:
             row = root_logits[plan.decision]
@@ -393,6 +432,17 @@ class TurnSearch:
             scores = self._scores(evaluated, row, plan.totals, plan.counts)
             finalists = [action for action in plan.survivors if plan.counts[action] > 0]
             chosen = min(finalists, key=lambda a: (-scores[a], a))
+            targets = None
+            if return_targets:
+                targets = SearchTargets(
+                    observation=observations[plan.decision],
+                    mask=masks[plan.decision],
+                    policy=self.improved_policy(
+                        row, masks[plan.decision], plan.totals, plan.counts,
+                        float(root_values[plan.decision]),
+                    ),
+                    root_value=float(root_values[plan.decision]),
+                )
             results[plan.decision] = SearchResult(
                 action=int(chosen),
                 greedy_action=plan.greedy,
@@ -413,12 +463,48 @@ class TurnSearch:
                     rollout_elapsed * plan.used / total_rollouts
                     if total_rollouts else 0.0
                 ),
+                targets=targets,
             )
         self.timings.calls += 1
         self.timings.decisions += count
         self.timings.searched += len(plans)
         self.timings.total_s += elapsed
         return results
+
+    def improved_policy(
+        self,
+        logits: np.ndarray,
+        mask: np.ndarray,
+        totals: dict[int, float],
+        counts: dict[int, int],
+        root_value: float,
+    ) -> np.ndarray:
+        """Completed-Q improved policy over the legal actions of one decision."""
+        legal = np.asarray(mask, dtype=np.bool_)
+        visited = [action for action, visits in counts.items() if visits > 0]
+        if not legal.any() or not visited:
+            raise ValueError("an improved policy needs legal and evaluated actions")
+        logits = np.asarray(logits, dtype=np.float64)
+        prior = np.zeros(len(logits), dtype=np.float64)
+        finite = logits[legal]
+        prior[legal] = np.exp(finite - finite.max())
+        prior /= prior.sum()
+        q = {action: totals[action] / counts[action] for action in visited}
+        visits = float(sum(counts[action] for action in visited))
+        visited_prior = float(sum(prior[action] for action in visited))
+        weighted_q = float(sum(prior[action] * q[action] for action in visited))
+        if visited_prior > 0.0:
+            mixed = (root_value + visits * weighted_q / visited_prior) / (1.0 + visits)
+        else:
+            mixed = (root_value + sum(q.values()) / len(q) * visits) / (1.0 + visits)
+        completed = np.full(len(logits), mixed, dtype=np.float64)
+        for action in visited:
+            completed[action] = q[action]
+        scale = (self.config.c_visit + max(counts[action] for action in visited)) * self.config.c_scale
+        improved = np.where(legal, logits + scale * (completed + 1.0) / 2.0, -np.inf)
+        improved -= improved[legal].max()
+        policy = np.where(legal, np.exp(improved), 0.0)
+        return (policy / policy.sum()).astype(np.float32)
 
     def _scores(self, actions, root_logits, totals, counts) -> dict[int, float]:
         max_visits = max(counts[action] for action in actions)

@@ -32,7 +32,7 @@ from src.encoding.state_encoder import encode_state
 from src.engine.game import Game
 from src.ppo.action_selection import validate_temperature
 from src.search.agent import SearchStatistics
-from src.search.turn_search import PolicyValueEvaluator, TurnSearch
+from src.search.turn_search import PolicyValueEvaluator, SearchResult, TurnSearch
 
 STEP_LIMIT = 20_000
 
@@ -130,6 +130,17 @@ class _Slot:
         return self.seats[self.game.current_player.name]
 
 
+@dataclass(frozen=True)
+class SearchDecision:
+    """A searched decision reported to :meth:`BatchedGameRunner.run` observers."""
+
+    key: Any
+    player: str
+    step: int
+    turn: int
+    result: SearchResult
+
+
 class BatchedGameRunner:
     """Drive many games concurrently with batched policy and search decisions."""
 
@@ -156,16 +167,26 @@ class BatchedGameRunner:
         )
         self.batch_size = batch_size
         self.timings = RunnerTimings()
+        self._on_search: Callable[[SearchDecision], None] | None = None
 
     def run(
         self,
         specs: Iterable[GameSpec],
         on_finish: Callable[[GameOutcome], None],
+        on_search: Callable[[SearchDecision], None] | None = None,
     ) -> None:
+        """Play every game spec, reporting finished games to *on_finish*.
+
+        When *on_search* is given, every searched decision is reported with
+        :class:`~src.search.turn_search.SearchTargets` before its action is
+        applied, and before the game's outcome is reported.
+        """
         started = time.perf_counter()
+        self._on_search = on_search
         try:
             self._run(specs, on_finish)
         finally:
+            self._on_search = None
             self.timings.total_s += time.perf_counter() - started
 
     def _run(
@@ -305,10 +326,12 @@ class BatchedGameRunner:
         contexts = self._contexts(slots)
         self.timings.search_prepare_s += time.perf_counter() - phase
         phase = time.perf_counter()
+        observer = self._on_search
         results = self.search.choose_many(
             [slot.game for slot in slots],
             budgets=[slot.seat.budget for slot in slots],
             contexts=contexts,
+            return_targets=observer is not None,
         )
         self.timings.search_s += time.perf_counter() - phase
         phase = time.perf_counter()
@@ -318,7 +341,16 @@ class BatchedGameRunner:
                 raise RuntimeError(
                     f"search selected illegal action index {result.action}"
                 )
-            slot.search[slot.game.current_player.name].record(result)
+            player = slot.game.current_player.name
+            slot.search[player].record(result)
+            if observer is not None:
+                observer(SearchDecision(
+                    key=slot.spec.key,
+                    player=player,
+                    step=slot.steps,
+                    turn=int(slot.game.stats.total_turns),
+                    result=result,
+                ))
             self._apply(slot, action)
         self.timings.search_apply_s += time.perf_counter() - phase
         self.timings.search_steps += 1
