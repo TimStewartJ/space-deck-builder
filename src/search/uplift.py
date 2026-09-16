@@ -190,11 +190,14 @@ def _tasks(config: UpliftConfig, completed: set[tuple[int, int]]) -> list[tuple[
 
 def _worker_main(worker_id: int, config_dict: dict, tasks: list, results) -> None:
     try:
+        threads = str(int(config_dict["numba_threads"]))
+        # Size native thread pools before numba and torch load so many worker
+        # processes do not each spin a pool sized for the whole machine.
+        for variable in ("NUMBA_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+            os.environ[variable] = threads
         import torch
 
         config = UpliftConfig(**{**config_dict, "budgets": tuple(config_dict["budgets"])})
-        # Worker processes share the host; keep CPU-side torch work within
-        # the same thread budget as the Numba kernels.
         torch.set_num_threads(config.numba_threads)
         arena = _Arena(config)
         for budget, index in tasks:
@@ -325,10 +328,14 @@ def run_uplift(config: UpliftConfig, output_json: str | None = None, log_fn=prin
         context = mp.get_context("spawn")
         results_queue = context.Queue()
         workers = min(config.workers, len(tasks))
+        # Deterministically mix budgets and deals across workers so slow and
+        # fast arms progress together and no worker runs a single budget.
+        schedule = list(tasks)
+        random.Random(config.seed).shuffle(schedule)
         processes = [
             context.Process(
                 target=_worker_main,
-                args=(worker, config_dict, tasks[worker::workers], results_queue),
+                args=(worker, config_dict, schedule[worker::workers], results_queue),
             )
             for worker in range(workers)
         ]

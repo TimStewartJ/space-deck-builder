@@ -5,22 +5,27 @@
 #       -Command "powershell.exe -NoProfile -ExecutionPolicy Bypass -File results\search_uplift\run_search_uplift.ps1 -Python {python}"
 #
 # Pre-registered design: the full budget ladder (0, 16, 64, 256) on
-# selfplay_seed0, then budgets 0 and 64 on selfplay_seed1 and selfplay_seed2.
-# Every arm plays the same checkpoint at temperature 0 as its baseline with
-# exact seat alternation. Each run resumes from its games journal.
+# selfplay_seed0 with 1,000 games per budget, then budgets 0 and 64 on
+# selfplay_seed1 and selfplay_seed2 with 500 games per budget. Every arm plays
+# the same checkpoint at temperature 0 as its baseline with exact seat
+# alternation. Each run resumes from its games journal. Eight GPU workers
+# measured close to single-process search latency; sixteen CPU or GPU workers
+# oversubscribed the host and ran several times slower per decision.
 param(
     [string] $Python = ".venv\Scripts\python.exe",
     [string] $OutDir = "results\search_uplift",
     [int] $Games = 1000,
-    [int] $Workers = 16,
-    [int] $NumbaThreads = 1
+    [int] $ReplicationGames = 500,
+    [int] $Workers = 8,
+    [int] $NumbaThreads = 2,
+    [string] $Device = "cuda"
 )
 
 $ErrorActionPreference = "Stop"
 $checkpoints = "results\optimized_selfplay_baseline\checkpoints"
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
-function Invoke-SearchEval([string] $Seed, [string[]] $Budgets, [string] $Name) {
+function Invoke-SearchEval([string] $Seed, [string[]] $Budgets, [string] $Name, [int] $GameCount) {
     $json = Join-Path $OutDir "$Name.json"
     if (Test-Path -LiteralPath $json) {
         Write-Host "skip $Name (complete)"
@@ -32,11 +37,12 @@ function Invoke-SearchEval([string] $Seed, [string[]] $Budgets, [string] $Name) 
         "--model", (Join-Path $checkpoints "selfplay_seed$Seed.pth"),
         "--budgets"
     ) + $Budgets + @(
-        "--games", [string]$Games,
+        "--games", [string]$GameCount,
         "--baseline", "greedy",
         "--seed", $Seed,
         "--workers", [string]$Workers,
         "--numba-threads", [string]$NumbaThreads,
+        "--simulation-device", $Device,
         "--output-json", $json
     )
     Write-Host "search-eval $Name"
@@ -55,7 +61,7 @@ function Invoke-SearchEval([string] $Seed, [string[]] $Budgets, [string] $Name) 
     }
 }
 
-Invoke-SearchEval "0" @("0", "16", "64", "256") "selfplay_seed0_ladder"
-Invoke-SearchEval "1" @("0", "64") "selfplay_seed1_budget64"
-Invoke-SearchEval "2" @("0", "64") "selfplay_seed2_budget64"
+Invoke-SearchEval "0" @("0", "16", "64", "256") "selfplay_seed0_ladder" $Games
+Invoke-SearchEval "1" @("0", "64") "selfplay_seed1_budget64" $ReplicationGames
+Invoke-SearchEval "2" @("0", "64") "selfplay_seed2_budget64" $ReplicationGames
 Write-Host "search uplift evidence complete"
