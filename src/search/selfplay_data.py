@@ -177,11 +177,17 @@ class GameRecorder:
         self.writer.add_game(outcome.key, records, SEAT_NAMES.index(outcome.winner))
 
 
+def finished_shards(directory: Path) -> list[Path]:
+    """Complete shard files in *directory*, excluding interrupted temporary writes."""
+    return [
+        path for path in sorted(Path(directory).glob("shard_*.npz"))
+        if not path.name.endswith(".tmp.npz")
+    ]
+
+
 def completed_games(directory: Path) -> set[int]:
     games: set[int] = set()
-    for path in sorted(Path(directory).glob("shard_*.npz")):
-        if path.name.endswith(".tmp.npz"):
-            continue
+    for path in finished_shards(directory):
         with np.load(path) as shard:
             if str(shard["format"]) != SHARD_FORMAT:
                 raise ValueError(f"{path} is not a {SHARD_FORMAT} shard")
@@ -215,7 +221,7 @@ class SelfPlayData:
 
 def load_selfplay_data(directory: str | Path) -> SelfPlayData:
     """Load and validate every shard in *directory*."""
-    paths = [path for path in sorted(Path(directory).glob("shard_*.npz")) if not path.name.endswith(".tmp.npz")]
+    paths = finished_shards(Path(directory))
     if not paths:
         raise FileNotFoundError(f"no self-play shards in {directory}")
     parts: dict[str, list[np.ndarray]] = {name: [] for name in SelfPlayData.__dataclass_fields__}
@@ -342,6 +348,10 @@ def generate_selfplay(config: SelfPlayConfig, output_dir: str | Path, log_fn=pri
     else:
         manifest_path.write_text(json.dumps({"identity": identity}, indent=2) + "\n", encoding="utf-8")
 
+    # A process stopped while writing leaves a temporary shard; its games are
+    # missing from finished shards and are replayed.
+    for stale in directory.glob("shard_*.tmp.npz"):
+        stale.unlink()
     done = completed_games(directory)
     unexpected = {game for game in done if not 0 <= game < config.games}
     if unexpected:
@@ -408,14 +418,15 @@ def generate_selfplay(config: SelfPlayConfig, output_dir: str | Path, log_fn=pri
     if missing:
         raise RuntimeError(f"{len(missing)} games are missing after generation, first {missing[:5]}")
     positions = 0
-    for path in sorted(directory.glob("shard_*.npz")):
+    shards = finished_shards(directory)
+    for path in shards:
         with np.load(path) as shard:
             positions += len(shard["outcome"])
     summary = {
         "identity": identity,
         "games": config.games,
         "positions": positions,
-        "shards": len(list(directory.glob("shard_*.npz"))),
+        "shards": len(shards),
         "elapsed_s": time.perf_counter() - started,
     }
     (directory / "summary.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")

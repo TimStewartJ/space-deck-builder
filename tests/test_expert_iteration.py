@@ -223,6 +223,12 @@ def test_selfplay_generation_resumes_and_reproduces_games(selfplay_dir, setup):
     assert any("remaining=2" in line for line in logs)
     assert completed_games(directory) == set(range(config.games + 2))
 
+    stale = directory / "shard_interrupted_00000.tmp.npz"
+    stale.write_bytes(b"partial write")
+    summary = generate_selfplay(extended, directory, log_fn=lambda *_: None, model=setup[3])
+    assert not stale.exists()
+    assert summary["positions"] == load_selfplay_data(directory).positions
+
 
 def test_distill_writes_loadable_checkpoint_and_history(selfplay_dir, tmp_path):
     directory, config, _ = selfplay_dir
