@@ -33,6 +33,16 @@ class InformationSet:
     fingerprint: str
     _canonical_game: Game = field(repr=False, compare=False)
 
+    @property
+    def canonical_game(self) -> Game:
+        """The canonical public view this information set was built from.
+
+        Hidden hand/deck allocations, deck order, and trade-deck order hold
+        information-independent canonical arrangements. Treat the view as
+        read-only; use :func:`determinize` for a playable sampled world.
+        """
+        return self._canonical_game
+
 
 def _counter_items(counter: Counter[int]) -> tuple[tuple[int, int], ...]:
     return tuple(

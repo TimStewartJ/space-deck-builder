@@ -171,7 +171,10 @@ compatibility.
 `src/search/information_set.py` projects a live scalar decision into only the
 acting player's public knowledge and samples seeded hidden hand, deck, and
 trade-deck arrangements from public ownership ledgers without reading the true
-hidden allocation.
+hidden allocation. `src/search/turn_search.py` uses that projection for
+turn-bounded rollout search guided by the policy and critic, and
+`python -m src search-eval` measures its uplift against the same checkpoint
+without search (ADR 0010).
 
 ### Diagnosing a slow rollout
 `scripts/bench_rollout.py` reports decisions/sec plus a per-phase breakdown of
@@ -204,6 +207,8 @@ Read it this way:
 - `src/vector_engine/opponents.py` — Scalar-equivalent vector fixed opponents
 - `src/ppo/vector_batch_runner.py` — Vector rollout runner, including snapshot self-play
 - `src/search/information_set.py` — Information-set projection and determinization
+- `src/search/turn_search.py` — Turn-bounded rollout search with vector worlds
+- `src/search/uplift.py` — Search-versus-baseline match harness (`search-eval`)
 - `src/ppo/opponent_pool.py` — Fixed opponents, self-play snapshots, PFSP weighting
 - `src/ppo/elo_tournament.py` — Cross-play Elo tournaments
 - `src/ppo/ppo_actor_critic.py` — Actor-Critic neural network

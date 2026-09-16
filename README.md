@@ -197,6 +197,22 @@ uses the simulator's true hidden allocation, preserves publicly known hand and
 top-deck constraints, and returns independent scalar states that convert
 directly into the vector engine for search.
 
+### Turn-bounded search
+
+`src/search/turn_search.py` compares the policy's highest-prior legal actions
+by truncated rollouts inside the vector engine. Each candidate is applied in
+worlds that re-deal only the opponent's unseen hand. The searcher's turn is
+continued greedily, and each world is scored by the exact outcome or by the
+negated critic value of the opponent's first decision. Sequential halving
+spends a fixed rollout budget. Results depend only on public information; see
+[`docs/decisions/0010-turn-bounded-search.md`](docs/decisions/0010-turn-bounded-search.md).
+
+```bash
+# Search at several budgets against the same checkpoint playing greedily
+python -m src search-eval --model results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth \
+    --budgets 0 16 64 256 --games 1000 --workers 8 --output-json uplift.json
+```
+
 ### Measuring rollout performance
 
 `scripts/bench_rollout.py` runs a short training and prints decisions/sec
@@ -233,7 +249,7 @@ src/
 ├── encoding/            # State and action tensor encoding
 ├── engine/              # Game engine (Game, Player, actions)
 ├── ppo/                 # PPO training (trainer, runners, shared-memory IO, opponent pool, Elo)
-├── search/              # Information-set projection and determinization
+├── search/              # Information-set projection, turn-bounded search, uplift harness
 ├── ui/                  # CLI and pygame interfaces
 └── utils/               # Logging utilities
 docs/

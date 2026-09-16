@@ -323,6 +323,37 @@ def _build_analyze_parser(sub: argparse._SubParsersAction):
     return p
 
 
+def _build_search_eval_parser(sub: argparse._SubParsersAction):
+    from src.config import DeviceConfig
+    from src.search.turn_search import TurnSearchConfig
+
+    p = sub.add_parser(
+        "search-eval",
+        help="Measure turn-bounded search against the same policy without search",
+    )
+    p.add_argument("--model", type=str, required=True,
+                   help="Checkpoint whose policy and critic guide the search and baseline")
+    p.add_argument("--budgets", type=int, nargs="+", default=[0, 16, 64, 256],
+                   help="Rollout budgets per decision; 0 plays greedily (fairness control)")
+    p.add_argument("--games", type=int, default=1000,
+                   help="Games per budget (even; exact seat alternation)")
+    p.add_argument("--baseline", choices=["greedy", "sampled", "heuristic"], default="greedy",
+                   help="Opponent: the checkpoint at temperature 0 or 1, or the Heuristic agent")
+    p.add_argument("--max-candidates", type=int, default=TurnSearchConfig().max_candidates,
+                   help="Highest-prior root actions compared by rollouts")
+    p.add_argument("--seed", type=int, default=0,
+                   help="Master seed for game deals and search worlds")
+    p.add_argument("--workers", type=int, default=8,
+                   help="Worker processes, each with its own policy copy")
+    p.add_argument("--numba-threads", type=int, default=2,
+                   help="Numba threads per worker")
+    p.add_argument("--simulation-device", type=str, default=DeviceConfig().simulation_device,
+                   help="Device for policy and critic inference")
+    p.add_argument("--output-json", type=str, default=None,
+                   help="Write the summary and per-game results; resumes from its .games.jsonl journal")
+    return p
+
+
 def build_cli_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     """Build the unified CLI parser and return it with the train subparser."""
     parser = argparse.ArgumentParser(
@@ -336,6 +367,7 @@ def build_cli_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser
     _build_elo_parser(sub)
     _build_eval_parser(sub)
     _build_analyze_parser(sub)
+    _build_search_eval_parser(sub)
     return parser, train_parser
 
 
@@ -376,6 +408,30 @@ def main(argv=None):
         _run_eval(args)
     elif args.command == "analyze":
         _run_analyze(args)
+    elif args.command == "search-eval":
+        _run_search_eval(args)
+
+
+def _run_search_eval(args):
+    """Run the search uplift ladder and print its summary."""
+    from src.search.uplift import UpliftConfig, run_uplift
+
+    try:
+        config = UpliftConfig(
+            model_path=args.model,
+            budgets=tuple(args.budgets),
+            games=args.games,
+            baseline=args.baseline,
+            max_candidates=args.max_candidates,
+            seed=args.seed,
+            device=args.simulation_device,
+            workers=args.workers,
+            numba_threads=args.numba_threads,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
+    run_uplift(config, output_json=args.output_json)
 
 
 def _run_train(args):
