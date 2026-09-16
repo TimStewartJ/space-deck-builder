@@ -195,6 +195,11 @@ def compute_mle_ratings(
                 expected_wins += games * expected_score(ratings[i], ratings[j])
 
             if expected_wins > 0:
+                # A participant that won no games has no finite
+                # maximum-likelihood rating and log10(0) is undefined. Half a
+                # virtual win keeps the update defined and convergent without
+                # changing any tournament in which every participant won.
+                observed_wins = max(observed_wins, 0.5)
                 # Multiplicative update: shift rating to make expected match observed
                 ratio = observed_wins / expected_wins
                 new_ratings[i] = ratings[i] + _MLE_SPREAD * math.log10(ratio)

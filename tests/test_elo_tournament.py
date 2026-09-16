@@ -184,6 +184,45 @@ class TestEloMath:
         ratings = compute_mle_ratings(3, wins, games)
         assert ratings[0] > ratings[1] > ratings[2]
 
+    def test_mle_non_anchor_without_wins_stays_finite(self):
+        """A participant that wins nothing gets a finite, lowest rating."""
+        import math
+
+        wins = {(0, 1): 600, (0, 2): 1000, (1, 2): 1000}
+        games = {(0, 1): 1000, (0, 2): 1000, (1, 2): 1000}
+        ratings = compute_mle_ratings(3, wins, games)
+        assert all(math.isfinite(rating) for rating in ratings)
+        assert ratings[0] > ratings[1] > ratings[2]
+        # Half a virtual win is the fixed point for the winless participant.
+        expected = sum(
+            1000 * expected_score(ratings[2], ratings[j]) for j in (0, 1)
+        )
+        assert expected == pytest.approx(0.5, rel=1e-3)
+
+    def test_mle_non_anchor_with_every_win_has_finite_ordered_rating(self):
+        """Perfect records stay finite; like the original update, their
+        distance from the field is limited by the iteration count."""
+        import math
+
+        wins = {(0, 1): 0, (0, 2): 700, (1, 2): 1000}
+        games = {(0, 1): 1000, (0, 2): 1000, (1, 2): 1000}
+        ratings = compute_mle_ratings(3, wins, games)
+        assert all(math.isfinite(rating) for rating in ratings)
+        assert ratings[1] > ratings[0] > ratings[2]
+
+    def test_mle_ratings_are_unchanged_without_perfect_records(self):
+        """Records strictly between zero and all wins take the plain MLE update."""
+        wins = {(0, 1): 700, (0, 2): 800, (1, 2): 600}
+        games = {(0, 1): 1000, (0, 2): 1000, (1, 2): 1000}
+        ratings = compute_mle_ratings(3, wins, games)
+        # Fixed point: every non-anchor's expected wins equal its observed wins.
+        for i, observed in ((1, 300 + 600), (2, 200 + 400)):
+            expected = sum(
+                1000 * expected_score(ratings[i], ratings[j])
+                for j in range(3) if j != i
+            )
+            assert expected == pytest.approx(observed, rel=1e-3)
+
 
 # ---------------------------------------------------------------------------
 # _play_builtin_games
