@@ -8,16 +8,22 @@
 # selfplay_seed0 with 1,000 games per budget, then budgets 0 and 64 on
 # selfplay_seed1 and selfplay_seed2 with 500 games per budget. Every arm plays
 # the same checkpoint at temperature 0 as its baseline with exact seat
-# alternation. Each run resumes from its games journal. Eight GPU workers
-# measured close to single-process search latency; sixteen CPU or GPU workers
-# oversubscribed the host and ran several times slower per decision.
+# alternation. Each run resumes from its games journal.
+#
+# The published evidence was produced at commit 1849b19 with eight
+# unbatched workers. Since docs/decisions/0011, search seeds come from public
+# root digests and worlds are dealt by a counter-based hash, so rerunning this
+# script samples different search worlds on the same deals. Topology settings
+# only change speed; two workers with 1,024 concurrent games each measured
+# fastest on the RX 9070 host.
 param(
     [string] $Python = ".venv\Scripts\python.exe",
     [string] $OutDir = "results\search_uplift",
     [int] $Games = 1000,
     [int] $ReplicationGames = 500,
-    [int] $Workers = 8,
-    [int] $NumbaThreads = 2,
+    [int] $Workers = 2,
+    [int] $NumbaThreads = 4,
+    [int] $BatchSize = 1024,
     [string] $Device = "cuda"
 )
 
@@ -42,6 +48,7 @@ function Invoke-SearchEval([string] $Seed, [string[]] $Budgets, [string] $Name, 
         "--seed", $Seed,
         "--workers", [string]$Workers,
         "--numba-threads", [string]$NumbaThreads,
+        "--batch-size", [string]$BatchSize,
         "--simulation-device", $Device,
         "--output-json", $json
     )

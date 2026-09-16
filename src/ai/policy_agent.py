@@ -32,6 +32,8 @@ class PolicyAgent(Agent):
         super().__init__(name)
         self.device = torch.device(device)
         self.model = model.to(self.device).eval()
+        parameter = next(self.model.parameters(), None)
+        self.dtype = parameter.dtype if parameter is not None else torch.float32
         self.card_names = card_names
         self.card_index_map = card_index_map
         self.temperature = validate_temperature(temperature)
@@ -57,7 +59,9 @@ class PolicyAgent(Agent):
         mask = context.mask.copy()
         if context.has_meaningful:
             mask[END_TURN_INDEX] = False
-        states = torch.from_numpy(observation.copy()).to(self.device).unsqueeze(0)
+        states = torch.from_numpy(observation.copy()).to(
+            self.device, dtype=self.dtype
+        ).unsqueeze(0)
         logits, _ = self.model(states)
         logits = logits.reshape(1, -1).masked_fill(
             ~torch.from_numpy(mask).to(self.device).unsqueeze(0),

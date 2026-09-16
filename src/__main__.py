@@ -343,10 +343,13 @@ def _build_search_eval_parser(sub: argparse._SubParsersAction):
                    help="Highest-prior root actions compared by rollouts")
     p.add_argument("--seed", type=int, default=0,
                    help="Master seed for game deals and search worlds")
-    p.add_argument("--workers", type=int, default=8,
-                   help="Worker processes, each with its own policy copy")
-    p.add_argument("--numba-threads", type=int, default=2,
+    p.add_argument("--workers", type=int, default=2,
+                   help="Worker processes, each with its own policy copy and game batch")
+    p.add_argument("--numba-threads", type=int, default=4,
                    help="Numba threads per worker")
+    p.add_argument("--batch-size", type=int, default=1024,
+                   help="Games played concurrently per worker; their policy and "
+                        "search decisions are evaluated together")
     p.add_argument("--simulation-device", type=str, default=DeviceConfig().simulation_device,
                    help="Device for policy and critic inference")
     p.add_argument("--output-json", type=str, default=None,
@@ -427,6 +430,7 @@ def _run_search_eval(args):
             device=args.simulation_device,
             workers=args.workers,
             numba_threads=args.numba_threads,
+            batch_size=args.batch_size,
         )
     except ValueError as exc:
         print(f"Error: {exc}")

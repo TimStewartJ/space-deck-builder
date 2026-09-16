@@ -488,3 +488,197 @@ def test_forced_decisions_skip_rollouts(card_data):
     assert result.forced
     assert result.rollouts == 0
     assert result.candidates == ()
+
+
+def _choice_games(cards, registry, specs):
+    """Games advanced to multi-action decisions of the requested acting players."""
+    action_dim = get_action_space_size(registry.card_names)
+    games = []
+    for seed, steps in specs:
+        game = _make_game(cards, registry, seed=seed)
+        _advance(game, steps)
+        viewer = len(games) % 2
+        for _ in range(2000):
+            if game.is_game_over:
+                break
+            context = build_action_context(
+                game, game.current_player, registry.card_index_map, action_dim
+            )
+            mask = context.mask.copy()
+            if context.has_meaningful:
+                mask[END_TURN_INDEX] = False
+            if game.players.index(game.current_player) == viewer and mask.sum() >= 3:
+                break
+            game.apply_decision(game.current_player.make_decision(game))
+        else:
+            pytest.skip("no multi-action decision reached for the requested viewer")
+        if game.is_game_over:
+            pytest.skip("game ended before a multi-action decision")
+        games.append(game)
+    assert len({game.players.index(game.current_player) for game in games}) == min(2, len(games))
+    return games
+
+
+def _exact_value_policy(action_dim: int):
+    """Scripted policy whose value is an elementwise function of the observation."""
+    return ScriptedPolicy(
+        action_dim, {END_TURN_INDEX: 0.5},
+        lambda states: states[:, 3] - 2.0 * states[:, 60] + states[:, 61],
+    )
+
+
+def _assert_results_equal(batched, individual, *, exact: bool):
+    assert len(batched) == len(individual)
+    for first, second in zip(batched, individual):
+        assert first.action == second.action
+        assert first.greedy_action == second.greedy_action
+        assert first.forced == second.forced
+        assert first.rollouts == second.rollouts
+        assert first.fingerprint == second.fingerprint
+        assert [c.action for c in first.candidates] == [c.action for c in second.candidates]
+        assert [c.rollouts for c in first.candidates] == [c.rollouts for c in second.candidates]
+        for a, b in zip(first.candidates, second.candidates):
+            if exact:
+                assert a.value == b.value and a.score == b.score
+            else:
+                assert a.value == pytest.approx(b.value, abs=1e-9)
+                assert a.score == pytest.approx(b.score, abs=1e-9)
+
+
+def test_choose_many_equals_individual_choose(card_data, policy):
+    cards, registry, rules = card_data
+    games = _choice_games(cards, registry, ((51, 90), (52, 141), (53, 60), (54, 173), (55, 30)))
+    action_dim = get_action_space_size(registry.card_names)
+    config = TurnSearchConfig(budget=16, max_candidates=5, seed=7)
+    for model, exact in (
+        (_exact_value_policy(action_dim), True),
+        (copy.deepcopy(policy).double(), False),
+    ):
+        search = TurnSearch(model, rules, registry.card_index_map, device="cpu", config=config)
+        batched = search.choose_many(games)
+        individual = [search.choose(game) for game in games]
+        assert any(not result.forced for result in batched)
+        _assert_results_equal(batched, individual, exact=exact)
+
+
+def test_choose_many_applies_per_decision_budgets(card_data, policy):
+    cards, registry, rules = card_data
+    games = _choice_games(cards, registry, ((61, 90), (62, 141), (63, 75)))
+    budgets = (3, 24, 9)
+    model = copy.deepcopy(policy).double()
+    batched = TurnSearch(
+        model, rules, registry.card_index_map, device="cpu",
+        config=TurnSearchConfig(budget=64, max_candidates=6, seed=2),
+    ).choose_many(games, budgets=budgets)
+    individual = [
+        TurnSearch(
+            model, rules, registry.card_index_map, device="cpu",
+            config=TurnSearchConfig(budget=budget, max_candidates=6, seed=2),
+        ).choose(game)
+        for game, budget in zip(games, budgets)
+    ]
+    _assert_results_equal(batched, individual, exact=False)
+    assert all(result.rollouts <= budget for result, budget in zip(batched, budgets))
+
+
+def test_choose_many_validates_inputs(card_data):
+    cards, registry, rules = card_data
+    games = _choice_games(cards, registry, ((71, 90), (72, 141)))
+    model = _exact_value_policy(get_action_space_size(registry.card_names))
+    search = TurnSearch(model, rules, registry.card_index_map, device="cpu")
+    assert search.choose_many([]) == []
+    with pytest.raises(ValueError, match="positive budget"):
+        search.choose_many(games, budgets=[4, 0])
+    with pytest.raises(ValueError, match="action context"):
+        search.choose_many(games, contexts=[])
+    swapped = [
+        build_action_context(game, game.current_player, registry.card_index_map, search.action_dim)
+        for game in reversed(games)
+    ]
+    if not np.array_equal(swapped[0].mask, swapped[1].mask):
+        with pytest.raises(RuntimeError, match="legality differs"):
+            search.choose_many(games, contexts=swapped)
+
+
+def test_choose_many_makes_no_deep_copies_and_counts_work(card_data, monkeypatch):
+    cards, registry, rules = card_data
+    games = _choice_games(cards, registry, ((81, 90), (82, 141)))
+    search = TurnSearch(
+        _exact_value_policy(get_action_space_size(registry.card_names)),
+        rules, registry.card_index_map, device="cpu",
+        config=TurnSearchConfig(budget=8, max_candidates=4, seed=1),
+    )
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("search must not deep copy games")
+
+    monkeypatch.setattr(copy, "deepcopy", forbidden)
+    results = search.choose_many(games)
+    timings = search.timings
+    assert timings.calls == 1 and timings.decisions == 2
+    assert timings.searched == sum(not result.forced for result in results)
+    assert timings.rollout_steps > 0 and timings.rounds > 0
+
+
+def test_multi_block_dealing_equals_individual_dealing(card_data):
+    from src.search.vector_determinization import deal_world_hands
+    from src.search.vector_root import SearchRootBuilder
+    from src.vector_engine.state import take_rows
+
+    cards, registry, rules = card_data
+    games = []
+    for seed, steps in ((91, 70), (92, 131), (93, 190)):
+        game = _make_game(cards, registry, seed=seed)
+        _advance(game, steps)
+        games.append(game)
+    roots_state, roots = SearchRootBuilder(rules).build(games)
+    sizes = [6, 4, 9]
+    worlds = np.concatenate([np.tile(np.arange(3, 3 + n // 3 + 1), 3)[:n] for n in sizes])
+    population = take_rows(roots_state, np.repeat(np.arange(3), sizes))
+    stops = np.cumsum(sizes)
+    deal_world_hands(
+        population, starts=stops - sizes, stops=stops,
+        viewers=[root.viewer for root in roots],
+        known_hands=np.stack([root.known_hand for root in roots]),
+        base_seeds=[11, 12, 13], worlds=worlds,
+    )
+    for block, (start, stop) in enumerate(zip(stops - sizes, stops)):
+        alone = take_rows(roots_state, np.full(sizes[block], block))
+        sample_world_hands(
+            alone, viewer=roots[block].viewer, known_hand=roots[block].known_hand,
+            worlds=worlds[start:stop], base_seed=11 + block,
+        )
+        assert np.array_equal(population.zones[start:stop], alone.zones)
+        assert np.array_equal(population.rng_state[start:stop], alone.rng_state)
+
+
+def test_dealt_hands_are_uniform_over_unseen_cards(card_data):
+    cards, registry, rules = card_data
+    game = _make_game(cards, registry, seed=94)
+    _advance(game, 170)
+    information = project_information_set(game)
+    viewer = information.viewer_index
+    opponent = 1 - viewer
+    root = from_games([information.canonical_game], rules, training_players=[viewer])
+    known = known_hand_counts(information, opponent, rules.num_cards)
+    unseen = (root.zones[0, opponent, ZONE_HAND] + root.zones[0, opponent, ZONE_DECK]).astype(np.int64)
+    top = np.bincount(
+        root.ordered_top[0, opponent, : root.ordered_top_count[0, opponent]].astype(np.int64),
+        minlength=rules.num_cards,
+    )
+    pool = unseen - known - top
+    k = int(root.zones[0, opponent, ZONE_HAND].sum() - known.sum())
+    m = int(pool.sum())
+    if k == 0 or k == m or np.count_nonzero(pool) < 2:
+        pytest.skip("position has no hidden hand choice")
+    worlds = 4000
+    state = tile_state(root, worlds)
+    sample_world_hands(state, viewer=viewer, known_hand=known, worlds=np.arange(worlds), base_seed=5)
+    dealt = state.zones[:, opponent, ZONE_HAND].astype(np.int64) - known
+    assert (dealt.sum(axis=1) == k).all()
+    for card in np.flatnonzero(pool):
+        p = pool[card] / m
+        expected = k * p
+        variance = k * p * (1 - p) * (m - k) / (m - 1)
+        standard_error = np.sqrt(variance / worlds)
+        assert abs(dealt[:, card].mean() - expected) < 5 * standard_error + 1e-9, card

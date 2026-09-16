@@ -4,7 +4,9 @@ Every arm plays the same seeded games with exact seat alternation: game
 ``index`` seats the searcher first when ``index`` is even. The baseline is the
 same checkpoint without search (greedy by default), so budget 0, where the
 searcher also plays greedily, is a fairness control. Game RNG streams depend
-only on the master seed and game index, so arms are paired by deal.
+only on the master seed and game index, so arms are paired by deal. Games run
+concurrently through :class:`~src.search.batched_games.BatchedGameRunner`;
+``batch_size`` games per process share each policy evaluation and search.
 """
 from __future__ import annotations
 
@@ -22,7 +24,6 @@ from dataclasses import asdict, dataclass
 SEARCH_NAME = "Search"
 BASELINE_NAME = "Baseline"
 BASELINES = ("greedy", "sampled", "heuristic")
-_STEP_LIMIT = 20_000
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,7 @@ class UpliftConfig:
     device: str = "cuda"
     workers: int = 1
     numba_threads: int = 2
+    batch_size: int = 256
 
     def __post_init__(self):
         if not self.budgets:
@@ -50,8 +52,15 @@ class UpliftConfig:
             raise ValueError(
                 f"baseline must be one of {', '.join(BASELINES)}, got {self.baseline!r}"
             )
-        if self.max_candidates < 1 or self.workers < 1 or self.numba_threads < 1:
-            raise ValueError("max_candidates, workers, and numba_threads must be positive")
+        if (
+            self.max_candidates < 1
+            or self.workers < 1
+            or self.numba_threads < 1
+            or self.batch_size < 1
+        ):
+            raise ValueError(
+                "max_candidates, workers, numba_threads, and batch_size must be positive"
+            )
 
 
 def game_seed(seed: int, index: int) -> int:
@@ -81,10 +90,11 @@ def _load_model(model_path: str, registry, device: str):
 
 
 class _Arena:
-    """Per-process cards, rules, policy, and one search per budget."""
+    """Per-process cards, rules, policy, search, and batched game runner."""
 
-    def __init__(self, config: UpliftConfig):
+    def __init__(self, config: UpliftConfig, model=None):
         from src.config import DataConfig, DeviceConfig
+        from src.search.batched_games import BatchedGameRunner
         from src.search.turn_search import TurnSearch, TurnSearchConfig
         from src.utils.logger import set_disabled
         from src.vector_engine.kernels import configure_numba_threads
@@ -98,85 +108,66 @@ class _Arena:
         self.cards = data.load_cards()
         self.registry = data.build_registry(self.cards)
         self.rules = compile_rules(self.cards, self.registry)
-        self.model = _load_model(config.model_path, self.registry, self.device)
-        self.searches = {
-            budget: TurnSearch(
-                self.model, self.rules, self.registry.card_index_map,
-                device=self.device,
-                config=TurnSearchConfig(
-                    budget=budget,
-                    max_candidates=config.max_candidates,
-                    seed=config.seed,
-                ),
-            )
-            for budget in config.budgets
-            if budget > 0
-        }
-
-    def _policy_agent(self, name: str, temperature: float):
-        from src.ai.policy_agent import PolicyAgent
-
-        return PolicyAgent(
-            name, self.model, self.registry.card_names,
-            self.registry.card_index_map, device=self.device,
-            temperature=temperature,
+        self.model = (
+            model if model is not None
+            else _load_model(config.model_path, self.registry, self.device)
+        )
+        search_budgets = [budget for budget in config.budgets if budget > 0]
+        self.search = TurnSearch(
+            self.model, self.rules, self.registry.card_index_map,
+            device=self.device,
+            config=TurnSearchConfig(
+                budget=max(search_budgets) if search_budgets else 1,
+                max_candidates=config.max_candidates,
+                seed=config.seed,
+            ),
+        )
+        self.runner = BatchedGameRunner(
+            cards=self.cards,
+            registry=self.registry,
+            model=self.model,
+            search=self.search,
+            device=self.device,
+            batch_size=config.batch_size,
         )
 
-    def play(self, budget: int, index: int) -> dict:
-        import torch
-
+    def spec(self, budget: int, index: int):
         from src.ai.heuristic_agent import HeuristicAgent
-        from src.engine.game import Game
-        from src.search.agent import SearchAgent
+        from src.search.batched_games import AgentSeat, GameSpec, PolicySeat, SearchSeat
 
-        seed = game_seed(self.config.seed, index)
-        torch.manual_seed(seed)
-        game = Game(
-            self.cards,
-            card_names=self.registry.card_names,
-            card_index_map=self.registry.card_index_map,
-        )
-        game.rng = random.Random(seed)
-        searcher = (
-            SearchAgent(SEARCH_NAME, self.searches[budget])
-            if budget > 0
-            else self._policy_agent(SEARCH_NAME, 0.0)
-        )
+        searcher = SearchSeat(budget) if budget > 0 else PolicySeat(0.0)
         if self.config.baseline == "heuristic":
-            baseline = HeuristicAgent(BASELINE_NAME)
+            baseline = AgentSeat(HeuristicAgent)
         else:
-            baseline = self._policy_agent(
-                BASELINE_NAME, 0.0 if self.config.baseline == "greedy" else 1.0
-            )
-        game.add_player(SEARCH_NAME, searcher)
-        game.add_player(BASELINE_NAME, baseline)
-        search_first = index % 2 == 0
-        game.start_game(
-            first_player_name=SEARCH_NAME if search_first else BASELINE_NAME
+            baseline = PolicySeat(0.0 if self.config.baseline == "greedy" else 1.0)
+        return GameSpec(
+            key=(budget, index),
+            seed=game_seed(self.config.seed, index),
+            players=((SEARCH_NAME, searcher), (BASELINE_NAME, baseline)),
+            first_player=SEARCH_NAME if index % 2 == 0 else BASELINE_NAME,
         )
-        started = time.perf_counter()
-        steps = 0
-        while not game.is_game_over:
-            action = game.current_player.make_decision(game)
-            game.apply_decision(action)
-            steps += 1
-            if steps > _STEP_LIMIT:
-                raise RuntimeError(f"game {index} exceeded {_STEP_LIMIT} decisions")
-        statistics = (
-            searcher.statistics.to_dict()
-            if budget > 0
-            else {"decisions": 0, "forced": 0, "deviations": 0, "rollouts": 0, "elapsed_s": 0.0}
-        )
-        return {
-            "budget": budget,
-            "index": index,
-            "search_first": search_first,
-            "search_won": game.get_winner() == SEARCH_NAME,
-            "turns": int(game.stats.total_turns),
-            "decisions": steps,
-            "elapsed_s": time.perf_counter() - started,
-            "search": statistics,
-        }
+
+    def play_many(self, tasks, record) -> None:
+        """Play every (budget, index) task, calling *record* with each finished row."""
+
+        def finish(outcome) -> None:
+            budget, index = outcome.key
+            statistics = outcome.search.get(SEARCH_NAME)
+            record({
+                "budget": budget,
+                "index": index,
+                "search_first": index % 2 == 0,
+                "search_won": outcome.winner == SEARCH_NAME,
+                "turns": outcome.turns,
+                "decisions": outcome.decisions,
+                "elapsed_s": outcome.elapsed_s,
+                "search": (
+                    statistics.to_dict() if statistics is not None
+                    else {"decisions": 0, "forced": 0, "deviations": 0, "rollouts": 0, "elapsed_s": 0.0}
+                ),
+            })
+
+        self.runner.run((self.spec(budget, index) for budget, index in tasks), finish)
 
 
 def _tasks(config: UpliftConfig, completed: set[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -192,8 +183,7 @@ def _worker_main(worker_id: int, config_dict: dict, tasks: list, results) -> Non
     try:
         config = UpliftConfig(**{**config_dict, "budgets": tuple(config_dict["budgets"])})
         arena = _Arena(config)
-        for budget, index in tasks:
-            results.put(("result", worker_id, arena.play(budget, index)))
+        arena.play_many(tasks, lambda row: results.put(("result", worker_id, row)))
         results.put(("done", worker_id, None))
     except BaseException:
         results.put(("error", worker_id, traceback.format_exc()))
@@ -274,11 +264,11 @@ def run_uplift(config: UpliftConfig, output_json: str | None = None, log_fn=prin
     """
     config_dict = asdict(config)
     # Worker topology does not change outcomes, so a journal can resume with
-    # a different process or thread count.
+    # a different process count, thread count, or batch size.
     identity = {
         key: (list(value) if key == "budgets" else value)
         for key, value in config_dict.items()
-        if key not in ("workers", "numba_threads")
+        if key not in ("workers", "numba_threads", "batch_size")
     }
     journal = f"{output_json}.games.jsonl" if output_json else None
     results: list[dict] = []
@@ -314,8 +304,7 @@ def run_uplift(config: UpliftConfig, output_json: str | None = None, log_fn=prin
 
     if tasks and config.workers == 1:
         arena = _Arena(config)
-        for budget, index in tasks:
-            record(arena.play(budget, index))
+        arena.play_many(tasks, record)
     elif tasks:
         context = mp.get_context("spawn")
         results_queue = context.Queue()

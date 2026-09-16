@@ -426,107 +426,155 @@ def from_games(
         raise ValueError("training_players length must match games")
 
     for game_index, game in enumerate(games):
-        if len(game.players) != NUM_PLAYERS:
-            raise ValueError("Gate 2 supports exactly two players")
-
-        for player_index, player in enumerate(game.players):
-            state.zones[game_index, player_index, ZONE_HAND] = _count_cards(
-                player.hand, rules.num_cards
-            )
-            state.zones[game_index, player_index, ZONE_DECK] = _count_cards(
-                player.deck, rules.num_cards
-            )
-            state.zones[
-                game_index, player_index, ZONE_DISCARD
-            ] = _count_cards(player.discard_pile, rules.num_cards)
-            # Scalar state intentionally encodes a newly played base in both
-            # played_cards and bases. Preserve that duplicate representation.
-            state.zones[
-                game_index, player_index, ZONE_PLAYED
-            ] = _count_cards(player.played_cards, rules.num_cards)
-            state.zones[game_index, player_index, ZONE_BASES] = _count_cards(
-                player.bases, rules.num_cards
-            )
-            state.trade[game_index, player_index] = player.trade
-            state.combat[game_index, player_index] = player.combat
-            state.health[game_index, player_index] = player.health
-            state.authority_gained[
-                game_index, player_index
-            ] = player.authority_gained
-            (
-                state.effect_state[game_index, player_index],
-                state.instance_rule_card[game_index, player_index],
-                state.instance_faction[game_index, player_index],
-            ) = _effect_instance_state(game, player_index, rules)
-            (
-                state.pending_mode[game_index, player_index],
-                state.pending_remaining[game_index, player_index],
-                state.pending_sources[game_index, player_index],
-                state.pending_mandatory[game_index, player_index],
-                state.pending_draw_on_complete[game_index, player_index],
-                state.pending_resolved[game_index, player_index],
-                state.pending_targets[game_index, player_index],
-                state.pending_source_card[game_index, player_index],
-                state.pending_source_instance[game_index, player_index],
-            ) = _pending_state(player, rules)
-            state.pending_count[game_index, player_index] = len(
-                player.pending_action_sets
-            )
-            state.discard_debt[
-                game_index, player_index
-            ] = player.pending_start_of_turn_discards
-            state.next_ship_to_top[
-                game_index, player_index
-            ] = player.next_ship_to_top
-            if len(player.ordered_top) > MAX_ORDERED_TOP:
-                raise ValueError("ordered top-deck segment exceeds capacity")
-            state.ordered_top_count[
-                game_index, player_index
-            ] = len(player.ordered_top)
-            for position, card in enumerate(player.ordered_top):
-                state.ordered_top[
-                    game_index, player_index, position
-                ] = card.index
-
-        if len(game.trade_row) > state.trade_row.shape[1]:
-            raise ValueError("trade row exceeds configured width")
-        for slot, card in enumerate(game.trade_row):
-            state.trade_row[game_index, slot] = card.index
-        state.trade_deck[game_index] = _count_cards(
-            game.trade_deck, rules.num_cards
+        write_game_row(
+            state,
+            game_index,
+            game,
+            rules,
+            training_player=training_players[game_index],
+            rng_seed=rng_seed,
         )
-        state.explorer_count[game_index] = len(game.explorer_pile)
-        state.current_player[game_index] = _player_index(
-            game, game.current_player
+    return state
+
+
+def write_game_row(
+    state: VectorState,
+    game_index: int,
+    game: Game,
+    rules: CompiledRules,
+    *,
+    training_player: int,
+    rng_seed: int = 0,
+    hand_deck_counts: tuple[
+        tuple[np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]
+    ] | None = None,
+    trade_deck_counts: np.ndarray | None = None,
+) -> None:
+    """Write one scalar game into row *game_index* of *state*.
+
+    Hand, deck, and trade-deck counts come from the game's true zones unless
+    ``hand_deck_counts`` (per player) and ``trade_deck_counts`` supply them.
+    Search roots pass public allocations so hidden zones are never read.
+    """
+    if len(game.players) != NUM_PLAYERS:
+        raise ValueError("Gate 2 supports exactly two players")
+
+    for player_index, player in enumerate(game.players):
+        if hand_deck_counts is None:
+            hand = _count_cards(player.hand, rules.num_cards)
+            deck = _count_cards(player.deck, rules.num_cards)
+        else:
+            hand, deck = hand_deck_counts[player_index]
+        state.zones[game_index, player_index, ZONE_HAND] = hand
+        state.zones[game_index, player_index, ZONE_DECK] = deck
+        state.zones[
+            game_index, player_index, ZONE_DISCARD
+        ] = _count_cards(player.discard_pile, rules.num_cards)
+        # Scalar state intentionally encodes a newly played base in both
+        # played_cards and bases. Preserve that duplicate representation.
+        state.zones[
+            game_index, player_index, ZONE_PLAYED
+        ] = _count_cards(player.played_cards, rules.num_cards)
+        state.zones[game_index, player_index, ZONE_BASES] = _count_cards(
+            player.bases, rules.num_cards
         )
-        state.first_player[game_index] = next(
+        state.trade[game_index, player_index] = player.trade
+        state.combat[game_index, player_index] = player.combat
+        state.health[game_index, player_index] = player.health
+        state.authority_gained[
+            game_index, player_index
+        ] = player.authority_gained
+        (
+            state.effect_state[game_index, player_index],
+            state.instance_rule_card[game_index, player_index],
+            state.instance_faction[game_index, player_index],
+        ) = _effect_instance_state(game, player_index, rules)
+        (
+            state.pending_mode[game_index, player_index],
+            state.pending_remaining[game_index, player_index],
+            state.pending_sources[game_index, player_index],
+            state.pending_mandatory[game_index, player_index],
+            state.pending_draw_on_complete[game_index, player_index],
+            state.pending_resolved[game_index, player_index],
+            state.pending_targets[game_index, player_index],
+            state.pending_source_card[game_index, player_index],
+            state.pending_source_instance[game_index, player_index],
+        ) = _pending_state(player, rules)
+        state.pending_count[game_index, player_index] = len(
+            player.pending_action_sets
+        )
+        state.discard_debt[
+            game_index, player_index
+        ] = player.pending_start_of_turn_discards
+        state.next_ship_to_top[
+            game_index, player_index
+        ] = player.next_ship_to_top
+        if len(player.ordered_top) > MAX_ORDERED_TOP:
+            raise ValueError("ordered top-deck segment exceeds capacity")
+        state.ordered_top_count[
+            game_index, player_index
+        ] = len(player.ordered_top)
+        for position, card in enumerate(player.ordered_top):
+            state.ordered_top[
+                game_index, player_index, position
+            ] = card.index
+
+    if len(game.trade_row) > state.trade_row.shape[1]:
+        raise ValueError("trade row exceeds configured width")
+    for slot, card in enumerate(game.trade_row):
+        state.trade_row[game_index, slot] = card.index
+    state.trade_deck[game_index] = (
+        _count_cards(game.trade_deck, rules.num_cards)
+        if trade_deck_counts is None
+        else trade_deck_counts
+    )
+    state.explorer_count[game_index] = len(game.explorer_pile)
+    state.current_player[game_index] = _player_index(
+        game, game.current_player
+    )
+    state.first_player[game_index] = next(
+        (
+            index
+            for index, player in enumerate(game.players)
+            if player.name == game.first_player_name
+        ),
+        0,
+    )
+    state.training_player[game_index] = training_player
+    state.turns[game_index] = game.stats.total_turns
+    state.done[game_index] = game.is_game_over
+    winner_name = game.get_winner() if game.is_game_over else None
+    if winner_name:
+        state.winner[game_index] = next(
             (
                 index
                 for index, player in enumerate(game.players)
-                if player.name == game.first_player_name
+                if player.name == winner_name
             ),
-            0,
+            NO_WINNER,
         )
-        state.training_player[game_index] = training_players[game_index]
-        state.turns[game_index] = game.stats.total_turns
-        state.done[game_index] = game.is_game_over
-        winner_name = game.get_winner() if game.is_game_over else None
-        if winner_name:
-            state.winner[game_index] = next(
-                (
-                    index
-                    for index, player in enumerate(game.players)
-                    if player.name == winner_name
-                ),
-                NO_WINNER,
-            )
-        state.hand_size[game_index] = game.config.hand_size
-        state.turn_cap[game_index] = game.config.turn_cap
-        state.rng_state[game_index] = (
-            (rng_seed + game_index + 1) * 1_103_515_245
-        ) & 0x7FFF_FFFF
+    state.hand_size[game_index] = game.config.hand_size
+    state.turn_cap[game_index] = game.config.turn_cap
+    state.rng_state[game_index] = (
+        (rng_seed + game_index + 1) * 1_103_515_245
+    ) & 0x7FFF_FFFF
 
-    return state
+
+def take_rows(state: VectorState, rows: np.ndarray) -> VectorState:
+    """Gather game rows into a new population, in the given order."""
+    rows = np.asarray(rows, dtype=np.int64)
+    if rows.ndim != 1 or len(rows) == 0:
+        raise ValueError("rows must be a non-empty rank-1 index array")
+    values = {}
+    for field in fields(state):
+        value = getattr(state, field.name)
+        if isinstance(value, np.ndarray):
+            values[field.name] = np.take(value, rows, axis=0)
+        elif field.name == "games":
+            values[field.name] = len(rows)
+        else:
+            values[field.name] = value
+    return VectorState(**values)
 
 
 def canonical_scalar_snapshot(

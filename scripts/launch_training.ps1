@@ -127,9 +127,11 @@ $workload = if ($Command) {
 } else {
     "`"$python`" -u -m src train $TrainArgs"
 }
+# Group the workload so the log captures every command of a chained
+# -Command (for example "a && b"), not only the last one.
 $taskCommand = (
     "set `"PYTHONPATH=$Repo`" && cd /d `"$Repo`" && " +
-    "$workload > `"$log`" 2>&1"
+    "($workload) > `"$log`" 2>&1"
 )
 $encodedCommand = [Convert]::ToBase64String(
     [Text.Encoding]::UTF8.GetBytes($taskCommand)

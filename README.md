@@ -209,10 +209,18 @@ spends a fixed rollout budget. Results depend only on public information; see
 At 64 rollouts per decision it beats the same checkpoint playing greedily on
 56.4% of paired deals (+44 Elo; [`results/search_uplift.md`](results/search_uplift.md)).
 
+Search roots are written straight from public counts
+(`src/search/vector_root.py`) without copying games, and
+`TurnSearch.choose_many` searches many games' decisions in one shared vector
+population, so a rollout step costs one policy evaluation for all of them.
+`src/search/batched_games.py` plays hundreds of games concurrently with
+batched policy and search decisions; see
+[`docs/decisions/0011-batched-search-and-count-roots.md`](docs/decisions/0011-batched-search-and-count-roots.md).
+
 ```bash
 # Search at several budgets against the same checkpoint playing greedily
 python -m src search-eval --model results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth \
-    --budgets 0 16 64 256 --games 1000 --workers 8 --output-json uplift.json
+    --budgets 0 16 64 256 --games 1000 --batch-size 1024 --output-json uplift.json
 ```
 
 ### Measuring rollout performance

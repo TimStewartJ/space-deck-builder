@@ -44,13 +44,13 @@ class SearchAgent(Agent):
         self.statistics = SearchStatistics()
 
     def make_decision(self, game_state):
-        result = self.search.choose(game_state)
         context = build_action_context(
             game_state,
             game_state.current_player,
             self.search.card_index_map,
             self.search.action_dim,
         )
+        result = self.search.choose(game_state, context)
         action = context.resolvers.get(result.action)
         if action is None:
             raise RuntimeError(
