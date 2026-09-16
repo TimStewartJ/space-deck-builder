@@ -1,0 +1,41 @@
+{
+  "config": {
+    "mode": "games",
+    "model": "results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth",
+    "budget": 64,
+    "max_candidates": 8,
+    "batch_sizes": [
+      64,
+      256
+    ],
+    "min_decisions": 256,
+    "games": 128,
+    "numba_threads": 4,
+    "device": "cuda",
+    "seed": 0,
+    "output": "logs\\bench_search\\games_t4.json"
+  },
+  "device": "cuda",
+  "result": {
+    "rows": [
+      {
+        "batch_size": 64,
+        "games": 128,
+        "elapsed_s": 88.46896019999986,
+        "games_per_min": 86.81010811744584,
+        "searched_decisions": 15645,
+        "searched_decisions_per_s": 176.84168509081252,
+        "win_rate": 0.6171875
+      },
+      {
+        "batch_size": 256,
+        "games": 128,
+        "elapsed_s": 66.88321429999996,
+        "games_per_min": 114.82701721768184,
+        "searched_decisions": 15645,
+        "searched_decisions_per_s": 233.91519327742608,
+        "win_rate": 0.6171875
+      }
+    ]
+  }
+}

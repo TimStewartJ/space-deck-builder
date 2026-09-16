@@ -46,6 +46,11 @@ from src.vector_engine.policy import suppress_redundant_end_turn
 from src.vector_engine.rules import CompiledRules
 from src.vector_engine.state import NO_WINNER, VectorState, take_rows
 
+# Identifies how search samples worlds and seeds decisions. Results recorded
+# under a different version play different search worlds on the same deals
+# and must not be mixed.
+SEARCH_IMPLEMENTATION = "batched-count-roots-v1"
+
 
 @dataclass(frozen=True)
 class TurnSearchConfig:
@@ -87,8 +92,9 @@ class SearchResult:
     """One searched decision.
 
     ``fingerprint`` is the public root digest that seeds the search.
-    ``elapsed_s`` is an equal share of the wall time of the batch that
-    searched this decision.
+    ``elapsed_s`` attributes the wall time of the batch that searched this
+    decision: root work is shared equally by the batch's decisions, and
+    rollout work is shared in proportion to rollouts.
     """
 
     action: int
@@ -297,6 +303,7 @@ class TurnSearch:
         observations = engine.materialize_current_player_observations().copy()
         root_logits = self.evaluator.logits(observations, masks)
         self.timings.root_policy_s += time.perf_counter() - phase
+        root_elapsed = time.perf_counter() - started
 
         forced: dict[int, tuple[int, int]] = {}
         plans: list[_Plan] = []
@@ -363,7 +370,12 @@ class TurnSearch:
             active = [plan for plan in active if not plan.finished]
 
         elapsed = time.perf_counter() - started
-        share = elapsed / count
+        # Root work is shared equally; rollout work is attributed in proportion
+        # to each decision's rollouts, so decisions with different budgets in
+        # one call report comparable latencies.
+        root_share = root_elapsed / count
+        total_rollouts = sum(plan.used for plan in plans)
+        rollout_elapsed = max(0.0, elapsed - root_elapsed)
         results: list[SearchResult | None] = [None] * count
         for decision, (action, greedy) in forced.items():
             results[decision] = SearchResult(
@@ -373,7 +385,7 @@ class TurnSearch:
                 rollouts=0,
                 candidates=(),
                 fingerprint=roots[decision].digest,
-                elapsed_s=share,
+                elapsed_s=root_share,
             )
         for plan in plans:
             row = root_logits[plan.decision]
@@ -397,7 +409,10 @@ class TurnSearch:
                     for action in evaluated
                 ),
                 fingerprint=roots[plan.decision].digest,
-                elapsed_s=share,
+                elapsed_s=root_share + (
+                    rollout_elapsed * plan.used / total_rollouts
+                    if total_rollouts else 0.0
+                ),
             )
         self.timings.calls += 1
         self.timings.decisions += count

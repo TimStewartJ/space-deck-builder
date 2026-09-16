@@ -682,3 +682,20 @@ def test_dealt_hands_are_uniform_over_unseen_cards(card_data):
         variance = k * p * (1 - p) * (m - k) / (m - 1)
         standard_error = np.sqrt(variance / worlds)
         assert abs(dealt[:, card].mean() - expected) < 5 * standard_error + 1e-9, card
+
+
+def test_elapsed_time_is_attributed_by_rollouts_within_a_batch(card_data):
+    cards, registry, rules = card_data
+    games = _choice_games(cards, registry, ((101, 90), (102, 141)))
+    search = TurnSearch(
+        _exact_value_policy(get_action_space_size(registry.card_names)),
+        rules, registry.card_index_map, device="cpu",
+        config=TurnSearchConfig(budget=64, max_candidates=4, seed=1),
+    )
+    results = search.choose_many(games, budgets=[2, 48])
+    if any(result.forced for result in results):
+        pytest.skip("fixture reached a forced decision")
+    small, large = results
+    assert small.rollouts < large.rollouts
+    assert large.elapsed_s > small.elapsed_s
+    assert small.elapsed_s + large.elapsed_s == pytest.approx(search.timings.total_s, rel=1e-6)

@@ -10,6 +10,13 @@ release ([`optimized_selfplay_baseline.md`](optimized_selfplay_baseline.md))
 and summarized by
 [`search_uplift/summarize_search_uplift.py`](search_uplift/summarize_search_uplift.py)
 
+> **Implementation note.** These games were produced by the unbatched search
+> at `1849b19`. The batched implementation
+> ([`batched_search.md`](batched_search.md)) samples different search worlds
+> on the same deals, so rerunning the script reproduces the design, not these
+> exact games; its measured strength matches within −0.8pp (95% CI −2.1 to
+> +0.5) over 2,000 paired deals.
+
 ## Question
 
 Does information-safe, turn-bounded search guided by a checkpoint's own policy

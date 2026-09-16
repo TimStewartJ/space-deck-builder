@@ -263,13 +263,18 @@ def run_uplift(config: UpliftConfig, output_json: str | None = None, log_fn=prin
     resumed, so an interrupted run continues where it stopped.
     """
     config_dict = asdict(config)
+    from src.search.turn_search import SEARCH_IMPLEMENTATION
+
     # Worker topology does not change outcomes, so a journal can resume with
-    # a different process count, thread count, or batch size.
+    # a different process count, thread count, or batch size. The search
+    # implementation does, so journals from another implementation are
+    # rejected.
     identity = {
         key: (list(value) if key == "budgets" else value)
         for key, value in config_dict.items()
         if key not in ("workers", "numba_threads", "batch_size")
     }
+    identity["search_implementation"] = SEARCH_IMPLEMENTATION
     journal = f"{output_json}.games.jsonl" if output_json else None
     results: list[dict] = []
     if journal and os.path.exists(journal):
@@ -347,7 +352,11 @@ def run_uplift(config: UpliftConfig, output_json: str | None = None, log_fn=prin
 
     results.sort(key=lambda row: (row["budget"], row["index"]))
     payload = {
-        "config": {**config_dict, "budgets": list(config.budgets)},
+        "config": {
+            **config_dict,
+            "budgets": list(config.budgets),
+            "search_implementation": SEARCH_IMPLEMENTATION,
+        },
         "summary": summarize(results, config.budgets),
         "elapsed_s": time.perf_counter() - started,
         "games": results,

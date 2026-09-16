@@ -1,0 +1,85 @@
+{
+  "config": {
+    "mode": "decisions",
+    "model": "results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth",
+    "budget": 64,
+    "max_candidates": 8,
+    "batch_sizes": [
+      256,
+      1024,
+      2048
+    ],
+    "min_decisions": 2048,
+    "games": 128,
+    "numba_threads": 4,
+    "device": "cuda",
+    "seed": 0,
+    "output": "logs\\bench_search\\decisions_v2.json"
+  },
+  "device": "cuda",
+  "result": {
+    "positions_s": 91.46620039999834,
+    "rows": [
+      {
+        "batch_size": 256,
+        "repeats": 8,
+        "decisions": 2048,
+        "searched": 2048,
+        "elapsed_s": 4.1425622000024305,
+        "decisions_per_s": 494.3800240341107,
+        "ms_per_searched_decision": 2.0227354492199368,
+        "timings_per_call_ms": {
+          "roots_s": 53.89316249966214,
+          "root_policy_s": 4.134462499678193,
+          "populate_s": 60.09737500062329,
+          "engine_s": 92.65692500230216,
+          "policy_s": 256.07777499953954,
+          "values_s": 32.243225003185216,
+          "total_s": 515.5788250003752
+        },
+        "rollout_steps_per_call": 84.0,
+        "rollout_rows_per_step": 1272.8214285714287
+      },
+      {
+        "batch_size": 1024,
+        "repeats": 2,
+        "decisions": 2048,
+        "searched": 2048,
+        "elapsed_s": 3.352720599999884,
+        "decisions_per_s": 610.8472027165254,
+        "ms_per_searched_decision": 1.6370706054686934,
+        "timings_per_call_ms": {
+          "roots_s": 208.83004999996047,
+          "root_policy_s": 7.920050004031509,
+          "populate_s": 249.28575000012643,
+          "engine_s": 357.1172499869135,
+          "policy_s": 647.0775500129093,
+          "values_s": 131.12714999806485,
+          "total_s": 1665.8236499970371
+        },
+        "rollout_steps_per_call": 97.0,
+        "rollout_rows_per_step": 4399.123711340206
+      },
+      {
+        "batch_size": 2048,
+        "repeats": 1,
+        "decisions": 2048,
+        "searched": 2048,
+        "elapsed_s": 3.5760815999965416,
+        "decisions_per_s": 572.6938669413977,
+        "ms_per_searched_decision": 1.7461335937483113,
+        "timings_per_call_ms": {
+          "roots_s": 416.14880000270205,
+          "root_policy_s": 13.446199998725206,
+          "populate_s": 478.0369000000064,
+          "engine_s": 681.3267000252381,
+          "policy_s": 1171.3580999785336,
+          "values_s": 392.04139999492327,
+          "total_s": 3557.710199995199
+        },
+        "rollout_steps_per_call": 97.0,
+        "rollout_rows_per_step": 8619.567010309278
+      }
+    ]
+  }
+}

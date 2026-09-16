@@ -1,0 +1,127 @@
+{
+  "config": {
+    "mode": "decisions",
+    "model": "results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth",
+    "budget": 64,
+    "max_candidates": 8,
+    "batch_sizes": [
+      1,
+      16,
+      64,
+      256,
+      1024
+    ],
+    "min_decisions": 256,
+    "games": 128,
+    "numba_threads": 4,
+    "device": "cuda",
+    "seed": 0,
+    "output": "logs\\bench_search\\decisions_t4.json"
+  },
+  "device": "cuda",
+  "result": {
+    "positions_s": 45.72055679999903,
+    "rows": [
+      {
+        "batch_size": 1,
+        "repeats": 256,
+        "decisions": 256,
+        "searched": 256,
+        "elapsed_s": 3.8097371000003477,
+        "decisions_per_s": 67.19623776663661,
+        "ms_per_searched_decision": 14.881785546876358,
+        "timings_per_call_ms": {
+          "roots_s": 0.5646796875282689,
+          "root_policy_s": 2.1108531250320084,
+          "populate_s": 1.267420312615286,
+          "engine_s": 0.7563367188083703,
+          "policy_s": 5.999054687379157,
+          "values_s": 3.842887499942549,
+          "total_s": 14.83385312515395
+        },
+        "rollout_steps_per_call": 3.0,
+        "rollout_rows_per_step": 18.666666666666668
+      },
+      {
+        "batch_size": 16,
+        "repeats": 16,
+        "decisions": 256,
+        "searched": 256,
+        "elapsed_s": 1.9944423000015377,
+        "decisions_per_s": 128.35668397115455,
+        "ms_per_searched_decision": 7.7907902343810065,
+        "timings_per_call_ms": {
+          "roots_s": 6.510756250236227,
+          "root_policy_s": 2.7660687501338543,
+          "populate_s": 13.130243750538284,
+          "engine_s": 10.780912495420125,
+          "policy_s": 81.03295625460305,
+          "values_s": 8.600593750770713,
+          "total_s": 124.39842499975384
+        },
+        "rollout_steps_per_call": 35.0,
+        "rollout_rows_per_step": 115.54285714285714
+      },
+      {
+        "batch_size": 64,
+        "repeats": 4,
+        "decisions": 256,
+        "searched": 256,
+        "elapsed_s": 1.23040889999902,
+        "decisions_per_s": 208.06091373380337,
+        "ms_per_searched_decision": 4.806284765621172,
+        "timings_per_call_ms": {
+          "roots_s": 21.266700000523997,
+          "root_policy_s": 2.806475000397768,
+          "populate_s": 47.17152499870281,
+          "engine_s": 32.646149997162865,
+          "policy_s": 185.4676000020845,
+          "values_s": 12.800174999028968,
+          "total_s": 306.8378000007215
+        },
+        "rollout_steps_per_call": 77.0,
+        "rollout_rows_per_step": 335.5064935064935
+      },
+      {
+        "batch_size": 256,
+        "repeats": 1,
+        "decisions": 256,
+        "searched": 256,
+        "elapsed_s": 0.736954700001661,
+        "decisions_per_s": 347.3754899716672,
+        "ms_per_searched_decision": 2.878729296881488,
+        "timings_per_call_ms": {
+          "roots_s": 88.7499000018579,
+          "root_policy_s": 3.7663000002794433,
+          "populate_s": 176.5460999959032,
+          "engine_s": 112.5782999661169,
+          "policy_s": 288.6872000308358,
+          "values_s": 45.722000002569985,
+          "total_s": 734.1516000014963
+        },
+        "rollout_steps_per_call": 80.0,
+        "rollout_rows_per_step": 1337.9125
+      },
+      {
+        "batch_size": 1024,
+        "repeats": 1,
+        "decisions": 1024,
+        "searched": 1024,
+        "elapsed_s": 2.375325699998939,
+        "decisions_per_s": 431.0987752123666,
+        "ms_per_searched_decision": 2.319654003905214,
+        "timings_per_call_ms": {
+          "roots_s": 296.1974999998347,
+          "root_policy_s": 8.196700000553392,
+          "populate_s": 676.4249000007112,
+          "engine_s": 446.4544999973441,
+          "policy_s": 692.6068000029773,
+          "values_s": 166.72660000040196,
+          "total_s": 2359.3131000016
+        },
+        "rollout_steps_per_call": 92.0,
+        "rollout_rows_per_step": 4636.402173913043
+      }
+    ]
+  }
+}

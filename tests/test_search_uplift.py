@@ -97,3 +97,19 @@ def test_run_uplift_plays_paired_exact_seat_games_and_resumes(tmp_path):
 
     with pytest.raises(ValueError, match="different configuration"):
         run_uplift(UpliftConfig(**{**config.__dict__, "seed": 4}), output_json=str(output), log_fn=logs.append)
+
+
+def test_run_uplift_rejects_journals_from_another_search_implementation(tmp_path):
+    config = UpliftConfig(
+        model_path=str(CHECKPOINT), budgets=(0,), games=2, device="cpu", workers=1,
+    )
+    output = tmp_path / "uplift.json"
+    identity = {
+        key: (list(value) if key == "budgets" else value)
+        for key, value in config.__dict__.items()
+        if key not in ("workers", "numba_threads", "batch_size")
+    }
+    (tmp_path / "uplift.json.games.jsonl").write_text(json.dumps({"config": identity}) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="different configuration"):
+        run_uplift(config, output_json=str(output), log_fn=lambda *_: None)

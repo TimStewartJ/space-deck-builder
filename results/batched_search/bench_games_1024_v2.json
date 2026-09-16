@@ -1,0 +1,63 @@
+{
+  "config": {
+    "mode": "games",
+    "model": "results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth",
+    "budget": 64,
+    "max_candidates": 8,
+    "batch_sizes": [
+      1024
+    ],
+    "min_decisions": 256,
+    "games": 1024,
+    "numba_threads": 4,
+    "device": "cuda",
+    "seed": 0,
+    "output": "logs\\bench_search\\games_1024_v2.json"
+  },
+  "device": "cuda",
+  "result": {
+    "rows": [
+      {
+        "batch_size": 1024,
+        "games": 1024,
+        "elapsed_s": 261.13563520000025,
+        "games_per_min": 235.28002967861485,
+        "searched_decisions": 127630,
+        "searched_decisions_per_s": 488.7498402975523,
+        "win_rate": 0.546875,
+        "runner_timings": {
+          "games": 1024,
+          "agent_decisions": 0,
+          "policy_steps": 5714,
+          "policy_decisions": 139474,
+          "search_steps": 409,
+          "search_decisions": 142343,
+          "start_s": 1.4491013001315878,
+          "agents_s": 0.097394499614893,
+          "policy_prepare_s": 4.586192700182437,
+          "policy_eval_s": 13.425686799528194,
+          "policy_apply_s": 1.7254755000467412,
+          "search_prepare_s": 2.2057723999896552,
+          "search_s": 234.61157999999705,
+          "search_apply_s": 1.3514617999608163,
+          "total_s": 261.1355563000034
+        },
+        "search_timings": {
+          "calls": 409,
+          "decisions": 142343,
+          "searched": 127630,
+          "rounds": 1199,
+          "rollout_steps": 34971,
+          "rollout_rows": 54454544,
+          "roots_s": 30.901169199969445,
+          "root_policy_s": 1.7243950999618392,
+          "populate_s": 29.698130800061335,
+          "engine_s": 46.93225170050573,
+          "policy_s": 103.84522009954526,
+          "values_s": 11.628220600170607,
+          "total_s": 232.04594070000167
+        }
+      }
+    ]
+  }
+}
