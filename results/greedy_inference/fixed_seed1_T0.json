@@ -1,0 +1,39 @@
+{
+  "per_opponent": [
+    {
+      "opponent": "random",
+      "wins": 5000,
+      "games": 5000,
+      "win_rate": 1.0,
+      "avg_steps": 130.8596,
+      "first_player_games": 2500,
+      "second_player_games": 2500
+    },
+    {
+      "opponent": "heuristic",
+      "wins": 4651,
+      "games": 5000,
+      "win_rate": 0.9302,
+      "avg_steps": 130.3628,
+      "first_player_games": 2500,
+      "second_player_games": 2500
+    },
+    {
+      "opponent": "simple",
+      "wins": 4971,
+      "games": 5000,
+      "win_rate": 0.9942,
+      "avg_steps": 128.03,
+      "first_player_games": 2500,
+      "second_player_games": 2500
+    }
+  ],
+  "total_wins": 14622,
+  "total_games": 15000,
+  "overall_win_rate": 0.9748,
+  "elapsed_seconds": 32.97526690000086,
+  "temperature": 0.0,
+  "model": "results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed1.pth",
+  "seed": 1,
+  "opponents": "random,heuristic,simple"
+}

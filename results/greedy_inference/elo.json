@@ -1,0 +1,1014 @@
+{
+  "anchor": "fixed_seed0",
+  "anchor_elo": 1000.0,
+  "games_per_pair": 1000,
+  "participants": [
+    {
+      "index": 0,
+      "label": "fixed_seed0",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed0.pth",
+      "temperature": 1.0,
+      "elo": 1000.0,
+      "wins": 6730,
+      "losses": 7270,
+      "games": 14000
+    },
+    {
+      "index": 1,
+      "label": "fixed_seed0@T0",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed0.pth",
+      "temperature": 0.0,
+      "elo": 1073.7407784314512,
+      "wins": 8046,
+      "losses": 5954,
+      "games": 14000
+    },
+    {
+      "index": 2,
+      "label": "fixed_seed1",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed1.pth",
+      "temperature": 1.0,
+      "elo": 1003.0894633335081,
+      "wins": 6851,
+      "losses": 7149,
+      "games": 14000
+    },
+    {
+      "index": 3,
+      "label": "fixed_seed1@T0",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed1.pth",
+      "temperature": 0.0,
+      "elo": 1069.666786881849,
+      "wins": 7976,
+      "losses": 6024,
+      "games": 14000
+    },
+    {
+      "index": 4,
+      "label": "fixed_seed2",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed2.pth",
+      "temperature": 1.0,
+      "elo": 996.8119451335679,
+      "wins": 6748,
+      "losses": 7252,
+      "games": 14000
+    },
+    {
+      "index": 5,
+      "label": "fixed_seed2@T0",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed2.pth",
+      "temperature": 0.0,
+      "elo": 1071.1221158284272,
+      "wins": 8001,
+      "losses": 5999,
+      "games": 14000
+    },
+    {
+      "index": 6,
+      "label": "selfplay_seed0",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth",
+      "temperature": 1.0,
+      "elo": 1148.111035799826,
+      "wins": 9315,
+      "losses": 4685,
+      "games": 14000
+    },
+    {
+      "index": 7,
+      "label": "selfplay_seed0@T0",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth",
+      "temperature": 0.0,
+      "elo": 1189.9400305276608,
+      "wins": 9999,
+      "losses": 4001,
+      "games": 14000
+    },
+    {
+      "index": 8,
+      "label": "selfplay_seed1",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed1.pth",
+      "temperature": 1.0,
+      "elo": 1106.7325414462105,
+      "wins": 8613,
+      "losses": 5387,
+      "games": 14000
+    },
+    {
+      "index": 9,
+      "label": "selfplay_seed1@T0",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed1.pth",
+      "temperature": 0.0,
+      "elo": 1151.764616103217,
+      "wins": 9376,
+      "losses": 4624,
+      "games": 14000
+    },
+    {
+      "index": 10,
+      "label": "selfplay_seed2",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed2.pth",
+      "temperature": 1.0,
+      "elo": 1140.8384524248959,
+      "wins": 9193,
+      "losses": 4807,
+      "games": 14000
+    },
+    {
+      "index": 11,
+      "label": "selfplay_seed2@T0",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed2.pth",
+      "temperature": 0.0,
+      "elo": 1183.9988254837035,
+      "wins": 9904,
+      "losses": 4096,
+      "games": 14000
+    },
+    {
+      "index": 12,
+      "label": "random",
+      "kind": "builtin",
+      "path": "",
+      "temperature": null,
+      "elo": -98.84614007782582,
+      "wins": 89,
+      "losses": 13911,
+      "games": 14000
+    },
+    {
+      "index": 13,
+      "label": "heuristic",
+      "kind": "builtin",
+      "path": "",
+      "temperature": null,
+      "elo": 674.6771492947656,
+      "wins": 2884,
+      "losses": 11116,
+      "games": 14000
+    },
+    {
+      "index": 14,
+      "label": "simple",
+      "kind": "builtin",
+      "path": "",
+      "temperature": null,
+      "elo": 367.13532508785903,
+      "wins": 1275,
+      "losses": 12725,
+      "games": 14000
+    }
+  ],
+  "pairings": [
+    {
+      "i": 0,
+      "j": 1,
+      "label_i": "fixed_seed0",
+      "label_j": "fixed_seed0@T0",
+      "wins_i": 374,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 2,
+      "label_i": "fixed_seed0",
+      "label_j": "fixed_seed1",
+      "wins_i": 476,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 3,
+      "label_i": "fixed_seed0",
+      "label_j": "fixed_seed1@T0",
+      "wins_i": 390,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 4,
+      "label_i": "fixed_seed0",
+      "label_j": "fixed_seed2",
+      "wins_i": 522,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 5,
+      "label_i": "fixed_seed0",
+      "label_j": "fixed_seed2@T0",
+      "wins_i": 384,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 6,
+      "label_i": "fixed_seed0",
+      "label_j": "selfplay_seed0",
+      "wins_i": 294,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 7,
+      "label_i": "fixed_seed0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 217,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 8,
+      "label_i": "fixed_seed0",
+      "label_j": "selfplay_seed1",
+      "wins_i": 353,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 9,
+      "label_i": "fixed_seed0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 290,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 10,
+      "label_i": "fixed_seed0",
+      "label_j": "selfplay_seed2",
+      "wins_i": 316,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 11,
+      "label_i": "fixed_seed0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 236,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 12,
+      "label_i": "fixed_seed0",
+      "label_j": "random",
+      "wins_i": 1000,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 13,
+      "label_i": "fixed_seed0",
+      "label_j": "heuristic",
+      "wins_i": 895,
+      "games": 1000
+    },
+    {
+      "i": 0,
+      "j": 14,
+      "label_i": "fixed_seed0",
+      "label_j": "simple",
+      "wins_i": 983,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 2,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "fixed_seed1",
+      "wins_i": 590,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 3,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "fixed_seed1@T0",
+      "wins_i": 506,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 4,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "fixed_seed2",
+      "wins_i": 584,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 5,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "fixed_seed2@T0",
+      "wins_i": 499,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 6,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "selfplay_seed0",
+      "wins_i": 403,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 7,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 369,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 8,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "selfplay_seed1",
+      "wins_i": 454,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 9,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 383,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 10,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "selfplay_seed2",
+      "wins_i": 404,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 11,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 330,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 12,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "random",
+      "wins_i": 1000,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 13,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "heuristic",
+      "wins_i": 908,
+      "games": 1000
+    },
+    {
+      "i": 1,
+      "j": 14,
+      "label_i": "fixed_seed0@T0",
+      "label_j": "simple",
+      "wins_i": 990,
+      "games": 1000
+    },
+    {
+      "i": 2,
+      "j": 3,
+      "label_i": "fixed_seed1",
+      "label_j": "fixed_seed1@T0",
+      "wins_i": 371,
+      "games": 1000
+    },
+    {
+      "i": 2,
+      "j": 4,
+      "label_i": "fixed_seed1",
+      "label_j": "fixed_seed2",
+      "wins_i": 531,
+      "games": 1000
+    },
+    {
+      "i": 2,
+      "j": 5,
+      "label_i": "fixed_seed1",
+      "label_j": "fixed_seed2@T0",
+      "wins_i": 389,
+      "games": 1000
+    },
+    {
+      "i": 2,
+      "j": 6,
+      "label_i": "fixed_seed1",
+      "label_j": "selfplay_seed0",
+      "wins_i": 321,
+      "games": 1000
+    },
+    {
+      "i": 2,
+      "j": 7,
+      "label_i": "fixed_seed1",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 241,
+      "games": 1000
+    },
+    {
+      "i": 2,
+      "j": 8,
+      "label_i": "fixed_seed1",
+      "label_j": "selfplay_seed1",
+      "wins_i": 344,
+      "games": 1000
+    },
+    {
+      "i": 2,
+      "j": 9,
+      "label_i": "fixed_seed1",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 273,
+      "games": 1000
+    },
+    {
+      "i": 2,
+      "j": 10,
+      "label_i": "fixed_seed1",
+      "label_j": "selfplay_seed2",
+      "wins_i": 293,
+      "games": 1000
+    },
+    {
+      "i": 2,
+      "j": 11,
+      "label_i": "fixed_seed1",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 274,
+      "games": 1000
+    },
+    {
+      "i": 2,
+      "j": 12,
+      "label_i": "fixed_seed1",
+      "label_j": "random",
+      "wins_i": 999,
+      "games": 1000
+    },
+    {
+      "i": 2,
+      "j": 13,
+      "label_i": "fixed_seed1",
+      "label_j": "heuristic",
+      "wins_i": 904,
+      "games": 1000
+    },
+    {
+      "i": 2,
+      "j": 14,
+      "label_i": "fixed_seed1",
+      "label_j": "simple",
+      "wins_i": 977,
+      "games": 1000
+    },
+    {
+      "i": 3,
+      "j": 4,
+      "label_i": "fixed_seed1@T0",
+      "label_j": "fixed_seed2",
+      "wins_i": 588,
+      "games": 1000
+    },
+    {
+      "i": 3,
+      "j": 5,
+      "label_i": "fixed_seed1@T0",
+      "label_j": "fixed_seed2@T0",
+      "wins_i": 489,
+      "games": 1000
+    },
+    {
+      "i": 3,
+      "j": 6,
+      "label_i": "fixed_seed1@T0",
+      "label_j": "selfplay_seed0",
+      "wins_i": 378,
+      "games": 1000
+    },
+    {
+      "i": 3,
+      "j": 7,
+      "label_i": "fixed_seed1@T0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 312,
+      "games": 1000
+    },
+    {
+      "i": 3,
+      "j": 8,
+      "label_i": "fixed_seed1@T0",
+      "label_j": "selfplay_seed1",
+      "wins_i": 427,
+      "games": 1000
+    },
+    {
+      "i": 3,
+      "j": 9,
+      "label_i": "fixed_seed1@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 399,
+      "games": 1000
+    },
+    {
+      "i": 3,
+      "j": 10,
+      "label_i": "fixed_seed1@T0",
+      "label_j": "selfplay_seed2",
+      "wins_i": 389,
+      "games": 1000
+    },
+    {
+      "i": 3,
+      "j": 11,
+      "label_i": "fixed_seed1@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 324,
+      "games": 1000
+    },
+    {
+      "i": 3,
+      "j": 12,
+      "label_i": "fixed_seed1@T0",
+      "label_j": "random",
+      "wins_i": 1000,
+      "games": 1000
+    },
+    {
+      "i": 3,
+      "j": 13,
+      "label_i": "fixed_seed1@T0",
+      "label_j": "heuristic",
+      "wins_i": 941,
+      "games": 1000
+    },
+    {
+      "i": 3,
+      "j": 14,
+      "label_i": "fixed_seed1@T0",
+      "label_j": "simple",
+      "wins_i": 996,
+      "games": 1000
+    },
+    {
+      "i": 4,
+      "j": 5,
+      "label_i": "fixed_seed2",
+      "label_j": "fixed_seed2@T0",
+      "wins_i": 406,
+      "games": 1000
+    },
+    {
+      "i": 4,
+      "j": 6,
+      "label_i": "fixed_seed2",
+      "label_j": "selfplay_seed0",
+      "wins_i": 291,
+      "games": 1000
+    },
+    {
+      "i": 4,
+      "j": 7,
+      "label_i": "fixed_seed2",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 231,
+      "games": 1000
+    },
+    {
+      "i": 4,
+      "j": 8,
+      "label_i": "fixed_seed2",
+      "label_j": "selfplay_seed1",
+      "wins_i": 346,
+      "games": 1000
+    },
+    {
+      "i": 4,
+      "j": 9,
+      "label_i": "fixed_seed2",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 266,
+      "games": 1000
+    },
+    {
+      "i": 4,
+      "j": 10,
+      "label_i": "fixed_seed2",
+      "label_j": "selfplay_seed2",
+      "wins_i": 305,
+      "games": 1000
+    },
+    {
+      "i": 4,
+      "j": 11,
+      "label_i": "fixed_seed2",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 251,
+      "games": 1000
+    },
+    {
+      "i": 4,
+      "j": 12,
+      "label_i": "fixed_seed2",
+      "label_j": "random",
+      "wins_i": 998,
+      "games": 1000
+    },
+    {
+      "i": 4,
+      "j": 13,
+      "label_i": "fixed_seed2",
+      "label_j": "heuristic",
+      "wins_i": 897,
+      "games": 1000
+    },
+    {
+      "i": 4,
+      "j": 14,
+      "label_i": "fixed_seed2",
+      "label_j": "simple",
+      "wins_i": 982,
+      "games": 1000
+    },
+    {
+      "i": 5,
+      "j": 6,
+      "label_i": "fixed_seed2@T0",
+      "label_j": "selfplay_seed0",
+      "wins_i": 391,
+      "games": 1000
+    },
+    {
+      "i": 5,
+      "j": 7,
+      "label_i": "fixed_seed2@T0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 332,
+      "games": 1000
+    },
+    {
+      "i": 5,
+      "j": 8,
+      "label_i": "fixed_seed2@T0",
+      "label_j": "selfplay_seed1",
+      "wins_i": 449,
+      "games": 1000
+    },
+    {
+      "i": 5,
+      "j": 9,
+      "label_i": "fixed_seed2@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 402,
+      "games": 1000
+    },
+    {
+      "i": 5,
+      "j": 10,
+      "label_i": "fixed_seed2@T0",
+      "label_j": "selfplay_seed2",
+      "wins_i": 344,
+      "games": 1000
+    },
+    {
+      "i": 5,
+      "j": 11,
+      "label_i": "fixed_seed2@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 332,
+      "games": 1000
+    },
+    {
+      "i": 5,
+      "j": 12,
+      "label_i": "fixed_seed2@T0",
+      "label_j": "random",
+      "wins_i": 1000,
+      "games": 1000
+    },
+    {
+      "i": 5,
+      "j": 13,
+      "label_i": "fixed_seed2@T0",
+      "label_j": "heuristic",
+      "wins_i": 930,
+      "games": 1000
+    },
+    {
+      "i": 5,
+      "j": 14,
+      "label_i": "fixed_seed2@T0",
+      "label_j": "simple",
+      "wins_i": 988,
+      "games": 1000
+    },
+    {
+      "i": 6,
+      "j": 7,
+      "label_i": "selfplay_seed0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 457,
+      "games": 1000
+    },
+    {
+      "i": 6,
+      "j": 8,
+      "label_i": "selfplay_seed0",
+      "label_j": "selfplay_seed1",
+      "wins_i": 557,
+      "games": 1000
+    },
+    {
+      "i": 6,
+      "j": 9,
+      "label_i": "selfplay_seed0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 524,
+      "games": 1000
+    },
+    {
+      "i": 6,
+      "j": 10,
+      "label_i": "selfplay_seed0",
+      "label_j": "selfplay_seed2",
+      "wins_i": 526,
+      "games": 1000
+    },
+    {
+      "i": 6,
+      "j": 11,
+      "label_i": "selfplay_seed0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 466,
+      "games": 1000
+    },
+    {
+      "i": 6,
+      "j": 12,
+      "label_i": "selfplay_seed0",
+      "label_j": "random",
+      "wins_i": 1000,
+      "games": 1000
+    },
+    {
+      "i": 6,
+      "j": 13,
+      "label_i": "selfplay_seed0",
+      "label_j": "heuristic",
+      "wins_i": 879,
+      "games": 1000
+    },
+    {
+      "i": 6,
+      "j": 14,
+      "label_i": "selfplay_seed0",
+      "label_j": "simple",
+      "wins_i": 984,
+      "games": 1000
+    },
+    {
+      "i": 7,
+      "j": 8,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "selfplay_seed1",
+      "wins_i": 627,
+      "games": 1000
+    },
+    {
+      "i": 7,
+      "j": 9,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 548,
+      "games": 1000
+    },
+    {
+      "i": 7,
+      "j": 10,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "selfplay_seed2",
+      "wins_i": 547,
+      "games": 1000
+    },
+    {
+      "i": 7,
+      "j": 11,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 519,
+      "games": 1000
+    },
+    {
+      "i": 7,
+      "j": 12,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "random",
+      "wins_i": 999,
+      "games": 1000
+    },
+    {
+      "i": 7,
+      "j": 13,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "heuristic",
+      "wins_i": 922,
+      "games": 1000
+    },
+    {
+      "i": 7,
+      "j": 14,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "simple",
+      "wins_i": 996,
+      "games": 1000
+    },
+    {
+      "i": 8,
+      "j": 9,
+      "label_i": "selfplay_seed1",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 446,
+      "games": 1000
+    },
+    {
+      "i": 8,
+      "j": 10,
+      "label_i": "selfplay_seed1",
+      "label_j": "selfplay_seed2",
+      "wins_i": 459,
+      "games": 1000
+    },
+    {
+      "i": 8,
+      "j": 11,
+      "label_i": "selfplay_seed1",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 391,
+      "games": 1000
+    },
+    {
+      "i": 8,
+      "j": 12,
+      "label_i": "selfplay_seed1",
+      "label_j": "random",
+      "wins_i": 998,
+      "games": 1000
+    },
+    {
+      "i": 8,
+      "j": 13,
+      "label_i": "selfplay_seed1",
+      "label_j": "heuristic",
+      "wins_i": 893,
+      "games": 1000
+    },
+    {
+      "i": 8,
+      "j": 14,
+      "label_i": "selfplay_seed1",
+      "label_j": "simple",
+      "wins_i": 983,
+      "games": 1000
+    },
+    {
+      "i": 9,
+      "j": 10,
+      "label_i": "selfplay_seed1@T0",
+      "label_j": "selfplay_seed2",
+      "wins_i": 528,
+      "games": 1000
+    },
+    {
+      "i": 9,
+      "j": 11,
+      "label_i": "selfplay_seed1@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 460,
+      "games": 1000
+    },
+    {
+      "i": 9,
+      "j": 12,
+      "label_i": "selfplay_seed1@T0",
+      "label_j": "random",
+      "wins_i": 1000,
+      "games": 1000
+    },
+    {
+      "i": 9,
+      "j": 13,
+      "label_i": "selfplay_seed1@T0",
+      "label_j": "heuristic",
+      "wins_i": 925,
+      "games": 1000
+    },
+    {
+      "i": 9,
+      "j": 14,
+      "label_i": "selfplay_seed1@T0",
+      "label_j": "simple",
+      "wins_i": 994,
+      "games": 1000
+    },
+    {
+      "i": 10,
+      "j": 11,
+      "label_i": "selfplay_seed2",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 446,
+      "games": 1000
+    },
+    {
+      "i": 10,
+      "j": 12,
+      "label_i": "selfplay_seed2",
+      "label_j": "random",
+      "wins_i": 1000,
+      "games": 1000
+    },
+    {
+      "i": 10,
+      "j": 13,
+      "label_i": "selfplay_seed2",
+      "label_j": "heuristic",
+      "wins_i": 874,
+      "games": 1000
+    },
+    {
+      "i": 10,
+      "j": 14,
+      "label_i": "selfplay_seed2",
+      "label_j": "simple",
+      "wins_i": 984,
+      "games": 1000
+    },
+    {
+      "i": 11,
+      "j": 12,
+      "label_i": "selfplay_seed2@T0",
+      "label_j": "random",
+      "wins_i": 1000,
+      "games": 1000
+    },
+    {
+      "i": 11,
+      "j": 13,
+      "label_i": "selfplay_seed2@T0",
+      "label_j": "heuristic",
+      "wins_i": 942,
+      "games": 1000
+    },
+    {
+      "i": 11,
+      "j": 14,
+      "label_i": "selfplay_seed2@T0",
+      "label_j": "simple",
+      "wins_i": 991,
+      "games": 1000
+    },
+    {
+      "i": 12,
+      "j": 13,
+      "label_i": "random",
+      "label_j": "heuristic",
+      "wins_i": 13,
+      "games": 1000
+    },
+    {
+      "i": 12,
+      "j": 14,
+      "label_i": "random",
+      "label_j": "simple",
+      "wins_i": 70,
+      "games": 1000
+    },
+    {
+      "i": 13,
+      "j": 14,
+      "label_i": "heuristic",
+      "label_j": "simple",
+      "wins_i": 807,
+      "games": 1000
+    }
+  ]
+}

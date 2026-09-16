@@ -12,6 +12,7 @@ as verified GitHub release bundles on the result's tag (see
 
 | Date | Writeup | Question | Outcome |
 |---|---|---|---|
+| 2026-09-16 | [`greedy_inference.md`](greedy_inference.md) | Do the published checkpoints play better when they choose their highest-probability action instead of sampling? | **Yes.** Temperature 0 raises win rate against Heuristic by +6.15pp (self-play) and +6.18pp (fixed), removing about 45% of those losses, and each checkpoint beats its sampled self (+43 and +72 Elo). Self-play still leads cross-play. Greedy play is the baseline search must beat. |
 | 2026-08-18 | [`rocm715_stack_probe.md`](rocm715_stack_probe.md) | Does the July torch 2.12/ROCm 7.15/gfx1201/Triton stack improve training or eliminate runtime degradation? | **No.** It passed all compatibility gates but made the matched 30-update workload 66.9% slower and retained process-age degradation. Production remains exact-pinned to torch 2.11/ROCm 7.13. |
 | 2026-08-18 | [`optimized_selfplay_baseline.md`](optimized_selfplay_baseline.md) | Does optimized snapshot self-play improve the selected 400×2,000 fixed-opponent baseline across three seeds? | **Yes in cross-play, tied overall on scripted opponents.** Under exact 50/50 seating, self-play occupies the top three Elo positions and wins 67.9% against fixed-baseline checkpoints. Its fixed gauntlet is 94.40% overall vs. 94.71% for the control. |
 | 2026-08-17 | [`snapshot_inference_optimization.md`](snapshot_inference_optimization.md) | Can vector PFSP self-play avoid fragmented snapshot inference and long-process ROCm drift? | **Yes.** Actor-only stacked inference plus 25-update process chunks cuts degraded cap-3 rollout from 12.41s to 5.42s (2.29x). A paired seed-0 selection pilot keeps cap 3 as the conservative default; cap 1 is an optional 3.27s fast path. |
@@ -35,6 +36,9 @@ as verified GitHub release bundles on the result's tag (see
 - **Snapshot self-play is the stronger checkpoint league.** Its three seeds
   occupy the top three positions against the fixed-baseline seeds even though
   the scripted gauntlet is statistically tied.
+- **Sampled evaluation understates the policies.** The locked protocol samples
+  each checkpoint's policy; greedy decoding of the same checkpoints is a
+  separate, stronger variant ([`greedy_inference.md`](greedy_inference.md)).
 - **There is no absolute strength anchor.** Every number here is relative to
   weak scripted opponents or to other checkpoints. Nothing establishes how
   well these agents actually play Star Realms.
