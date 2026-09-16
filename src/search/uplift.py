@@ -190,15 +190,7 @@ def _tasks(config: UpliftConfig, completed: set[tuple[int, int]]) -> list[tuple[
 
 def _worker_main(worker_id: int, config_dict: dict, tasks: list, results) -> None:
     try:
-        threads = str(int(config_dict["numba_threads"]))
-        # Size native thread pools before numba and torch load so many worker
-        # processes do not each spin a pool sized for the whole machine.
-        for variable in ("NUMBA_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
-            os.environ[variable] = threads
-        import torch
-
         config = UpliftConfig(**{**config_dict, "budgets": tuple(config_dict["budgets"])})
-        torch.set_num_threads(config.numba_threads)
         arena = _Arena(config)
         for budget, index in tasks:
             results.put(("result", worker_id, arena.play(budget, index)))
