@@ -47,9 +47,39 @@ Run `python -m src <command> --help` for full option details.
 [`docs/eval_protocol.md`](docs/eval_protocol.md) — that document is the
 contract every result in `results/` is measured against.
 
+### Reference Training Recipe
+
+The strongest published agent comes from the `reference-selfplay` preset in
+`src/config.py` ([`results/optimized_selfplay_baseline.md`](results/optimized_selfplay_baseline.md)).
+Train one seed end to end on Windows with:
+
+```powershell
+.\scripts\train_reference.ps1 -Seed 0
+```
+
+The script launches through Task Scheduler (outside the caller's process
+tree), trains in fresh 25-update processes with full resume continuity, and
+finishes with the locked exact-seat gauntlet. Re-running the same command
+resumes an interrupted arc. On other platforms, or for a single-process run,
+use `python -m src train --preset reference-selfplay --seed 0`; explicit
+flags override preset values.
+
+The published checkpoints are available from the
+[`v0.3-selfplay-baseline`](https://github.com/TimStewartJ/space-deck-builder/releases/tag/v0.3-selfplay-baseline)
+release:
+
+```bash
+python scripts/release_artifacts.py fetch --tag v0.3-selfplay-baseline \
+    --bundle optimized_selfplay_baseline-checkpoints \
+    --dest results/optimized_selfplay_baseline
+```
+
 ### Training Examples
 
 ```bash
+# Reference self-play recipe in one process
+uv run --extra rocm python -m src train --preset reference-selfplay --seed 0
+
 # Basic training (fixed opponents from src/config.py)
 uv run --extra rocm python -m src train
 
@@ -95,6 +125,7 @@ Training parameters are defined as centralized dataclasses in `src/config.py`:
 - **`RunConfig`** — training topology (episodes, updates, concurrency, opponents)
 - **`DeviceConfig`** — GPU/CPU device placement
 - **`SimConfig`** — simulation settings
+- **`TRAINING_PRESETS`** — published training recipes applied with `train --preset`
 
 CLI arguments map directly to these config objects. Checkpoints save config metadata for reproducibility.
 
@@ -102,8 +133,9 @@ CLI arguments map directly to these config objects. Checkpoints save config meta
 
 ### Rollout architecture
 
-Training runs `num_workers` simulation processes against a single batched
-inference server that owns the GPU:
+With `--engine object`, training runs `num_workers` simulation processes
+against a single batched inference server that owns the GPU. `eval` and `elo`
+use the same multiprocess runner:
 
 1. `num_concurrent` games run simultaneously **per worker** — it defaults to
    `episodes // num_workers` (800 at the shipped defaults), so with 20 workers
@@ -179,9 +211,12 @@ despite Normal process priority. The Task Scheduler launchers under `scripts/`
 avoid that inherited execution context.
 
 For training, use `scripts/launch_training.ps1`. It also applies the measured
-P-core affinity on the project's i7-12700K host. Long self-play arcs should use
-25-update `scripts/chunked_resume.ps1` processes so ROCm latency cannot
-accumulate inside one Python runtime.
+P-core affinity on the project's i7-12700K host, and `-Command` launches any
+other workload (evaluation, tournaments, orchestration scripts) through the
+same boundary. Long self-play arcs should use 25-update
+`scripts/chunked_resume.ps1` processes so ROCm latency cannot accumulate inside
+one Python runtime; `scripts/train_reference.ps1` combines both for the
+reference recipe.
 
 ### Project Structure
 
@@ -201,7 +236,7 @@ src/
 docs/
 ├── eval_protocol.md     # The measurement contract for every result
 └── decisions/           # Architecture decision records
-results/                 # Experiment writeups + their eval/Elo logs
+results/                 # Experiment writeups + their committed evidence
 scripts/                 # Developer tools — see scripts/README.md for the full index
 tests/                   # pytest suite
 data/

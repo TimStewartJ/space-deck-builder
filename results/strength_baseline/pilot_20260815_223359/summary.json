@@ -1,0 +1,131 @@
+{
+    "runId":  "pilot_20260815_223359",
+    "generatedAt":  "2026-08-16T17:34:50.7508951-07:00",
+    "selectedBudget":  {
+                           "updates":  400,
+                           "episodes":  2000,
+                           "arm":  "C"
+                       },
+    "seeds":  {
+                  "0":  {
+                            "random":  {
+                                           "wins":  4984,
+                                           "games":  5000,
+                                           "winRate":  0.9968
+                                       },
+                            "heuristic":  {
+                                              "wins":  4341,
+                                              "games":  5000,
+                                              "winRate":  0.8682
+                                          },
+                            "simple":  {
+                                           "wins":  4866,
+                                           "games":  5000,
+                                           "winRate":  0.9732
+                                       }
+                        },
+                  "1":  {
+                            "random":  {
+                                           "wins":  4991,
+                                           "games":  5000,
+                                           "winRate":  0.9982
+                                       },
+                            "heuristic":  {
+                                              "wins":  4345,
+                                              "games":  5000,
+                                              "winRate":  0.869
+                                          },
+                            "simple":  {
+                                           "wins":  4870,
+                                           "games":  5000,
+                                           "winRate":  0.974
+                                       }
+                        },
+                  "2":  {
+                            "random":  {
+                                           "wins":  4985,
+                                           "games":  5000,
+                                           "winRate":  0.997
+                                       },
+                            "heuristic":  {
+                                              "wins":  4391,
+                                              "games":  5000,
+                                              "winRate":  0.8782
+                                          },
+                            "simple":  {
+                                           "wins":  4888,
+                                           "games":  5000,
+                                           "winRate":  0.9776
+                                       }
+                        }
+              },
+    "aggregate":  {
+                      "random":  {
+                                     "wins":  14960,
+                                     "games":  15000,
+                                     "winRate":  0.99733333333333329
+                                 },
+                      "heuristic":  {
+                                        "wins":  13077,
+                                        "games":  15000,
+                                        "winRate":  0.8718
+                                    },
+                      "simple":  {
+                                     "wins":  14624,
+                                     "games":  15000,
+                                     "winRate":  0.97493333333333332
+                                 },
+                      "overall":  {
+                                      "wins":  42661,
+                                      "games":  45000,
+                                      "winRate":  0.94802222222222221
+                                  }
+                  },
+    "historical":  {
+                       "fixedMixThreeSeed":  {
+                                                 "random":  0.99946666666666661,
+                                                 "heuristic":  0.86226666666666663,
+                                                 "simple":  0.989,
+                                                 "overall":  0.95024444444444445
+                                             },
+                       "selfPlayThreeSeed":  {
+                                                 "random":  0.99953333333333338,
+                                                 "heuristic":  0.8736666666666667,
+                                                 "simple":  0.98893333333333333,
+                                                 "overall":  0.95404444444444447
+                                             },
+                       "bestCheckpoint0428_1249":  {
+                                                       "random":  1,
+                                                       "heuristic":  0.8744,
+                                                       "simple":  0.9894,
+                                                       "overall":  0.9546
+                                                   },
+                       "source":  "results/curriculum_v02.md"
+                   },
+    "deltasPercentagePoints":  {
+                                   "random":  {
+                                                  "versusHistoricalFixedPp":  -0.21333333333333204,
+                                                  "versusHistoricalSelfPlayPp":  -0.22000000000000908,
+                                                  "versusHistoricalBestPp":  -0.2666666666666706
+                                              },
+                                   "heuristic":  {
+                                                     "versusHistoricalFixedPp":  0.95333333333333936,
+                                                     "versusHistoricalSelfPlayPp":  -0.18666666666666831,
+                                                     "versusHistoricalBestPp":  -0.25999999999999357
+                                                 },
+                                   "simple":  {
+                                                  "versusHistoricalFixedPp":  -1.4066666666666672,
+                                                  "versusHistoricalSelfPlayPp":  -1.4000000000000012,
+                                                  "versusHistoricalBestPp":  -1.4466666666666628
+                                              },
+                                   "overall":  {
+                                                   "versusHistoricalFixedPp":  -0.22222222222222365,
+                                                   "versusHistoricalSelfPlayPp":  -0.60222222222222621,
+                                                   "versusHistoricalBestPp":  -0.65777777777777935
+                                               }
+                               },
+    "elo":  {
+                "status":  "unavailable",
+                "reason":  "The April reference checkpoint has 8 zone embeddings; current checkpoints have 10. Strict tournament loading correctly rejects cross-encoding inference. Historical Elo remains available in results/curriculum_v02.md."
+            }
+}

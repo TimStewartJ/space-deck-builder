@@ -12,6 +12,12 @@
 .PARAMETER TrainArgs
     Command-line arguments appended to `python -m src train`.
 
+.PARAMETER Command
+    A complete command line to run instead of `python -m src train`, such as
+    an evaluation, tournament, or orchestration script. `{python}` is replaced
+    with the resolved GPU-capable interpreter. Cannot be combined with
+    TrainArgs.
+
 .PARAMETER ProcessorAffinityMask
     Auto, None, a decimal mask, or a hexadecimal mask such as 0xFFFF.
 
@@ -21,10 +27,15 @@
 
 .EXAMPLE
     .\scripts\launch_training.ps1 -TrainArgs "--seed 0 --updates 400"
+
+.EXAMPLE
+    .\scripts\launch_training.ps1 -Name sdb_eval_seed0 `
+        -Command "{python} -u -m src eval --model results\run\final.pth --games 15000 --seed 0"
 #>
 [CmdletBinding()]
 param(
     [string] $TrainArgs = "",
+    [string] $Command = "",
     [string] $Repo = (Split-Path -Parent $PSScriptRoot),
     [string] $Python = "",
     [string] $Name = "sdb_train",
@@ -43,6 +54,9 @@ if ($Name -cnotmatch "^sdb_[A-Za-z0-9_.-]+$") {
         "Task names must start with 'sdb_' and contain only letters, " +
         "numbers, dot, underscore, or hyphen."
     )
+}
+if ($TrainArgs -and $Command) {
+    throw "Pass either -TrainArgs or -Command, not both."
 }
 $TaskPath = "\"
 $Repo = (Resolve-Path $Repo).Path
@@ -108,12 +122,17 @@ $launchManifest = Join-Path $logDir "$Name`_$stamp.json"
 $launchId = [guid]::NewGuid().ToString("D")
 $taskDescription = "Space Deck Builder launch $launchId"
 
-$command = (
+$workload = if ($Command) {
+    $Command.Replace("{python}", "`"$python`"")
+} else {
+    "`"$python`" -u -m src train $TrainArgs"
+}
+$taskCommand = (
     "set `"PYTHONPATH=$Repo`" && cd /d `"$Repo`" && " +
-    "`"$python`" -u -m src train $TrainArgs > `"$log`" 2>&1"
+    "$workload > `"$log`" 2>&1"
 )
 $encodedCommand = [Convert]::ToBase64String(
-    [Text.Encoding]::UTF8.GetBytes($command)
+    [Text.Encoding]::UTF8.GetBytes($taskCommand)
 )
 $encodedManifest = [Convert]::ToBase64String(
     [Text.Encoding]::UTF8.GetBytes($launchManifest)
@@ -333,6 +352,7 @@ Register-ScheduledTask `
     repository = $Repo
     python = $python
     train_args = $TrainArgs
+    command = $workload
     process_priority = $ProcessPriority
     processor_affinity = $affinityLabel
     log = $log

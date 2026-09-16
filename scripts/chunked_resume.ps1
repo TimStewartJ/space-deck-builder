@@ -503,10 +503,16 @@ while ($currentUpdate -lt $TargetUpdate) {
     }
     Save-Manifest $manifest $manifestPath
     Push-Location $WorkingDir
+    $previousErrorAction = $ErrorActionPreference
     try {
+        # Windows PowerShell 5.1 turns redirected native stderr into
+        # terminating errors under "Stop", which would kill the chunk on its
+        # first warning and leave the error log empty.
+        $ErrorActionPreference = "Continue"
         & $Python @arguments 1> $log 2> $errorLog
         $exitCode = $LASTEXITCODE
     } finally {
+        $ErrorActionPreference = $previousErrorAction
         Pop-Location
     }
     if ($null -eq $exitCode) {

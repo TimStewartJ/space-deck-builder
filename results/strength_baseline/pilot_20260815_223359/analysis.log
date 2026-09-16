@@ -1,0 +1,828 @@
+{
+  "run_id": "pilot_20260815_223359",
+  "decision_rule": "Choose C, then B, if its last-three pooled Heuristic rate is within 2.5pp of A and its final rate is within 3.5pp.",
+  "arms": {
+    "A": {
+      "name": "A",
+      "updates": 50,
+      "episodes": 16000,
+      "metrics": "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_A\\metrics.jsonl",
+      "checkpoint": "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_A\\ppo_agent_0816_0809_upd50_wins3037.pth",
+      "evaluations": [
+        {
+          "update": 5,
+          "wins": 153,
+          "games": 1067,
+          "win_rate": 0.1434
+        },
+        {
+          "update": 10,
+          "wins": 507,
+          "games": 1067,
+          "win_rate": 0.4752
+        },
+        {
+          "update": 15,
+          "wins": 673,
+          "games": 1067,
+          "win_rate": 0.6307
+        },
+        {
+          "update": 20,
+          "wins": 813,
+          "games": 1067,
+          "win_rate": 0.7619
+        },
+        {
+          "update": 25,
+          "wins": 817,
+          "games": 1067,
+          "win_rate": 0.7657
+        },
+        {
+          "update": 30,
+          "wins": 853,
+          "games": 1067,
+          "win_rate": 0.7994
+        },
+        {
+          "update": 35,
+          "wins": 894,
+          "games": 1067,
+          "win_rate": 0.8379
+        },
+        {
+          "update": 40,
+          "wins": 914,
+          "games": 1067,
+          "win_rate": 0.8566
+        },
+        {
+          "update": 45,
+          "wins": 917,
+          "games": 1067,
+          "win_rate": 0.8594
+        },
+        {
+          "update": 50,
+          "wins": 926,
+          "games": 1067,
+          "win_rate": 0.8679
+        }
+      ],
+      "final_heuristic_win_rate": 0.8679,
+      "tail_heuristic_win_rate": 0.8612933458294283,
+      "plateau_update": 35
+    },
+    "B": {
+      "name": "B",
+      "updates": 200,
+      "episodes": 4000,
+      "metrics": "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_B\\metrics.jsonl",
+      "checkpoint": "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_B\\ppo_agent_0816_1059_upd200_wins3038.pth",
+      "evaluations": [
+        {
+          "update": 5,
+          "wins": 105,
+          "games": 1067,
+          "win_rate": 0.0984
+        },
+        {
+          "update": 10,
+          "wins": 355,
+          "games": 1067,
+          "win_rate": 0.3327
+        },
+        {
+          "update": 15,
+          "wins": 519,
+          "games": 1067,
+          "win_rate": 0.4864
+        },
+        {
+          "update": 20,
+          "wins": 681,
+          "games": 1067,
+          "win_rate": 0.6382
+        },
+        {
+          "update": 25,
+          "wins": 693,
+          "games": 1067,
+          "win_rate": 0.6495
+        },
+        {
+          "update": 30,
+          "wins": 684,
+          "games": 1067,
+          "win_rate": 0.641
+        },
+        {
+          "update": 35,
+          "wins": 760,
+          "games": 1067,
+          "win_rate": 0.7123
+        },
+        {
+          "update": 40,
+          "wins": 751,
+          "games": 1067,
+          "win_rate": 0.7038
+        },
+        {
+          "update": 45,
+          "wins": 811,
+          "games": 1067,
+          "win_rate": 0.7601
+        },
+        {
+          "update": 50,
+          "wins": 862,
+          "games": 1067,
+          "win_rate": 0.8079
+        },
+        {
+          "update": 55,
+          "wins": 890,
+          "games": 1067,
+          "win_rate": 0.8341
+        },
+        {
+          "update": 60,
+          "wins": 822,
+          "games": 1067,
+          "win_rate": 0.7704
+        },
+        {
+          "update": 65,
+          "wins": 868,
+          "games": 1067,
+          "win_rate": 0.8135
+        },
+        {
+          "update": 70,
+          "wins": 867,
+          "games": 1067,
+          "win_rate": 0.8126
+        },
+        {
+          "update": 75,
+          "wins": 901,
+          "games": 1067,
+          "win_rate": 0.8444
+        },
+        {
+          "update": 80,
+          "wins": 898,
+          "games": 1067,
+          "win_rate": 0.8416
+        },
+        {
+          "update": 85,
+          "wins": 883,
+          "games": 1067,
+          "win_rate": 0.8276
+        },
+        {
+          "update": 90,
+          "wins": 860,
+          "games": 1067,
+          "win_rate": 0.806
+        },
+        {
+          "update": 95,
+          "wins": 895,
+          "games": 1067,
+          "win_rate": 0.8388
+        },
+        {
+          "update": 100,
+          "wins": 863,
+          "games": 1067,
+          "win_rate": 0.8088
+        },
+        {
+          "update": 105,
+          "wins": 889,
+          "games": 1067,
+          "win_rate": 0.8332
+        },
+        {
+          "update": 110,
+          "wins": 870,
+          "games": 1067,
+          "win_rate": 0.8154
+        },
+        {
+          "update": 115,
+          "wins": 899,
+          "games": 1067,
+          "win_rate": 0.8425
+        },
+        {
+          "update": 120,
+          "wins": 923,
+          "games": 1067,
+          "win_rate": 0.865
+        },
+        {
+          "update": 125,
+          "wins": 912,
+          "games": 1067,
+          "win_rate": 0.8547
+        },
+        {
+          "update": 130,
+          "wins": 936,
+          "games": 1067,
+          "win_rate": 0.8772
+        },
+        {
+          "update": 135,
+          "wins": 921,
+          "games": 1067,
+          "win_rate": 0.8632
+        },
+        {
+          "update": 140,
+          "wins": 908,
+          "games": 1067,
+          "win_rate": 0.851
+        },
+        {
+          "update": 145,
+          "wins": 922,
+          "games": 1067,
+          "win_rate": 0.8641
+        },
+        {
+          "update": 150,
+          "wins": 952,
+          "games": 1067,
+          "win_rate": 0.8922
+        },
+        {
+          "update": 155,
+          "wins": 924,
+          "games": 1067,
+          "win_rate": 0.866
+        },
+        {
+          "update": 160,
+          "wins": 918,
+          "games": 1067,
+          "win_rate": 0.8604
+        },
+        {
+          "update": 165,
+          "wins": 944,
+          "games": 1067,
+          "win_rate": 0.8847
+        },
+        {
+          "update": 170,
+          "wins": 918,
+          "games": 1067,
+          "win_rate": 0.8604
+        },
+        {
+          "update": 175,
+          "wins": 912,
+          "games": 1067,
+          "win_rate": 0.8547
+        },
+        {
+          "update": 180,
+          "wins": 914,
+          "games": 1067,
+          "win_rate": 0.8566
+        },
+        {
+          "update": 185,
+          "wins": 943,
+          "games": 1067,
+          "win_rate": 0.8838
+        },
+        {
+          "update": 190,
+          "wins": 914,
+          "games": 1067,
+          "win_rate": 0.8566
+        },
+        {
+          "update": 195,
+          "wins": 936,
+          "games": 1067,
+          "win_rate": 0.8772
+        },
+        {
+          "update": 200,
+          "wins": 936,
+          "games": 1067,
+          "win_rate": 0.8772
+        }
+      ],
+      "final_heuristic_win_rate": 0.8772,
+      "tail_heuristic_win_rate": 0.8703530146829116,
+      "plateau_update": 115
+    },
+    "C": {
+      "name": "C",
+      "updates": 400,
+      "episodes": 2000,
+      "metrics": "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_C\\metrics.jsonl",
+      "checkpoint": "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_C\\ppo_agent_0816_1524_upd400_wins3006.pth",
+      "evaluations": [
+        {
+          "update": 5,
+          "wins": 86,
+          "games": 1067,
+          "win_rate": 0.0806
+        },
+        {
+          "update": 10,
+          "wins": 298,
+          "games": 1067,
+          "win_rate": 0.2793
+        },
+        {
+          "update": 15,
+          "wins": 509,
+          "games": 1067,
+          "win_rate": 0.477
+        },
+        {
+          "update": 20,
+          "wins": 641,
+          "games": 1067,
+          "win_rate": 0.6007
+        },
+        {
+          "update": 25,
+          "wins": 723,
+          "games": 1067,
+          "win_rate": 0.6776
+        },
+        {
+          "update": 30,
+          "wins": 752,
+          "games": 1067,
+          "win_rate": 0.7048
+        },
+        {
+          "update": 35,
+          "wins": 804,
+          "games": 1067,
+          "win_rate": 0.7535
+        },
+        {
+          "update": 40,
+          "wins": 807,
+          "games": 1067,
+          "win_rate": 0.7563
+        },
+        {
+          "update": 45,
+          "wins": 812,
+          "games": 1067,
+          "win_rate": 0.761
+        },
+        {
+          "update": 50,
+          "wins": 798,
+          "games": 1067,
+          "win_rate": 0.7479
+        },
+        {
+          "update": 55,
+          "wins": 815,
+          "games": 1067,
+          "win_rate": 0.7638
+        },
+        {
+          "update": 60,
+          "wins": 797,
+          "games": 1067,
+          "win_rate": 0.747
+        },
+        {
+          "update": 65,
+          "wins": 755,
+          "games": 1067,
+          "win_rate": 0.7076
+        },
+        {
+          "update": 70,
+          "wins": 855,
+          "games": 1067,
+          "win_rate": 0.8013
+        },
+        {
+          "update": 75,
+          "wins": 842,
+          "games": 1067,
+          "win_rate": 0.7891
+        },
+        {
+          "update": 80,
+          "wins": 859,
+          "games": 1067,
+          "win_rate": 0.8051
+        },
+        {
+          "update": 85,
+          "wins": 816,
+          "games": 1067,
+          "win_rate": 0.7648
+        },
+        {
+          "update": 90,
+          "wins": 816,
+          "games": 1067,
+          "win_rate": 0.7648
+        },
+        {
+          "update": 95,
+          "wins": 840,
+          "games": 1067,
+          "win_rate": 0.7873
+        },
+        {
+          "update": 100,
+          "wins": 850,
+          "games": 1067,
+          "win_rate": 0.7966
+        },
+        {
+          "update": 105,
+          "wins": 831,
+          "games": 1067,
+          "win_rate": 0.7788
+        },
+        {
+          "update": 110,
+          "wins": 820,
+          "games": 1067,
+          "win_rate": 0.7685
+        },
+        {
+          "update": 115,
+          "wins": 804,
+          "games": 1067,
+          "win_rate": 0.7535
+        },
+        {
+          "update": 120,
+          "wins": 887,
+          "games": 1067,
+          "win_rate": 0.8313
+        },
+        {
+          "update": 125,
+          "wins": 888,
+          "games": 1067,
+          "win_rate": 0.8322
+        },
+        {
+          "update": 130,
+          "wins": 814,
+          "games": 1067,
+          "win_rate": 0.7629
+        },
+        {
+          "update": 135,
+          "wins": 866,
+          "games": 1067,
+          "win_rate": 0.8116
+        },
+        {
+          "update": 140,
+          "wins": 857,
+          "games": 1067,
+          "win_rate": 0.8032
+        },
+        {
+          "update": 145,
+          "wins": 871,
+          "games": 1067,
+          "win_rate": 0.8163
+        },
+        {
+          "update": 150,
+          "wins": 853,
+          "games": 1067,
+          "win_rate": 0.7994
+        },
+        {
+          "update": 155,
+          "wins": 859,
+          "games": 1067,
+          "win_rate": 0.8051
+        },
+        {
+          "update": 160,
+          "wins": 836,
+          "games": 1067,
+          "win_rate": 0.7835
+        },
+        {
+          "update": 165,
+          "wins": 817,
+          "games": 1067,
+          "win_rate": 0.7657
+        },
+        {
+          "update": 170,
+          "wins": 865,
+          "games": 1067,
+          "win_rate": 0.8107
+        },
+        {
+          "update": 175,
+          "wins": 854,
+          "games": 1067,
+          "win_rate": 0.8004
+        },
+        {
+          "update": 180,
+          "wins": 844,
+          "games": 1067,
+          "win_rate": 0.791
+        },
+        {
+          "update": 185,
+          "wins": 824,
+          "games": 1067,
+          "win_rate": 0.7723
+        },
+        {
+          "update": 190,
+          "wins": 867,
+          "games": 1067,
+          "win_rate": 0.8126
+        },
+        {
+          "update": 195,
+          "wins": 897,
+          "games": 1067,
+          "win_rate": 0.8407
+        },
+        {
+          "update": 200,
+          "wins": 897,
+          "games": 1067,
+          "win_rate": 0.8407
+        },
+        {
+          "update": 205,
+          "wins": 848,
+          "games": 1067,
+          "win_rate": 0.7948
+        },
+        {
+          "update": 210,
+          "wins": 905,
+          "games": 1067,
+          "win_rate": 0.8482
+        },
+        {
+          "update": 215,
+          "wins": 857,
+          "games": 1067,
+          "win_rate": 0.8032
+        },
+        {
+          "update": 220,
+          "wins": 883,
+          "games": 1067,
+          "win_rate": 0.8276
+        },
+        {
+          "update": 225,
+          "wins": 890,
+          "games": 1067,
+          "win_rate": 0.8341
+        },
+        {
+          "update": 230,
+          "wins": 876,
+          "games": 1067,
+          "win_rate": 0.821
+        },
+        {
+          "update": 235,
+          "wins": 885,
+          "games": 1067,
+          "win_rate": 0.8294
+        },
+        {
+          "update": 240,
+          "wins": 899,
+          "games": 1067,
+          "win_rate": 0.8425
+        },
+        {
+          "update": 245,
+          "wins": 907,
+          "games": 1067,
+          "win_rate": 0.85
+        },
+        {
+          "update": 250,
+          "wins": 885,
+          "games": 1067,
+          "win_rate": 0.8294
+        },
+        {
+          "update": 255,
+          "wins": 903,
+          "games": 1067,
+          "win_rate": 0.8463
+        },
+        {
+          "update": 260,
+          "wins": 895,
+          "games": 1067,
+          "win_rate": 0.8388
+        },
+        {
+          "update": 265,
+          "wins": 936,
+          "games": 1067,
+          "win_rate": 0.8772
+        },
+        {
+          "update": 270,
+          "wins": 912,
+          "games": 1067,
+          "win_rate": 0.8547
+        },
+        {
+          "update": 275,
+          "wins": 902,
+          "games": 1067,
+          "win_rate": 0.8454
+        },
+        {
+          "update": 280,
+          "wins": 897,
+          "games": 1067,
+          "win_rate": 0.8407
+        },
+        {
+          "update": 285,
+          "wins": 909,
+          "games": 1067,
+          "win_rate": 0.8519
+        },
+        {
+          "update": 290,
+          "wins": 903,
+          "games": 1067,
+          "win_rate": 0.8463
+        },
+        {
+          "update": 295,
+          "wins": 921,
+          "games": 1067,
+          "win_rate": 0.8632
+        },
+        {
+          "update": 300,
+          "wins": 914,
+          "games": 1067,
+          "win_rate": 0.8566
+        },
+        {
+          "update": 305,
+          "wins": 913,
+          "games": 1067,
+          "win_rate": 0.8557
+        },
+        {
+          "update": 310,
+          "wins": 907,
+          "games": 1067,
+          "win_rate": 0.85
+        },
+        {
+          "update": 315,
+          "wins": 920,
+          "games": 1067,
+          "win_rate": 0.8622
+        },
+        {
+          "update": 320,
+          "wins": 920,
+          "games": 1067,
+          "win_rate": 0.8622
+        },
+        {
+          "update": 325,
+          "wins": 916,
+          "games": 1067,
+          "win_rate": 0.8585
+        },
+        {
+          "update": 330,
+          "wins": 884,
+          "games": 1067,
+          "win_rate": 0.8285
+        },
+        {
+          "update": 335,
+          "wins": 934,
+          "games": 1067,
+          "win_rate": 0.8754
+        },
+        {
+          "update": 340,
+          "wins": 920,
+          "games": 1067,
+          "win_rate": 0.8622
+        },
+        {
+          "update": 345,
+          "wins": 953,
+          "games": 1067,
+          "win_rate": 0.8932
+        },
+        {
+          "update": 350,
+          "wins": 891,
+          "games": 1067,
+          "win_rate": 0.8351
+        },
+        {
+          "update": 355,
+          "wins": 903,
+          "games": 1067,
+          "win_rate": 0.8463
+        },
+        {
+          "update": 360,
+          "wins": 909,
+          "games": 1067,
+          "win_rate": 0.8519
+        },
+        {
+          "update": 365,
+          "wins": 938,
+          "games": 1067,
+          "win_rate": 0.8791
+        },
+        {
+          "update": 370,
+          "wins": 900,
+          "games": 1067,
+          "win_rate": 0.8435
+        },
+        {
+          "update": 375,
+          "wins": 923,
+          "games": 1067,
+          "win_rate": 0.865
+        },
+        {
+          "update": 380,
+          "wins": 943,
+          "games": 1067,
+          "win_rate": 0.8838
+        },
+        {
+          "update": 385,
+          "wins": 925,
+          "games": 1067,
+          "win_rate": 0.8669
+        },
+        {
+          "update": 390,
+          "wins": 927,
+          "games": 1067,
+          "win_rate": 0.8688
+        },
+        {
+          "update": 395,
+          "wins": 904,
+          "games": 1067,
+          "win_rate": 0.8472
+        },
+        {
+          "update": 400,
+          "wins": 902,
+          "games": 1067,
+          "win_rate": 0.8454
+        }
+      ],
+      "final_heuristic_win_rate": 0.8454,
+      "tail_heuristic_win_rate": 0.8537956888472352,
+      "plateau_update": 235
+    }
+  },
+  "selected_arm": "C",
+  "selected_updates": 400,
+  "selected_episodes": 2000,
+  "selected_plateau_update": 235,
+  "selected_checkpoint": "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_C\\ppo_agent_0816_1524_upd400_wins3006.pth",
+  "selected_metrics": "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_C\\metrics.jsonl"
+}

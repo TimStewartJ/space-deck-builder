@@ -5,14 +5,17 @@ Every experiment writeup, newest first. All are measured against
 are comparing numbers across files.
 
 Each writeup keeps its own eval/Elo logs beside it. Training logs and
-checkpoints are gitignored, so anything cited here was force-added or lives
-only on the machine that produced it.
+checkpoints are gitignored. Logs a writeup depends on are force-added; from
+`v0.3-selfplay-baseline` onward, checkpoints and snapshot pools are published
+as verified GitHub release bundles on the result's tag (see
+[`docs/eval_protocol.md`](../docs/eval_protocol.md#8-storage-layout)).
 
 | Date | Writeup | Question | Outcome |
 |---|---|---|---|
 | 2026-08-18 | [`rocm715_stack_probe.md`](rocm715_stack_probe.md) | Does the July torch 2.12/ROCm 7.15/gfx1201/Triton stack improve training or eliminate runtime degradation? | **No.** It passed all compatibility gates but made the matched 30-update workload 66.9% slower and retained process-age degradation. Production remains exact-pinned to torch 2.11/ROCm 7.13. |
 | 2026-08-18 | [`optimized_selfplay_baseline.md`](optimized_selfplay_baseline.md) | Does optimized snapshot self-play improve the selected 400×2,000 fixed-opponent baseline across three seeds? | **Yes in cross-play, tied overall on scripted opponents.** Under exact 50/50 seating, self-play occupies the top three Elo positions and wins 67.9% against fixed-baseline checkpoints. Its fixed gauntlet is 94.40% overall vs. 94.71% for the control. |
 | 2026-08-17 | [`snapshot_inference_optimization.md`](snapshot_inference_optimization.md) | Can vector PFSP self-play avoid fragmented snapshot inference and long-process ROCm drift? | **Yes.** Actor-only stacked inference plus 25-update process chunks cuts degraded cap-3 rollout from 12.41s to 5.42s (2.29x). A paired seed-0 selection pilot keeps cap 3 as the conservative default; cap 1 is an optional 3.27s fast path. |
+| 2026-08-16 | [`compute_budget_pilot.md`](compute_budget_pilot.md) | At a fixed 800k-episode budget, how should updates trade against episodes per update? | **400 × 2,000.** The preregistered Heuristic rule selected the smallest batch; its three fixed-opponent seeds pooled 87.18% against Heuristic and became the control for the self-play baseline. |
 | 2026-08-14 | [`vector_engine_gate.md`](vector_engine_gate.md) | Is a struct-of-arrays compiler engine fast enough and rules-exact end to end? | **Yes.** All 49 cards compile and match scalar state/masks/observations. The full engine runs at 5.88M/s, the actual-policy path at 587k/s, and `train --engine vec --opponents random` completes rollout, PPO update, scalar eval, and checkpoint save. |
 | 2026-04-28 | [`curriculum_v02.md`](curriculum_v02.md) | Should the default training curriculum be the fixed mixed pool, or self-play? | Mixed fixed opponents became the default (+6.8pp gauntlet, +136 Elo vs random-only). Self-play is stronger still (+203 Elo, 59.7% head-to-head) but ~1.8x the wall time, so it stays opt-in. |
 | 2026-04-24 | [`token_features_phase1.md`](token_features_phase1.md) | Do static per-card feature tokens beat a pure embedding lookup? | **Tied.** Kept behind `--token-features`, off by default. See the correction at the top — the parameter delta was ~1%, not 2.7x, so this did not test a capacity increase. |

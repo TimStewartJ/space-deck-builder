@@ -126,18 +126,25 @@ side-by-side on the **vs. heuristic** column (the headline number).
 docs/eval_protocol.md             # this file
 results/baseline_v3.md            # Step 2 output
 results/<variant_name>.md         # one per future variant
-results/<variant_name>/*.log      # that variant's eval + Elo logs (force-added;
-                                  #   *.log is gitignored by default)
+results/<variant_name>/           # that variant's committed evidence: eval and
+                                  #   Elo logs, metrics, manifests, summaries
+                                  #   (*.log is gitignored; force-add it)
 analysis/elo_<tag>_<timestamp>/   # raw Elo tournament outputs
 models/ppo_agent_<ts>_upd<N>_wins<W>.pth   # checkpoints, as emitted by the trainer
 logs/<variant>_seed<N>_<ts>.log   # per-run training logs
 ```
 
-> **Preserve the artifacts a result depends on.** Checkpoints and `*.log`
-> are gitignored, so anything a `results/*.md` file cites must be force-added
-> (`git add -f`) or it exists only on the machine that produced it. Width-probe
-> checkpoints referenced by `results/capacity_probe.md` were lost this way when
-> their worktree was deleted.
+> **Preserve the artifacts a result depends on.** Text evidence a
+> `results/*.md` file cites is committed beside it. Checkpoints and snapshot
+> pools are published as GitHub release assets on the tag that identifies the
+> result: `scripts/release_artifacts.py publish` bundles them with a
+> `SHA256SUMS` manifest (cross-checked against `ARTIFACTS.sha256` when
+> present), and `scripts/release_artifacts.py fetch` downloads, verifies, and
+> restores them. `results/optimized_selfplay_baseline/` predates this policy,
+> so its checkpoints are committed and also published in the
+> `v0.3-selfplay-baseline` release. Width-probe checkpoints referenced by
+> `results/capacity_probe.md` were lost because they existed only in a deleted
+> worktree.
 
 ## 9. Stability clause
 
@@ -168,3 +175,6 @@ a version bump.
   - Dangling `v0.1-baseline` tag reference replaced with the tag that
     actually exists (`baseline/2026-04-22`).
   - Storage layout updated to the checkpoint naming the trainer emits.
+- `v0.1.2` — storage policy only; **no result is invalidated**.
+  - Checkpoints and snapshot pools are published as verified GitHub release
+    bundles on the result's tag instead of being committed.

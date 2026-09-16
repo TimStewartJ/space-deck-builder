@@ -1,0 +1,103 @@
+{
+  "schema_version": 1,
+  "state": "complete",
+  "branch": "feat/stacked-snapshot-inference",
+  "commit": "6674b0c",
+  "start_checkpoint": "E:\\sdb-snapshot-inference\\models\\ppo_agent_0816_2132_upd213_wins-1.pth",
+  "fixed_baseline": "E:\\space-deck-builder\\results\\strength_baseline\\pilot_20260815_223359\\seed_0\\ppo_agent_0816_1524_upd400_wins3006.pth",
+  "start_update": 213,
+  "target_update": 263,
+  "schedule_horizon": 400,
+  "seed": 0,
+  "episodes": 2000,
+  "updates": 50,
+  "chunk_size": 25,
+  "locked_eval_games": 15000,
+  "current_stage": null,
+  "started_at": "2026-08-17T01:11:59.6175527-07:00",
+  "finished_at": "2026-08-17T01:50:07.9308423-07:00",
+  "failure": null,
+  "caps": [
+    {
+      "cap": 1,
+      "status": "complete",
+      "manifest": "E:\\space-deck-builder\\results\\snapshot_optimization\\cap_ablation_20260817_010705\\cap_1\\manifest.json",
+      "final_checkpoint": "E:\\space-deck-builder\\results\\snapshot_optimization\\cap_ablation_20260817_010705\\cap_1\\models\\ppo_agent_0817_0125_upd263_wins13975.pth"
+    },
+    {
+      "cap": 2,
+      "status": "complete",
+      "manifest": "E:\\space-deck-builder\\results\\snapshot_optimization\\cap_ablation_20260817_010705\\cap_2\\manifest.json",
+      "final_checkpoint": "E:\\space-deck-builder\\results\\snapshot_optimization\\cap_ablation_20260817_010705\\cap_2\\models\\ppo_agent_0817_0133_upd263_wins14026.pth"
+    },
+    {
+      "cap": 3,
+      "status": "complete",
+      "manifest": "E:\\space-deck-builder\\results\\snapshot_optimization\\cap_ablation_20260817_010705\\cap_3\\manifest.json",
+      "final_checkpoint": "E:\\space-deck-builder\\results\\snapshot_optimization\\cap_ablation_20260817_010705\\cap_3\\models\\ppo_agent_0817_0141_upd263_wins14102.pth"
+    }
+  ],
+  "elo": {
+    "status": "complete",
+    "output_dir": "E:\\space-deck-builder\\results\\snapshot_optimization\\cap_ablation_20260817_010705\\elo",
+    "log": "E:\\space-deck-builder\\results\\snapshot_optimization\\cap_ablation_20260817_010705\\elo.log",
+    "error_log": "E:\\space-deck-builder\\results\\snapshot_optimization\\cap_ablation_20260817_010705\\elo.err.log"
+  },
+  "recoveries": [
+    {
+      "cap": 1,
+      "checkpoint": "E:\\space-deck-builder\\results\\snapshot_optimization\\cap_ablation_20260817_010705\\cap_1\\models\\ppo_agent_0817_0114_upd237_wins-1.pth",
+      "update": 237,
+      "reason": "legacy interim eval timeout",
+      "recovered_at": "2026-08-17T01:22:03.6500057-07:00"
+    }
+  ],
+  "analysis": {
+    "selected_cap": 3,
+    "decision": "Keep cap 3 as default; cap 1 remains optional fast mode",
+    "reason": "Cap 3 had the strongest locked Heuristic rate (85.20%) at the same speed as cap 2. Cap 1 was 2.28pp weaker, exceeding the 1pp tolerance.",
+    "warm": {
+      "cap3": {
+        "rollout_s": 5.415,
+        "update_s": 8.468,
+        "ppo_s": 3.053,
+        "episodes_per_s": 370.176
+      },
+      "cap2": {
+        "rollout_s": 5.478,
+        "update_s": 8.716,
+        "ppo_s": 3.238,
+        "episodes_per_s": 366.685
+      },
+      "cap1": {
+        "rollout_s": 3.27,
+        "update_s": 6.281,
+        "ppo_s": 3.01,
+        "episodes_per_s": 613.108
+      },
+      "old_degraded": {
+        "rollout_s": 12.414,
+        "update_s": 16.233,
+        "ppo_s": 3.819
+      }
+    },
+    "locked_heuristic": {
+      "cap3": 0.852,
+      "cap2": 0.8414,
+      "cap1": 0.8292
+    },
+    "elo": {
+      "start_update_213": 1073,
+      "cap3": 1093,
+      "cap2": 1098,
+      "cap1": 1092,
+      "fixed_baseline": 1000
+    },
+    "coverage": {
+      "cap1_unique_snapshots": 35,
+      "cap2_unique_snapshots": 42,
+      "cap3_unique_snapshots": 47
+    },
+    "writeup": "E:\\sdb-snapshot-inference\\results\\snapshot_inference_optimization.md"
+  }
+}

@@ -3,6 +3,8 @@
 **Branch:** `feat/stacked-snapshot-inference`  
 **Implementation commits:** `1189f28`, `6674b0c`, `2a9c846`  
 **Experiment root:** `results/snapshot_optimization/cap_ablation_20260817_010705`
+(logs, metrics, manifests, and Elo logs are committed; the cap-arm checkpoints
+are archived off-repo)
 
 > **Scope:** This is a paired architecture-selection pilot from one shared
 > update-213 checkpoint with continuation seed 0. It uses the protocol-sized

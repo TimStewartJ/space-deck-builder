@@ -1,0 +1,1 @@
+The April reference checkpoint has 8 zone embeddings; current checkpoints have 10. Strict tournament loading correctly rejects cross-encoding inference. Historical Elo remains available in results/curriculum_v02.md.

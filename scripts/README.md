@@ -24,12 +24,23 @@ pwsh -File scripts\<name>.ps1
 
 ## Launching training
 
+Launch long workloads outside the caller's process tree. A run started as a
+child of the agent runtime measured ~3.7x slower than the same run started
+through Task Scheduler, and `Start-Process` does not escape that context.
+
 | Script | Purpose |
 |---|---|
-| `launch_training.ps1` | Launches `python -m src train` through Windows Task Scheduler at Normal priority, outside the caller's process tree. Each launch has a unique identity and owns a kill-on-close Windows Job Object so every descendant is cleaned up atomically. On the project's i7-12700K host, its Auto affinity uses logical CPUs 0-15 so training runs on P-cores. `-ProcessorAffinityMask None` explicitly restores all logical CPUs; explicit hexadecimal/decimal masks are also supported. |
+| `train_reference.ps1` | One command for a published training preset: `.\scripts\train_reference.ps1 -Seed 0`. Registers a Task Scheduler launch, trains the first chunk from scratch with the preset's full LR and self-play horizons, continues through `chunked_resume.ps1`, and finishes with the preset's locked exact-seat gauntlet. Preset values come from `TRAINING_PRESETS` in `src/config.py`; re-running with the same run root resumes, and mismatched parameters are rejected. Smoke-size overrides (`-Updates`, `-ChunkSize`, `-Episodes`, eval sizes, workers) are available. |
+| `launch_training.ps1` | Launches `python -m src train` (`-TrainArgs`) or any other command (`-Command`, with `{python}` replaced by the resolved GPU interpreter) through Windows Task Scheduler at Normal priority, outside the caller's process tree. Each launch has a unique identity and owns a kill-on-close Windows Job Object so every descendant is cleaned up atomically. On the project's i7-12700K host, its Auto affinity uses logical CPUs 0-15 so training runs on P-cores. `-ProcessorAffinityMask None` explicitly restores all logical CPUs; explicit hexadecimal/decimal masks are also supported. |
 | `stop_training.ps1` | Stops one exact launcher-owned task instance after verifying its launch manifest and action-process identity. Closing the launcher's Job Object terminates its full process tree without process-id ancestry races. Use this instead of `Stop-ScheduledTask`, which can orphan Python workers. |
 | `training_process_placement.ps1` | Shared priority/affinity helper used by launch and chunk orchestration. Auto is deliberately hardware-safe: it applies `0xFFFF` only to the known 20-thread i7-12700K layout. |
 | `training_task_lock.ps1` | Shared exclusive task-transaction lock used to serialize registration/startup against stopping the same scheduled task name. |
+
+## Result artifacts
+
+| Script | Purpose |
+|---|---|
+| `release_artifacts.py` | `publish` bundles a result's checkpoints and snapshot pools (default `**/*.pth`) into a deterministic zip with a `SHA256SUMS` manifest, refuses files that differ from an existing `ARTIFACTS.sha256`, and uploads the zip plus its checksum to the GitHub release for the result's tag. `fetch` downloads a bundle, verifies the archive and every entry, and extracts it safely. See `docs/eval_protocol.md` §8. |
 
 ## Inspection
 
@@ -67,10 +78,14 @@ pwsh -File scripts\<name>.ps1
 
 ## Sweep orchestrators
 
-These all share the same shape: launch one detached training run per
-configuration, write a manifest entry per run, and grace-kill the python
-process ~3 minutes after `Training complete.` to make sure ROCm/CUDA
-resources are released before the next launch.
+These April 2026 orchestrators predate the vector engine, presets, and the
+Task Scheduler launcher. They drive the object engine with the flags of that
+era and are kept for provenance of the architecture ablations; prefer
+`train_reference.ps1` and `chunked_resume.ps1` for new work. They all share
+the same shape: launch one detached training run per configuration, write a
+manifest entry per run, and grace-kill the python process ~3 minutes after
+`Training complete.` to make sure ROCm/CUDA resources are released before the
+next launch.
 
 | Script | Purpose |
 |---|---|
@@ -91,6 +106,6 @@ after a crash.
   store config dataclasses in the checkpoint, not just weights.
 - Output for analysis scripts goes to stdout in human-readable form. Pipe
   to `Tee-Object` if you want both terminal output and a saved log.
-- Long-running orchestrators must be launched with `Start-Process` in a
-  hidden window so they survive shell exits — see the **Launching Detached
-  Training Runs** section in agents.md.
+- Long-running workloads must run outside the caller's process tree: launch
+  them through `launch_training.ps1` (or `train_reference.ps1`) and stop them
+  with `stop_training.ps1`.

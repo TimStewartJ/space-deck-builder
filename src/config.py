@@ -328,6 +328,73 @@ class SimConfig:
         return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
 
 
+@dataclass(frozen=True)
+class TrainingPreset:
+    """A named, published training recipe.
+
+    ``train_defaults`` maps ``python -m src train`` argument destinations to
+    values. ``--preset`` applies them as parser defaults, so any explicit flag
+    still wins. The chunk and evaluation fields describe how
+    ``scripts/train_reference.ps1`` runs the arc in fresh processes: interim
+    chunks evaluate ``interim_eval_games`` and the final chunk runs the locked
+    ``final_eval_games`` gauntlet with exact seat alternation.
+    """
+    name: str
+    description: str
+    train_defaults: dict[str, Any]
+    chunk_size: int
+    interim_eval_games: int
+    final_eval_games: int
+    eval_num_workers: int
+    results: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+TRAINING_PRESETS: dict[str, TrainingPreset] = {
+    "reference-selfplay": TrainingPreset(
+        name="reference-selfplay",
+        description=(
+            "Optimized snapshot self-play league: vector engine, "
+            "400 updates x 2,000 episodes, fixed opponents plus constant 50% "
+            "variance-PFSP self-play with three active snapshots"
+        ),
+        train_defaults={
+            "engine": "vec",
+            "vec_threads": 4,
+            "vec_max_active_snapshots": 3,
+            "episodes": 2000,
+            "updates": 400,
+            "eval_every": 25,
+            "eval_games": 3200,
+            "num_workers": 16,
+            "opponents": "random,heuristic,simple",
+            "self_play": True,
+            "self_play_ratio": 0.5,
+            "self_play_schedule": "constant",
+            "pfsp": "variance",
+        },
+        chunk_size=25,
+        interim_eval_games=3200,
+        final_eval_games=15000,
+        eval_num_workers=16,
+        results="results/optimized_selfplay_baseline.md",
+    ),
+}
+
+
+def get_training_preset(name: str) -> TrainingPreset:
+    """Return a published training preset by name."""
+    try:
+        return TRAINING_PRESETS[name]
+    except KeyError:
+        valid = ", ".join(sorted(TRAINING_PRESETS))
+        raise ValueError(
+            f"Unknown training preset {name!r}. Valid: {valid}"
+        ) from None
+
+
 # Current checkpoint schema version. V4 adds optional per-card static
 # feature tokens (cost, defense, faction, ally faction, type) gated by
 # ``ModelConfig.token_features``. V2/V3 checkpoints remain weight-loadable

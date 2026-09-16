@@ -66,6 +66,29 @@ python -m src train
 
 > **Defaults live in `src/config.py`** (see `PPOConfig`, `RunConfig`, `DeviceConfig`, `ModelConfig`). Treat that file as the single source of truth — do not duplicate default values here or in `README.md`. Override any default on the CLI with its matching flag; run `python -m src train --help` for the full flag list.
 
+### Reference Recipe
+The strongest published recipe is a named preset in `TRAINING_PRESETS`
+(`src/config.py`). Train one seed end to end with:
+
+```powershell
+.\scripts\train_reference.ps1 -Seed 0
+```
+
+The script registers a Task Scheduler launch, trains the first chunk from
+scratch, continues in fresh 25-update processes with RNG/optimizer/pool
+continuity, and finishes with the locked exact-seat gauntlet. Re-running the
+same command resumes the arc. `python -m src train --preset reference-selfplay`
+applies the same values in a single process; explicit flags still override
+the preset.
+
+### Launching Long Runs
+Launch training, evaluation, tournaments, and benchmarks outside the agent
+process tree. A child of the agent runtime measured ~3.7x slower than the same
+run started through Task Scheduler, and `Start-Process` does not escape that
+execution context. Use `scripts\launch_training.ps1` (`-TrainArgs` for
+`python -m src train`, `-Command` for any other command with `{python}` as the
+interpreter placeholder) and stop runs with `scripts\stop_training.ps1`.
+
 ### Self-Play Training
 ```bash
 python -m src train --self-play
@@ -112,7 +135,7 @@ python -m src train --load-latest-model
 ## Architecture & Performance
 
 ### Rollout
-Training runs `num_workers` simulation processes against a single batched inference server that owns the GPU.
+With `--engine object` (the `RunConfig` default), training runs `num_workers` simulation processes against a single batched inference server that owns the GPU. The same multiprocess runner powers `eval` and `elo`.
 
 **How it works:**
 1. `num_concurrent` games run simultaneously **per worker** — it defaults to
@@ -130,16 +153,25 @@ Shipping arrays through `mp.Queue` instead cost a pickle, pipe write, unpickle
 and staging copy per decision — roughly 4.7 GB per update, all serialised
 through the single server thread.
 
-### Compiler-backed vector engine (experimental)
+### Compiler-backed vector engine
 `src/vector_engine/` compiles all 49 canonical cards from the existing `Effect`
-trees into fixed-width opcode tables and runs the rules in one 16-thread Numba
-SPMD process, including pending target choices and continuation effects.
+trees into fixed-width opcode tables and runs the rules in one Numba SPMD
+process, including pending target choices and continuation effects.
 
 Correctness is differential: scalar and vector legal masks/observations match
 before every action, and complete canonical state matches afterward. Gate 2
 measured 5.88M engine+mask+observation decisions/s and 587k/s with the actual
-GPU policy, so rollouts are policy-bound. `train --engine vec` is guarded to
-the random opponent; object remains the default.
+GPU policy, so rollouts are policy-bound. `train --engine vec` supports the
+fixed Random/Heuristic/Simple opponents, weighted opponent specifications, and
+PFSP snapshot self-play with stacked actor-only snapshot inference; the
+reference preset trains on it. Object remains the `RunConfig` default for
+compatibility.
+
+### Information-set search support
+`src/search/information_set.py` projects a live scalar decision into only the
+acting player's public knowledge and samples seeded hidden hand, deck, and
+trade-deck arrangements from public ownership ledgers without reading the true
+hidden allocation.
 
 ### Diagnosing a slow rollout
 `scripts/bench_rollout.py` reports decisions/sec plus a per-phase breakdown of
@@ -169,6 +201,9 @@ Read it this way:
 - `src/vector_engine/kernels.py` — Numba rules, masks, observations, and wrapper
 - `src/vector_engine/differential.py` — Per-step scalar/vector oracle
 - `src/vector_engine/policy.py` — Actual PPO policy integration
+- `src/vector_engine/opponents.py` — Scalar-equivalent vector fixed opponents
+- `src/ppo/vector_batch_runner.py` — Vector rollout runner, including snapshot self-play
+- `src/search/information_set.py` — Information-set projection and determinization
 - `src/ppo/opponent_pool.py` — Fixed opponents, self-play snapshots, PFSP weighting
 - `src/ppo/elo_tournament.py` — Cross-play Elo tournaments
 - `src/ppo/ppo_actor_critic.py` — Actor-Critic neural network
@@ -207,15 +242,20 @@ python -m src analyze --model models/ppo_agent_XXXX.pth
 
 - **First update is slow** due to GPU/ROCm warmup. Subsequent updates are 3-5x faster.
 - **Watch entropy against the observed baseline, not a fixed threshold.** On the
-  shipped defaults a healthy 200-update run starts near `ent≈0.90` and drifts to
-  `ent≈0.57`. Entropy falling far faster than that early on means the policy is
-  going deterministic before it has explored; raise `--entropy` or lower `--lr`.
+  reference self-play preset a healthy run starts near `ent≈0.97`, falls to
+  `ent≈0.78` by update 25, and settles near `ent≈0.72`. (The historical
+  object-engine 200 × 16,000 recipe drifted from `ent≈0.90` to `ent≈0.57`.)
+  Entropy falling far faster than that early on means the policy is going
+  deterministic before it has explored; raise `--entropy` or lower `--lr`.
 - **`kl` and `clip` tell you whether updates are actually landing.** The shipped
-  defaults produce a small trust-region step (`kl≈0.003`, `clip≈0.03` at full
-  LR). Near-zero values mean the policy has effectively stopped moving.
+  PPO settings produce a small trust-region step (`kl≈0.002–0.004`,
+  `clip≈0.02–0.03` at full LR); both fall toward zero as the cosine schedule
+  reaches `lr_end`. Near-zero values at full LR mean the policy has stopped
+  moving.
 - **`ev` (explained variance)** is the critic's fit to observed returns. It
   should climb early and stay high; a sustained decline means the value
   function is losing track of the state distribution.
 - **`--simulation-device cuda`** is faster than `cpu` because the BatchRunner does batched inference on GPU, eliminating CPU↔GPU transfer per batch.
 - **Checkpoints** are saved after every update to `models/ppo_agent_{timestamp}_upd{N}_wins{W}.pth`. Only eval updates record a real win count; others save `wins-1`.
 - **Eval is expensive** — raise `--eval-every` for long training runs. Eval always runs on the last update regardless.
+- **Publish checkpoints a result depends on** with `scripts/release_artifacts.py publish` rather than committing them; see `docs/eval_protocol.md` §8.

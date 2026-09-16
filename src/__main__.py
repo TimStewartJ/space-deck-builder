@@ -23,6 +23,7 @@ def _build_train_parser(sub: argparse._SubParsersAction):
         ModelConfig,
         PPOConfig,
         RunConfig,
+        TRAINING_PRESETS,
     )
     _ppo = PPOConfig()
     _run = RunConfig()
@@ -31,6 +32,18 @@ def _build_train_parser(sub: argparse._SubParsersAction):
 
     p = sub.add_parser("train", help="Run PPO training")
     _add_common_args(p)
+    p.add_argument(
+        "--preset",
+        type=str,
+        default=None,
+        choices=sorted(TRAINING_PRESETS),
+        help=(
+            "Apply a published training recipe from src/config.py as the "
+            "defaults for this run; explicit flags still override it. "
+            "Use scripts/train_reference.ps1 to run the complete arc in "
+            "fresh-process chunks outside the caller's process tree."
+        ),
+    )
     p.add_argument(
         "--models-dir",
         type=str,
@@ -277,23 +290,45 @@ def _build_analyze_parser(sub: argparse._SubParsersAction):
     return p
 
 
-def main(argv=None):
+def build_cli_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
+    """Build the unified CLI parser and return it with the train subparser."""
     parser = argparse.ArgumentParser(
         prog="space-deck-builder",
         description="Star Realms AI — training, simulation, and benchmarking",
     )
     sub = parser.add_subparsers(dest="command")
-    _build_train_parser(sub)
+    train_parser = _build_train_parser(sub)
     _build_simulate_parser(sub)
     _build_benchmark_parser(sub)
     _build_elo_parser(sub)
     _build_eval_parser(sub)
     _build_analyze_parser(sub)
+    return parser, train_parser
 
+
+def parse_cli_args(argv=None) -> argparse.Namespace:
+    """Parse CLI arguments, applying a training preset before explicit flags.
+
+    A preset changes the train subparser's defaults and the arguments are
+    parsed again, so every flag given on the command line overrides the
+    preset while omitted flags take the published recipe values.
+    """
+    parser, train_parser = build_cli_parser()
     args = parser.parse_args(argv)
+    if args.command == "train" and getattr(args, "preset", None):
+        from src.config import get_training_preset
+
+        preset = get_training_preset(args.preset)
+        train_parser.set_defaults(**preset.train_defaults)
+        args = parser.parse_args(argv)
+    return args
+
+
+def main(argv=None):
+    args = parse_cli_args(argv)
 
     if args.command is None:
-        parser.print_help()
+        build_cli_parser()[0].print_help()
         sys.exit(1)
 
     if args.command == "train":
@@ -315,6 +350,8 @@ def _run_train(args):
     from src.config import DataConfig, PPOConfig, RunConfig, DeviceConfig, ModelConfig
     from src.ppo.ppo_trainer import train
 
+    if getattr(args, "preset", None):
+        print(f"Training preset: {args.preset}", flush=True)
     data_cfg = DataConfig(
         cards_path=args.cards_path,
         models_dir=args.models_dir,

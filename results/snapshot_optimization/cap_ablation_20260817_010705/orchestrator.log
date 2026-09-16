@@ -1,0 +1,117 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260817011159
+Username: TIMMIEPC\timmie
+RunAs User: TIMMIEPC\timmie
+Configuration Name: 
+Machine: TIMMIEPC (Microsoft Windows NT 10.0.26200.0)
+Host Application: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\timmie\.copilot\session-state\a5638986-91cf-4193-a9a8-07f82fd159b1\files\run_snapshot_cap_ablation.ps1
+Process ID: 22928
+PSVersion: 5.1.26100.9168
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9168
+BuildVersion: 10.0.26100.9168
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Starting or resuming snapshot cap 1.
+[chunked_resume:snapshot-cap-1] start=E:\sdb-snapshot-inference\models\ppo_agent_0816_2132_upd213_wins-1.pth current=213
+ target=263 chunk=25
+[chunked_resume:snapshot-cap-1] chunk start: 213 -> 238; log=E:\space-deck-builder\results\snapshot_optimization\cap_abl
+ation_20260817_010705\cap_1\upd213_to_238_20260817_011201.log
+chunk process exited with code -1
+At E:\sdb-snapshot-inference\scripts\chunked_resume.ps1:476 char:9
++         throw $manifest.failure
++         ~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (chunk process exited with code -1:String) [], RuntimeException
+    + FullyQualifiedErrorId : chunk process exited with code -1
+**********************
+Windows PowerShell transcript end
+End time: 20260817012131
+**********************
+**********************
+Windows PowerShell transcript start
+Start time: 20260817012212
+Username: TIMMIEPC\timmie
+RunAs User: TIMMIEPC\timmie
+Configuration Name: 
+Machine: TIMMIEPC (Microsoft Windows NT 10.0.26200.0)
+Host Application: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\timmie\.copilot\session-state\a5638986-91cf-4193-a9a8-07f82fd159b1\files\run_snapshot_cap_ablation.ps1
+Process ID: 38796
+PSVersion: 5.1.26100.9168
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9168
+BuildVersion: 10.0.26100.9168
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Starting or resuming snapshot cap 1.
+[chunked_resume:snapshot-cap-1] start=E:\space-deck-builder\results\snapshot_optimization\cap_ablation_20260817_010705\c
+ap_1\models\ppo_agent_0817_0114_upd237_wins-1.pth current=237 target=263 chunk=25
+[chunked_resume:snapshot-cap-1] chunk start: 237 -> 262; log=E:\space-deck-builder\results\snapshot_optimization\cap_abl
+ation_20260817_010705\cap_1\upd237_to_262_20260817_012214.log
+[chunked_resume:snapshot-cap-1] chunk complete: update 262
+[chunked_resume:snapshot-cap-1] chunk start: 262 -> 263; log=E:\space-deck-builder\results\snapshot_optimization\cap_abl
+ation_20260817_010705\cap_1\upd262_to_263_20260817_012501.log
+[chunked_resume:snapshot-cap-1] chunk complete: update 263
+[chunked_resume:snapshot-cap-1] complete: E:\space-deck-builder\results\snapshot_optimization\cap_ablation_20260817_0107
+05\cap_1\models\ppo_agent_0817_0125_upd263_wins13975.pth
+Starting or resuming snapshot cap 2.
+[chunked_resume:snapshot-cap-2] start=E:\sdb-snapshot-inference\models\ppo_agent_0816_2132_upd213_wins-1.pth current=213
+ target=263 chunk=25
+[chunked_resume:snapshot-cap-2] chunk start: 213 -> 238; log=E:\space-deck-builder\results\snapshot_optimization\cap_abl
+ation_20260817_010705\cap_2\upd213_to_238_20260817_012548.log
+[chunked_resume:snapshot-cap-2] chunk complete: update 238
+[chunked_resume:snapshot-cap-2] chunk start: 238 -> 263; log=E:\space-deck-builder\results\snapshot_optimization\cap_abl
+ation_20260817_010705\cap_2\upd238_to_263_20260817_012942.log
+[chunked_resume:snapshot-cap-2] chunk complete: update 263
+[chunked_resume:snapshot-cap-2] complete: E:\space-deck-builder\results\snapshot_optimization\cap_ablation_20260817_0107
+05\cap_2\models\ppo_agent_0817_0133_upd263_wins14026.pth
+Starting or resuming snapshot cap 3.
+[chunked_resume:snapshot-cap-3] chunk complete: update 238
+[chunked_resume:snapshot-cap-3] chunk start: 238 -> 263; log=E:\space-deck-builder\results\snapshot_optimization\cap_abl
+ation_20260817_010705\cap_3\upd238_to_263_20260817_013748.log
+[chunked_resume:snapshot-cap-3] chunk complete: update 263
+[chunked_resume:snapshot-cap-3] complete: E:\space-deck-builder\results\snapshot_optimization\cap_ablation_20260817_0107
+05\cap_3\models\ppo_agent_0817_0141_upd263_wins14102.pth
+Snapshot cap ablation and Elo tournament complete.
+**********************
+Windows PowerShell transcript end
+End time: 20260817014414
+**********************
+**********************
+Windows PowerShell transcript start
+Start time: 20260817014721
+Username: TIMMIEPC\timmie
+RunAs User: TIMMIEPC\timmie
+Configuration Name: 
+Machine: TIMMIEPC (Microsoft Windows NT 10.0.26200.0)
+Host Application: powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Users\timmie\.copilot\session-state\a5638986-91cf-4193-a9a8-07f82fd159b1\files\run_snapshot_cap_ablation.ps1
+Process ID: 11352
+PSVersion: 5.1.26100.9168
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9168
+BuildVersion: 10.0.26100.9168
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Starting or resuming snapshot cap 1.
+[chunked_resume:snapshot-cap-1] already complete: E:\space-deck-builder\results\snapshot_optimization\cap_ablation_20260
+817_010705\cap_1\final_checkpoint.pth
+Starting or resuming snapshot cap 2.
+[chunked_resume:snapshot-cap-2] already complete: E:\space-deck-builder\results\snapshot_optimization\cap_ablation_20260
+817_010705\cap_2\final_checkpoint.pth
+Starting or resuming snapshot cap 3.
+[chunked_resume:snapshot-cap-3] already complete: E:\space-deck-builder\results\snapshot_optimization\cap_ablation_20260
+817_010705\cap_3\final_checkpoint.pth
+Snapshot cap ablation and Elo tournament complete.
+**********************
+Windows PowerShell transcript end
+End time: 20260817015007
+**********************

@@ -1,0 +1,48 @@
+{
+    "runId":  "pilot_20260815_223359",
+    "startedAt":  "2026-08-15T22:34:02.6868740-07:00",
+    "status":  "complete",
+    "repo":  "E:\\space-deck-builder",
+    "arms":  [
+                 {
+                     "name":  "A",
+                     "updates":  50,
+                     "episodes":  16000,
+                     "seed":  0,
+                     "startedAt":  "2026-08-15T22:34:02.7248749-07:00",
+                     "status":  "complete",
+                     "log":  "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_A\\training.log",
+                     "exitCode":  0,
+                     "finishedAt":  "2026-08-16T08:09:39.3268598-07:00",
+                     "metrics":  "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_A\\metrics.jsonl",
+                     "checkpoint":  "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_A\\ppo_agent_0816_0809_upd50_wins3037.pth"
+                 },
+                 {
+                     "name":  "B",
+                     "updates":  200,
+                     "episodes":  4000,
+                     "seed":  0,
+                     "startedAt":  "2026-08-16T08:09:39.3318590-07:00",
+                     "status":  "complete",
+                     "log":  "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_B\\training.log",
+                     "exitCode":  0,
+                     "finishedAt":  "2026-08-16T10:59:14.9730019-07:00",
+                     "metrics":  "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_B\\metrics.jsonl",
+                     "checkpoint":  "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_B\\ppo_agent_0816_1059_upd200_wins3038.pth"
+                 },
+                 {
+                     "name":  "C",
+                     "updates":  400,
+                     "episodes":  2000,
+                     "seed":  0,
+                     "startedAt":  "2026-08-16T10:59:14.9770019-07:00",
+                     "status":  "complete",
+                     "log":  "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_C\\training.log",
+                     "exitCode":  0,
+                     "finishedAt":  "2026-08-16T15:24:12.0172350-07:00",
+                     "metrics":  "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_C\\metrics.jsonl",
+                     "checkpoint":  "E:\\space-deck-builder\\results\\compute_budget_pilot\\pilot_20260815_223359\\arm_C\\ppo_agent_0816_1524_upd400_wins3006.pth"
+                 }
+             ],
+    "finishedAt":  "2026-08-16T15:24:12.0192284-07:00"
+}
