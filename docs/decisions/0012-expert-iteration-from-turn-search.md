@@ -85,6 +85,14 @@ top of the distilled policy.
 start round 2 from the distilled checkpoints. If either gate fails, improve
 leaf evaluation before more rounds.
 
+## Round 1 result
+
+**FAIL** by two games on the primary gate. The distilled checkpoint scored
+1,056/2,000 = 52.8% against its source at temperature 0 (+19 Elo, 95% CI +4 to
++35; threshold 52.9%). It passed retention with 92.64% against Heuristic, and
+search on the distilled checkpoint added +55 Elo over its greedy play. See
+[`results/expert_iteration_round1.md`](../../results/expert_iteration_round1.md).
+
 ## Rejected alternatives
 
 **One-hot targets on the searched move.** They discard the prior's ordering

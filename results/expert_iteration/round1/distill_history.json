@@ -1,0 +1,193 @@
+{
+  "config": {
+    "model_path": "results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth",
+    "data_dir": "logs\\expert_iteration\\round1\\data",
+    "output_path": "logs\\expert_iteration\\round1\\distilled_seed0.pth",
+    "lr": 0.0001,
+    "batch_size": 8192,
+    "max_epochs": 8,
+    "patience": 2,
+    "value_coef": 0.5,
+    "grad_clip": 0.5,
+    "validation_modulus": 20,
+    "seed": 0,
+    "device": "cuda"
+  },
+  "source_model_sha256": "9d10dca5110c2bbe9cc0f8693e11578dee347a8c60e7ed63002af7d82e80a503",
+  "data_positions": 2230469,
+  "train_positions": 2116709,
+  "validation_positions": 113760,
+  "best_epoch": 5,
+  "history": [
+    {
+      "epoch": 0,
+      "validation": {
+        "positions": 113760,
+        "policy_ce": 0.6367223640366781,
+        "target_entropy": 0.5467599689038326,
+        "value_mse": 0.6066505850618902,
+        "kl_initial": 0.0,
+        "search_agreement": 0.9717410942225364,
+        "initial_greedy_agreement": 1.0,
+        "policy_kl": 0.08996239513284554,
+        "value_explained_variance": 0.3951243546853067,
+        "loss": 0.9400476565676232
+      }
+    },
+    {
+      "epoch": 1,
+      "train": {
+        "policy_ce": 0.6201610118726045,
+        "value_mse": 0.5837596387936802,
+        "grad_norm": 0.5002100087961174,
+        "steps": 259,
+        "elapsed_s": 8.51902610000252
+      },
+      "validation": {
+        "positions": 113760,
+        "policy_ce": 0.6239153168540128,
+        "target_entropy": 0.5467599689038326,
+        "value_mse": 0.573129695243138,
+        "kl_initial": 0.009239052653145018,
+        "search_agreement": 0.9355386669808727,
+        "initial_greedy_agreement": 0.9533502219080162,
+        "policy_kl": 0.0771553479501802,
+        "value_explained_variance": 0.4251981447243667,
+        "loss": 0.9104801644755818
+      }
+    },
+    {
+      "epoch": 2,
+      "train": {
+        "policy_ce": 0.6172354481395147,
+        "value_mse": 0.5754010267699547,
+        "grad_norm": 0.49737057785960237,
+        "steps": 259,
+        "elapsed_s": 6.523350900002697
+      },
+      "validation": {
+        "positions": 113760,
+        "policy_ce": 0.6227595676685017,
+        "target_entropy": 0.5467599689038326,
+        "value_mse": 0.5724283017186675,
+        "kl_initial": 0.01009224960069616,
+        "search_agreement": 0.9349593495934959,
+        "initial_greedy_agreement": 0.9521523113781862,
+        "policy_kl": 0.07599959876466911,
+        "value_explained_variance": 0.4265586917637101,
+        "loss": 0.9089737185278355
+      }
+    },
+    {
+      "epoch": 3,
+      "train": {
+        "policy_ce": 0.6163147414052809,
+        "value_mse": 0.5705994427434266,
+        "grad_norm": 0.5736140435036545,
+        "steps": 259,
+        "elapsed_s": 6.397791099996539
+      },
+      "validation": {
+        "positions": 113760,
+        "policy_ce": 0.6219704114267427,
+        "target_entropy": 0.5467599689038326,
+        "value_mse": 0.5705944120297117,
+        "kl_initial": 0.011946120107894876,
+        "search_agreement": 0.9350575389811869,
+        "initial_greedy_agreement": 0.9517693727661914,
+        "policy_kl": 0.07521044252291009,
+        "value_explained_variance": 0.4267482740494899,
+        "loss": 0.9072676174415986
+      }
+    },
+    {
+      "epoch": 4,
+      "train": {
+        "policy_ce": 0.6158042388993341,
+        "value_mse": 0.5665525883781404,
+        "grad_norm": 0.5347254634133637,
+        "steps": 259,
+        "elapsed_s": 6.39248470000166
+      },
+      "validation": {
+        "positions": 113760,
+        "policy_ce": 0.6215216914309731,
+        "target_entropy": 0.5467599689038326,
+        "value_mse": 0.5705487730130867,
+        "kl_initial": 0.011405347537055464,
+        "search_agreement": 0.9335257845332077,
+        "initial_greedy_agreement": 0.9501394289305212,
+        "policy_kl": 0.07476172252714053,
+        "value_explained_variance": 0.42629399529148737,
+        "loss": 0.9067960779375165
+      }
+    },
+    {
+      "epoch": 5,
+      "train": {
+        "policy_ce": 0.6154094754959165,
+        "value_mse": 0.5628203399853356,
+        "grad_norm": 0.5438678613845906,
+        "steps": 259,
+        "elapsed_s": 6.417493300003116
+      },
+      "validation": {
+        "positions": 113760,
+        "policy_ce": 0.6212298644075246,
+        "target_entropy": 0.5467599689038326,
+        "value_mse": 0.5706964828126373,
+        "kl_initial": 0.012455329546277868,
+        "search_agreement": 0.9326322611052198,
+        "initial_greedy_agreement": 0.9488727858293076,
+        "policy_kl": 0.07446989550369199,
+        "value_explained_variance": 0.4260160463655316,
+        "loss": 0.9065781058138432
+      }
+    },
+    {
+      "epoch": 6,
+      "train": {
+        "policy_ce": 0.6150739581888707,
+        "value_mse": 0.5592074985669847,
+        "grad_norm": 0.5137533322264329,
+        "steps": 259,
+        "elapsed_s": 6.406295099994168
+      },
+      "validation": {
+        "positions": 113760,
+        "policy_ce": 0.6212903673303446,
+        "target_entropy": 0.5467599689038326,
+        "value_mse": 0.5721601097224969,
+        "kl_initial": 0.012266308144678044,
+        "search_agreement": 0.9294312870664938,
+        "initial_greedy_agreement": 0.9452201406072032,
+        "policy_kl": 0.07453039842651199,
+        "value_explained_variance": 0.4245544306524984,
+        "loss": 0.907370422191593
+      }
+    },
+    {
+      "epoch": 7,
+      "train": {
+        "policy_ce": 0.6148449994882561,
+        "value_mse": 0.5557213085038322,
+        "grad_norm": 0.5002676290549827,
+        "steps": 259,
+        "elapsed_s": 6.549811899996712
+      },
+      "validation": {
+        "positions": 113760,
+        "policy_ce": 0.6209002616871594,
+        "target_entropy": 0.5467599689038326,
+        "value_mse": 0.5728975706462619,
+        "kl_initial": 0.012951798713995266,
+        "search_agreement": 0.9297847688621814,
+        "initial_greedy_agreement": 0.9455638034641216,
+        "policy_kl": 0.07414029278332679,
+        "value_explained_variance": 0.42389618480058466,
+        "loss": 0.9073490470102903
+      }
+    }
+  ],
+  "elapsed_s": 72.23018210000009
+}

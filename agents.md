@@ -178,6 +178,9 @@ vector population, guided by the policy and critic.
 `src/search/batched_games.py` plays many games concurrently with batched
 policy and search decisions, and `python -m src search-eval` measures search
 uplift against the same checkpoint without search (ADR 0010 and ADR 0011).
+`python -m src search-selfplay` records search-versus-search games as training
+shards with completed-Q improved policies and outcomes, and
+`python -m src distill` trains a checkpoint on them (ADR 0012).
 Launch large `search-eval` runs and `scripts/bench_turn_search.py` through
 `scripts/launch_training.ps1 -Command`.
 
@@ -217,6 +220,8 @@ Read it this way:
 - `src/search/turn_search.py` — Batched turn-bounded rollout search with vector worlds
 - `src/search/batched_games.py` — Concurrent games with batched policy and search seats
 - `src/search/uplift.py` — Search-versus-baseline match harness (`search-eval`)
+- `src/search/selfplay_data.py` — Search self-play training shards (`search-selfplay`)
+- `src/search/distill.py` — Distillation of search targets into a checkpoint (`distill`)
 - `src/ppo/opponent_pool.py` — Fixed opponents, self-play snapshots, PFSP weighting
 - `src/ppo/elo_tournament.py` — Cross-play Elo tournaments
 - `src/ppo/ppo_actor_critic.py` — Actor-Critic neural network

@@ -1,0 +1,39 @@
+{
+  "anchor": "distilled_seed0@T0",
+  "anchor_elo": 1000.0,
+  "games_per_pair": 2000,
+  "participants": [
+    {
+      "index": 0,
+      "label": "distilled_seed0@T0",
+      "kind": "checkpoint",
+      "path": "logs\\expert_iteration\\round1\\distilled_seed0.pth",
+      "temperature": 0.0,
+      "elo": 1000.0,
+      "wins": 1056,
+      "losses": 944,
+      "games": 2000
+    },
+    {
+      "index": 1,
+      "label": "selfplay_seed0@T0",
+      "kind": "checkpoint",
+      "path": "results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth",
+      "temperature": 0.0,
+      "elo": 980.5232304401103,
+      "wins": 944,
+      "losses": 1056,
+      "games": 2000
+    }
+  ],
+  "pairings": [
+    {
+      "i": 0,
+      "j": 1,
+      "label_i": "distilled_seed0@T0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 1056,
+      "games": 2000
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "identity": {
+    "model_path": "results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth",
+    "budget": 64,
+    "max_candidates": 8,
+    "seed": 0,
+    "device": "cuda",
+    "model_sha256": "9d10dca5110c2bbe9cc0f8693e11578dee347a8c60e7ed63002af7d82e80a503",
+    "search_implementation": "batched-count-roots-v1",
+    "shard_format": "search-selfplay-v1"
+  },
+  "games": 8192,
+  "positions": 2230469,
+  "shards": 35,
+  "elapsed_s": 2662.8132904999948
+}

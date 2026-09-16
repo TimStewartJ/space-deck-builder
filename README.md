@@ -223,6 +223,25 @@ python -m src search-eval --model results/optimized_selfplay_baseline/checkpoint
     --budgets 0 16 64 256 --games 1000 --batch-size 1024 --output-json uplift.json
 ```
 
+### Expert iteration
+
+`python -m src search-selfplay` records games where both seats search with
+the same checkpoint. Every position stores the acting player's observation,
+legal actions, the search's completed-Q improved policy, and the game outcome.
+`python -m src distill` trains a checkpoint on those targets with a game-level
+validation split and early stopping; see
+[`docs/decisions/0012-expert-iteration-from-turn-search.md`](docs/decisions/0012-expert-iteration-from-turn-search.md).
+Round 1 made the greedy policy +19 Elo stronger (95% CI +4 to +35), narrowly
+missing its pre-registered +20 Elo gate
+([`results/expert_iteration_round1.md`](results/expert_iteration_round1.md)).
+
+```bash
+python -m src search-selfplay --model results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth \
+    --games 8192 --budget 64 --output-dir logs/expert_iteration/data
+python -m src distill --model results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth \
+    --data logs/expert_iteration/data --output logs/expert_iteration/distilled.pth
+```
+
 ### Measuring rollout performance
 
 `scripts/bench_rollout.py` runs a short training and prints decisions/sec

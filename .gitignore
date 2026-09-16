@@ -20,6 +20,9 @@ logs/OVERNIGHT_ABORT.flag
 # Reference-recipe run roots (scripts/train_reference.ps1): chunk logs,
 # manifests, and checkpoints. Publish evidence under results/ explicitly.
 logs/reference/
+# Search self-play shards and distilled checkpoints; publish evidence under
+# results/ and checkpoints as release assets.
+logs/expert_iteration/
 # SpecStory explanation file
 .specstory/.what-is-this.md
 
