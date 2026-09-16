@@ -149,6 +149,28 @@ def test_eval_and_elo_cli_parse_temperatures():
         parse_cli_args(["elo", "--checkpoint-temperatures", "0,0"])
 
 
+def test_elo_cli_counts_temperature_variants_as_participants(monkeypatch):
+    from src import __main__ as cli
+
+    captured = {}
+    monkeypatch.setattr(
+        "src.ppo.elo_tournament.run_tournament",
+        lambda **kwargs: captured.update(kwargs),
+    )
+    args = parse_cli_args([
+        "elo", "--checkpoints", str(CHECKPOINT),
+        "--checkpoint-temperatures", "1,0", "--games-per-pair", "2",
+    ])
+    cli._run_elo(args)
+
+    assert captured["checkpoint_paths"] == [str(Path(CHECKPOINT))]
+    assert captured["checkpoint_temperatures"] == [1.0, 0.0]
+
+    lone = parse_cli_args(["elo", "--checkpoints", str(CHECKPOINT)])
+    with pytest.raises(SystemExit):
+        cli._run_elo(lone)
+
+
 def test_evaluate_passes_temperature_to_runner(monkeypatch):
     from src.config import DataConfig
     from src.ppo import ppo_eval

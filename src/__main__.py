@@ -478,10 +478,12 @@ def _run_elo(args):
               f"Valid types: {', '.join(sorted(BUILTIN_AGENT_TYPES))}")
         sys.exit(1)
 
-    total_participants = len(paths) + len(agent_types)
+    checkpoint_participants = len(paths) * len(args.checkpoint_temperatures)
+    total_participants = checkpoint_participants + len(agent_types)
     if total_participants < 2:
         print(f"Error: need at least 2 participants, found {total_participants} "
-              f"({len(paths)} checkpoints, {len(agent_types)} agents)")
+              f"({len(paths)} checkpoints x {len(args.checkpoint_temperatures)} "
+              f"temperatures, {len(agent_types)} agents)")
         sys.exit(1)
 
     data_cfg = DataConfig(cards_path=args.cards_path)
