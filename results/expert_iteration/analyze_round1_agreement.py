@@ -90,9 +90,10 @@ def main() -> None:
 
     distilled = json.loads(DIAGNOSTIC.read_text(encoding="utf-8"))
     matched = json.loads(MATCHED.read_text(encoding="utf-8"))
-    # The matched run was recorded at bec31af, before the payload carried a
-    # search-implementation label; later commits changed only latency
-    # attribution and resume identity, not how search plays.
+    # The matched run's payload predates the search-implementation label.
+    # Between the batched search commit and the label, only latency
+    # attribution and resume identity changed, and replaying matched deals
+    # with the labeled implementation reproduces its games.
     for payload in (distilled, matched):
         config = payload["config"]
         settings = (config["seed"], config["games"], config["max_candidates"], config["baseline"], 64 in config["budgets"])

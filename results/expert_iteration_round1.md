@@ -99,9 +99,9 @@ changing 3.1% of non-forced decisions). The matched baseline is
 `selfplay_seed0` on the same 1,000 deals with the same batched search
 ([`batched_search/strength_seed0_budget0_64.json`](batched_search/strength_seed0_budget0_64.json)),
 where search scored 54.9% (+34 Elo). Paired by deal, search's advantage on the
-distilled checkpoint is +3.0 points (95% CI −0.3 to +6.3; 160 vs 130
-discordant deals; exact McNemar p = 0.088). Distillation produced no
-detectable reduction in how much search adds.
+distilled checkpoint is 3.0 points higher than on the source (95% CI −0.3 to
++6.3; 160 vs 130 discordant deals; exact McNemar p = 0.088). Distillation
+produced no detectable reduction in how much search adds.
 
 ## Conclusions
 
@@ -113,8 +113,9 @@ detectable reduction in how much search adds.
   most of its own departures from greedy play are positions where search kept
   the greedy move. This distillation recipe transfers little of what search
   changes.
-- Search adds no less on top of the distilled policy than on its source on
-  the same deals, so the remaining search advantage has not been used up.
+- Search adds no detectably less on top of the distilled policy than on its
+  source on the same deals, so the remaining search advantage has not been
+  used up.
 
 The pre-registered consequence of a failed gate is to improve leaf evaluation
 before running more rounds.
