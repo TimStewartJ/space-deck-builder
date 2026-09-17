@@ -1,0 +1,27 @@
+{
+  "validation_non_forced_positions": 101844,
+  "recorded_greedy_matches_source_model": 1.0,
+  "student_search_agreement": 0.9326322611052198,
+  "student_source_agreement": 0.9488727858293076,
+  "search_source_agreement": 0.9717410942225364,
+  "search_changed_positions": 2878,
+  "search_changed_fraction": 0.02825890577746357,
+  "student_plays_search_move_where_search_changed": 0.18276580958999306,
+  "student_keeps_greedy_where_search_changed": 0.7574704656011119,
+  "student_changed_positions": 5207,
+  "student_changes_where_search_kept_greedy": 0.8659496831188784,
+  "student_changes_matching_target_top": 0.10966007297868255,
+  "target_top_matches_search_move": 0.9501394289305212,
+  "search_advantage_comparison": {
+    "distilled_budget64_win_rate": 0.579,
+    "source_budget64_win_rate": 0.549,
+    "paired_difference": 0.03,
+    "paired_difference_ci95": [
+      -0.0033251518385538914,
+      0.06332515183855389
+    ],
+    "discordant_distilled_only": 160,
+    "discordant_source_only": 130,
+    "exact_mcnemar_p": 0.08840538831524868
+  }
+}

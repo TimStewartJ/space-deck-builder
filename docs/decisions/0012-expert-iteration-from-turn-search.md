@@ -89,8 +89,10 @@ leaf evaluation before more rounds.
 
 **FAIL** by two games on the primary gate. The distilled checkpoint scored
 1,056/2,000 = 52.8% against its source at temperature 0 (+19 Elo, 95% CI +4 to
-+35; threshold 52.9%). It passed retention with 92.64% against Heuristic, and
-search on the distilled checkpoint added +55 Elo over its greedy play. See
++35; threshold 52.9%). It passed retention with 92.64% against Heuristic. It
+adopted only 18.3% of search's move changes on validation positions, and
+search on the distilled checkpoint added no detectably less than on its
+source on the same deals. See
 [`results/expert_iteration_round1.md`](../../results/expert_iteration_round1.md).
 
 ## Rejected alternatives

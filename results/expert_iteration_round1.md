@@ -49,11 +49,19 @@ Validation loss was best at epoch 5; epochs 6 and 7 did not improve it.
 - **Policy.** The student closed about 17% of the gap to the search targets
   (KL 0.090 → 0.0745 nats), and its critic explains more outcome variance
   (0.395 → 0.426).
-- **Agreement.** The student's greedy move agrees *less* often with search's
-  move (97.2% → 93.3%). The completed-Q targets are soft (entropy 0.547 nats),
-  so when two actions have similar targets the student's argmax follows the
-  smaller logit differences. The student changes about 5% of the source's
-  greedy decisions, not only the ~3% search changes.
+- **Adoption of search's changes.** On the 101,844 non-forced validation
+  positions ([`agreement_analysis.json`](expert_iteration/round1/agreement_analysis.json)):
+  - search changed the source's greedy move on 2.83% (2,878) of positions;
+  - where search changed the move, the student played search's move on only
+    18.3% and kept the source's greedy move on 75.8%;
+  - the student changed the greedy move on 5.11% (5,207) of positions, and
+    86.6% of those changes are positions where search kept the greedy move;
+  - only 11.0% of the student's changes are the target's top action.
+- **Targets vs search moves.** The targets' top action is search's move on
+  95.0% of positions, so the soft completed-Q targets (entropy 0.547 nats) do
+  not always point at the move search played. One untested hypothesis for the
+  student's other changes is that it fits small differences between similar
+  target probabilities.
 
 ## Gates
 
@@ -87,10 +95,13 @@ saturated, and differences of this size are within its noise.
 | 64 | 579/1,000 | 57.9% (54.8–60.9%) | +55 |
 
 Search still improves on the distilled checkpoint's own greedy play (+55 Elo,
-changing 3.1% of decisions). That is at least as much as on the source
-checkpoint (+44 Elo pooled over three seeds): distillation did not use up the
-advantage search adds. These are separate matchups, so the Elo figures need
-not add.
+changing 3.1% of non-forced decisions). The matched baseline is
+`selfplay_seed0` on the same 1,000 deals with the same batched search
+([`batched_search/strength_seed0_budget0_64.json`](batched_search/strength_seed0_budget0_64.json)),
+where search scored 54.9% (+34 Elo). Paired by deal, search's advantage on the
+distilled checkpoint is +3.0 points (95% CI −0.3 to +6.3; 160 vs 130
+discordant deals; exact McNemar p = 0.088). Distillation produced no
+detectable reduction in how much search adds.
 
 ## Conclusions
 
@@ -98,11 +109,12 @@ not add.
   (+19 Elo, 95% CI +4 to +35) with no detectable loss against the fixed
   gauntlet, but the gain missed the pre-registered +20 Elo threshold, so the
   round fails.
-- Search adds as much on top of the distilled policy as it did on the source,
-  so further rounds are not ruled out by a shrinking search advantage.
-- The distilled policy changes more decisions than search does, and its
-  agreement with search's moves fell. The soft completed-Q targets transfer
-  search's preferences only partly.
+- The student adopted only about one in five of search's move changes, and
+  most of its own departures from greedy play are positions where search kept
+  the greedy move. This distillation recipe transfers little of what search
+  changes.
+- Search adds no less on top of the distilled policy than on its source on
+  the same deals, so the remaining search advantage has not been used up.
 
 The pre-registered consequence of a failed gate is to improve leaf evaluation
 before running more rounds.
@@ -113,7 +125,11 @@ before running more rounds.
 - `distill_history.json`, `distill.log` — per-epoch training and validation
   metrics;
 - `gate_elo_T0.json`, `gate_gauntlet_T0.json` and logs — both gates;
-- `diagnostic_search_eval.json` and log — the diagnostic match.
+- `diagnostic_search_eval.json` and log — the diagnostic match;
+- `agreement_analysis.json` — adoption of search's changes and the matched
+  search comparison, produced by
+  [`analyze_round1_agreement.py`](expert_iteration/analyze_round1_agreement.py)
+  from the archived shards and checkpoint.
 
 The distilled checkpoint
 (`distilled_seed0.pth`, SHA-256 `af1cbea817b23d63dd7d89feb2c2de3d7922006ac11b7da4bef1ef93e93b60ca`),
