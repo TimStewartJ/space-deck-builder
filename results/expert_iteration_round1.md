@@ -136,5 +136,10 @@ The distilled checkpoint
 (`distilled_seed0.pth`, SHA-256 `af1cbea817b23d63dd7d89feb2c2de3d7922006ac11b7da4bef1ef93e93b60ca`),
 the 35 self-play shards, and the diagnostic games journal are archived off-repo
 under `D:\space-deck-builder-archive\expert-iteration-round1-20260916`. The
-checkpoint has not been published because nothing has been pushed; publish it
-as a release asset when the branch is pushed.
+checkpoint is published as `expert_iteration_round1-checkpoints.zip` in the
+`expert-iteration/round1/2026-09-16` release. Restore it to the default work
+directory of [`run_round1.ps1`](expert_iteration/run_round1.ps1) with:
+
+```powershell
+python scripts/release_artifacts.py fetch --tag expert-iteration/round1/2026-09-16 --bundle expert_iteration_round1-checkpoints --dest logs/expert_iteration/round1
+```
