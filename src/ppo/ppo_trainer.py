@@ -17,7 +17,7 @@ from src.ai.agent import Agent
 from src.ai.ppo_agent import PPOAgent
 from src.encoding.action_encoder import get_action_space_size
 from src.ppo.batch_runner import BatchRunner
-from src.ppo.opponent_pool import OpponentPool
+from src.ppo.opponent_pool import OpponentPool, load_frozen_opponents
 from src.ppo.train_logger import setup_training_logger, MetricsWriter, format_ppo_metrics
 from src.utils.logger import set_disabled, set_verbose
 
@@ -94,6 +94,7 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
             ),
             pfsp_weights=pfsp_weights,
             max_active_snapshots=run_cfg.vec_max_active_snapshots,
+            snapshot_temperature=run_cfg.frozen_opponent_temperature,
         )
 
     if run_cfg.num_workers > 1:
@@ -247,6 +248,15 @@ def train(
                 "Resume requested but checkpoint has no pool_manifest; "
                 "self-play snapshot pool starts empty."
             )
+    if run_cfg.frozen_opponents:
+        frozen_names = load_frozen_opponents(
+            pool, run_cfg.frozen_opponents, card_names, registry=registry,
+        )
+        logger.info(
+            f"Frozen opponents: {', '.join(frozen_names)} "
+            f"(ratio {run_cfg.frozen_opponent_ratio:g}, "
+            f"temperature {run_cfg.frozen_opponent_temperature:g})"
+        )
     opp_types = pool.opponent_types
     pool_msg = f"Opponent pool: {', '.join(opp_types)}"
     if run_cfg.self_play:
@@ -376,17 +386,25 @@ def train(
             end_update,
             self_play_horizon,
         )
-        current_sp_ratio = _compute_self_play_ratio(
-            run_cfg.self_play_ratio_start,
-            run_cfg.self_play_ratio,
-            run_cfg.self_play_schedule,
-            progress,
-        )
+        if run_cfg.frozen_opponents:
+            current_sp_ratio = run_cfg.frozen_opponent_ratio
+        else:
+            current_sp_ratio = _compute_self_play_ratio(
+                run_cfg.self_play_ratio_start,
+                run_cfg.self_play_ratio,
+                run_cfg.self_play_schedule,
+                progress,
+            )
         pool.self_play_ratio = current_sp_ratio
 
         make_opponent = pool.make_factory(card_names, device=sim_device, registry=registry)
         snap_msg = " + snapshots" if pool.has_snapshots else ""
-        sp_ratio_msg = f", sp_ratio: {current_sp_ratio:.2f}" if run_cfg.self_play else ""
+        if run_cfg.self_play:
+            sp_ratio_msg = f", sp_ratio: {current_sp_ratio:.2f}"
+        elif run_cfg.frozen_opponents:
+            sp_ratio_msg = f", frozen ratio: {current_sp_ratio:.2f}"
+        else:
+            sp_ratio_msg = ""
         logger.info(f"--- Update {upd}/{end_update} "
                      f"(opponents: {', '.join(opp_types)}{snap_msg}{sp_ratio_msg}) ---")
 

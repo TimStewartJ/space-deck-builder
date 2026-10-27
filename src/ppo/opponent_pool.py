@@ -102,6 +102,21 @@ class OpponentPool:
     def has_snapshots(self) -> bool:
         return len(self._snapshots) > 0
 
+    def add_frozen_snapshot(self, name: str, state_dict: dict,
+                            model_config=None) -> None:
+        """Add a fixed checkpoint as a snapshot opponent.
+
+        Frozen snapshots never learn and are not subject to the eviction cap,
+        which only applies when self-play adds or restores snapshots; the
+        trainer never combines the two. They carry no on-disk path, so they
+        are never written into a pool manifest.
+        """
+        if any(existing == name for existing, _, _ in self._snapshots):
+            raise ValueError(f"opponent pool already holds {name!r}")
+        self._snapshots.append((name, state_dict, model_config))
+        self._snapshot_ema.setdefault(name, 0.5)
+        self._snapshot_games.setdefault(name, 0)
+
     @property
     def opponent_types(self) -> list[str]:
         """Unique fixed agent type names in the pool."""
@@ -450,6 +465,70 @@ def _make_ppo_opponent(
                    registry=registry, model_config=model_config)
     opp.model.load_state_dict(state_dict)
     return opp
+
+
+FROZEN_OPPONENT_PREFIX = "frozen:"
+
+
+def load_frozen_opponents(
+    pool: OpponentPool,
+    paths: list[str],
+    card_names: list[str],
+    registry=None,
+) -> list[str]:
+    """Load checkpoints into *pool* as frozen snapshot opponents.
+
+    Each checkpoint becomes ``frozen:<file name without extension>``. Every
+    one must exist, load, and fit this card set's state and action sizes, and
+    names must be unique; any failure raises instead of skipping a checkpoint.
+    Returns the snapshot names in load order.
+    """
+    from pathlib import Path
+
+    from src.config import ModelConfig, load_checkpoint
+    from src.encoding.action_encoder import get_action_space_size
+    from src.encoding.state_encoder import get_state_size
+    from src.ppo.ppo_actor_critic import PPOActorCritic
+
+    state_dim = get_state_size(card_names)
+    action_dim = get_action_space_size(card_names)
+    names: list[str] = []
+    for raw_path in paths:
+        path = Path(raw_path)
+        name = FROZEN_OPPONENT_PREFIX + path.stem
+        if name in names:
+            raise ValueError(
+                f"frozen opponent {raw_path!r} shares the name {name!r} with "
+                "an earlier checkpoint"
+            )
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"frozen opponent checkpoint not found: {raw_path}"
+            )
+        checkpoint = load_checkpoint(str(path), map_location="cpu")
+        saved_config = checkpoint.get("config", {}).get("model")
+        model_config = (
+            ModelConfig.from_dict(saved_config) if saved_config else ModelConfig()
+        )
+        model = PPOActorCritic(
+            state_dim,
+            action_dim,
+            len(card_names),
+            model_config=model_config,
+            card_registry=registry,
+        )
+        try:
+            model.load_state_dict(checkpoint["model_state_dict"])
+        except RuntimeError as exc:
+            raise ValueError(
+                f"frozen opponent {raw_path!r} does not fit this card set's "
+                f"state and action sizes: {exc}"
+            ) from exc
+        pool.add_frozen_snapshot(
+            name, checkpoint["model_state_dict"], model_config
+        )
+        names.append(name)
+    return names
 
 
 def _log_spaced_ages(count: int, history: int) -> list[int]:

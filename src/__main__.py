@@ -139,6 +139,37 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--pfsp", type=str, default=_run.pfsp_mode,
                    choices=["uniform", "hard", "variance"],
                    help="PFSP snapshot weighting: uniform (default), hard, or variance")
+    p.add_argument(
+        "--frozen-opponents",
+        type=str,
+        nargs="+",
+        default=list(_run.frozen_opponents),
+        metavar="CHECKPOINT",
+        help=(
+            "Frozen checkpoints to train against (vector engine only, not "
+            "with --self-play). They are loaded into the opponent pool at the "
+            "start of every process, fresh or resumed, and never learn"
+        ),
+    )
+    p.add_argument(
+        "--frozen-opponent-ratio",
+        type=float,
+        default=_run.frozen_opponent_ratio,
+        help=(
+            "Share of training games against the frozen opponents; the rest "
+            f"use --opponents (default: {_run.frozen_opponent_ratio:g})"
+        ),
+    )
+    p.add_argument(
+        "--frozen-opponent-temperature",
+        type=_temperature_arg,
+        default=_run.frozen_opponent_temperature,
+        help=(
+            "Inference temperature of the frozen opponents: 1 samples their "
+            "policy, 0 plays their highest-scoring legal action "
+            f"(default: {_run.frozen_opponent_temperature:g})"
+        ),
+    )
     # Devices (defaults sourced from DeviceConfig dataclass)
     p.add_argument("--main-device",       type=str, default=_dev.main_device,
                    help="Device for training updates")
@@ -596,6 +627,9 @@ def _run_train(args):
         self_play_schedule=args.self_play_schedule,
         self_play_horizon=args.self_play_horizon,
         pfsp_mode=args.pfsp,
+        frozen_opponents=list(args.frozen_opponents),
+        frozen_opponent_ratio=args.frozen_opponent_ratio,
+        frozen_opponent_temperature=args.frozen_opponent_temperature,
         num_workers=args.num_workers,
         num_concurrent=args.num_concurrent,
         resume=args.resume,

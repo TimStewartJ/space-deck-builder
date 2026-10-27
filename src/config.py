@@ -6,6 +6,7 @@ their own defaults.
 """
 from __future__ import annotations
 
+import math
 from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
 from typing import Any
@@ -214,6 +215,16 @@ class RunConfig:
     # same horizon so linear and cosine curricula remain continuous.
     self_play_horizon: int | None = None
     pfsp_mode: str = "uniform"
+    # Frozen checkpoints trained against. They are loaded into the opponent
+    # pool at the start of every process, fresh or resumed, never learn, and
+    # are never saved into a checkpoint's pool manifest. A
+    # ``frozen_opponent_ratio`` share of training games faces them (the rest
+    # use ``opponents``), and they play at ``frozen_opponent_temperature``,
+    # where 0 selects each one's highest-scoring legal action. They require
+    # the vector engine and exclude self-play snapshots.
+    frozen_opponents: list[str] = field(default_factory=list)
+    frozen_opponent_ratio: float = 1.0
+    frozen_opponent_temperature: float = 1.0
     # Path to a checkpoint to resume training from.When set, model weights,
     # optimizer state, LR scheduler state, snapshot pool manifest, and the
     # update counter are restored. ``updates`` is interpreted as "additional
@@ -273,6 +284,30 @@ class RunConfig:
             raise ValueError(
                 "self_play_horizon must be positive when set, got "
                 f"{self.self_play_horizon}"
+            )
+        if not (0.0 <= self.frozen_opponent_ratio <= 1.0):
+            raise ValueError(
+                "frozen_opponent_ratio must be in [0, 1], got "
+                f"{self.frozen_opponent_ratio}"
+            )
+        temperature = self.frozen_opponent_temperature
+        if not (isinstance(temperature, (int, float)) and math.isfinite(temperature)
+                and temperature >= 0):
+            raise ValueError(
+                "frozen_opponent_temperature must be a finite non-negative "
+                f"number, got {temperature!r}"
+            )
+        if self.frozen_opponents:
+            if self.self_play:
+                raise ValueError(
+                    "frozen opponents cannot be combined with self-play"
+                )
+            if self.engine != "vec":
+                raise ValueError("frozen opponents require the vector engine")
+        elif self.frozen_opponent_ratio != 1.0 or temperature != 1.0:
+            raise ValueError(
+                "frozen_opponent_ratio and frozen_opponent_temperature need "
+                "frozen_opponents"
             )
 
     def to_dict(self) -> dict[str, Any]:
@@ -404,6 +439,27 @@ TRAINING_PRESETS: dict[str, TrainingPreset] = {
         train_defaults={
             **_REFERENCE_SELFPLAY_DEFAULTS,
             "model_path": CHAMPION_CHECKPOINT,
+        },
+        chunk_size=25,
+        interim_eval_games=3200,
+        final_eval_games=15000,
+        eval_num_workers=16,
+        results="docs/decisions/0013-strength-yardstick.md",
+    ),
+    "exploit-selfplay-seed0": TrainingPreset(
+        name="exploit-selfplay-seed0",
+        description=(
+            "Exploiter arm of the strength yardstick: 400 updates x 2,000 "
+            "episodes from the published selfplay_seed0 weights with a fresh "
+            "optimizer, every training game against selfplay_seed0 frozen and "
+            "playing its highest-scoring legal action"
+        ),
+        train_defaults={
+            **_REFERENCE_RUN_DEFAULTS,
+            "model_path": CHAMPION_CHECKPOINT,
+            "frozen_opponents": [CHAMPION_CHECKPOINT],
+            "frozen_opponent_ratio": 1.0,
+            "frozen_opponent_temperature": 0.0,
         },
         chunk_size=25,
         interim_eval_games=3200,
