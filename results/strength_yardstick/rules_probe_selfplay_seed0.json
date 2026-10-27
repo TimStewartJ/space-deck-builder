@@ -1,0 +1,46 @@
+{
+  "checkpoint": "results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth",
+  "games": 400,
+  "deal_seed": 20261027,
+  "games_with_or": 377,
+  "games_with_both_or_options": 377,
+  "or_by_card": {
+    "Barter World": {
+      "first_option": 718,
+      "second_option_afterwards": 715
+    },
+    "Blob World": {
+      "first_option": 117,
+      "second_option_afterwards": 116
+    },
+    "Defense Center": {
+      "first_option": 340,
+      "second_option_afterwards": 340
+    },
+    "Patrol Mech": {
+      "first_option": 598,
+      "second_option_afterwards": 597
+    },
+    "Recycling Station": {
+      "first_option": 667,
+      "second_option_afterwards": 663
+    },
+    "Stealth Needle": {
+      "first_option": 6,
+      "second_option_afterwards": 6
+    },
+    "Trading Post": {
+      "first_option": 671,
+      "second_option_afterwards": 671
+    }
+  },
+  "ship_choices": {
+    "never used": 12,
+    "next decision": 3426,
+    "later in the turn": 731
+  },
+  "machine_base": {
+    "scrap used": 91,
+    "scrap skipped": 9
+  }
+}
