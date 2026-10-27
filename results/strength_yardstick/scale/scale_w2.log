@@ -1,0 +1,4 @@
+league: 1 checkpoint(s) x 2 opponent(s), calibration=False, remaining matchups=2, workers=2
+            selfplay_seed0 vs aggro     837/1000 = 0.8370  (19s)
+            selfplay_seed0 vs balanced  766/1000 = 0.7660  (20s)
+selfplay_seed0: league 1603/2000 = 0.8015 (95% CI 0.7834-0.8184)

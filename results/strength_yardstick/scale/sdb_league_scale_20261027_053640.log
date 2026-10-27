@@ -1,0 +1,3 @@
+[scale] workers=1 matchups=1 games=1000 each: 18s wall, 3,364 games/min
+[scale] workers=2 matchups=2 games=1000 each: 22s wall, 5,455 games/min
+[scale] workers=4 matchups=4 games=1000 each: 28s wall, 8,472 games/min

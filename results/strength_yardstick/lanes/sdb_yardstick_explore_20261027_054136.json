@@ -1,0 +1,23 @@
+﻿{
+    "process_priority":  "Normal",
+    "schema_version":  2,
+    "repository":  "D:\\sdb-yardstick-run3",
+    "log":  "D:\\sdb-yardstick-run3\\logs\\sdb_yardstick_explore_20261027_054136.log",
+    "finished_at":  "2026-10-27T06:45:29.6849721-07:00",
+    "train_args":  "",
+    "command":  "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\\sdb-yardstick-runs\\explore_after_finish.ps1 -Python \"E:\\space-deck-builder\\.venv\\Scripts\\python.exe\"",
+    "launched_at":  "2026-10-27T05:41:36.9987851-07:00",
+    "task":  "sdb_yardstick_explore",
+    "launch_id":  "6fc8f10f-0f1c-4cb0-905a-5decfa8f3d16",
+    "started_at":  "2026-10-27T05:41:38.2498062-07:00",
+    "task_action_executable":  "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "python":  "E:\\space-deck-builder\\.venv\\Scripts\\python.exe",
+    "task_action_pid":  38980,
+    "job_object_assigned":  true,
+    "error_message":  null,
+    "task_path":  "\\",
+    "exit_code":  0,
+    "state":  "complete",
+    "task_action_created_at":  "2026-10-27T05:41:37.0174060-07:00",
+    "processor_affinity":  "0xFFFFF"
+}

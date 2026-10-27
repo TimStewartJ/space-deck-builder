@@ -1,0 +1,108 @@
+[run_arms] arm=control seeds=0,1,2 commit=c2e1a89193161ba9a8dfcf326adc924fd8a262ba runs=D:\sdb-yardstick-runs
+[run_arms] 2026-10-26T23:44:17 train continue-selfplay-seed0 seed 0 in D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0
+[train_reference] bootstrap 0 -> 25; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\bootstrap_0_to_25_20261026_234417.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] start=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\bootstrap_models\ppo_agent_1026_2352_upd25_wins3019.pth current=25 target=400 chunk=25
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 25 -> 50; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd25_to_50_20261026_235245.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 50
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 50 -> 75; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd50_to_75_20261026_235709.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 75
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 75 -> 100; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd75_to_100_20261027_000126.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 100
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 100 -> 125; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd100_to_125_20261027_000536.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 125
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 125 -> 150; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd125_to_150_20261027_000949.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 150
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 150 -> 175; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd150_to_175_20261027_001356.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 175
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 175 -> 200; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd175_to_200_20261027_001827.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 200
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 200 -> 225; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd200_to_225_20261027_002400.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 225
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 225 -> 250; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd225_to_250_20261027_002915.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 250
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 250 -> 275; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd250_to_275_20261027_003445.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 275
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 275 -> 300; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd275_to_300_20261027_004549.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 300
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 300 -> 325; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd300_to_325_20261027_010627.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 325
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 325 -> 350; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd325_to_350_20261027_012923.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 350
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 350 -> 375; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd350_to_375_20261027_013448.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 375
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk start: 375 -> 400; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\upd375_to_400_20261027_013941.log
+[chunked_resume:reference_continue_selfplay_seed0_seed0] chunk complete: update 400
+[chunked_resume:reference_continue_selfplay_seed0_seed0] complete: D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\models\ppo_agent_1027_0147_upd400_wins14421.pth
+[train_reference] complete: D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\final_checkpoint.pth
+[run_arms] 2026-10-27T01:47:46 train continue-selfplay-seed0 seed 1 in D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1
+[train_reference] bootstrap 0 -> 25; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\bootstrap_0_to_25_20261027_014747.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] start=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\bootstrap_models\ppo_agent_1027_0154_upd25_wins3007.pth current=25 target=400 chunk=25
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 25 -> 50; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd25_to_50_20261027_015501.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 50
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 50 -> 75; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd50_to_75_20261027_020229.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 75
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 75 -> 100; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd75_to_100_20261027_020916.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 100
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 100 -> 125; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd100_to_125_20261027_021533.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 125
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 125 -> 150; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd125_to_150_20261027_022156.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 150
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 150 -> 175; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd150_to_175_20261027_022812.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 175
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 175 -> 200; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd175_to_200_20261027_023410.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 200
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 200 -> 225; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd200_to_225_20261027_024114.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 225
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 225 -> 250; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd225_to_250_20261027_024729.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 250
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 250 -> 275; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd250_to_275_20261027_025500.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 275
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 275 -> 300; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd275_to_300_20261027_030058.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 300
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 300 -> 325; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd300_to_325_20261027_030835.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 325
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 325 -> 350; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd325_to_350_20261027_031420.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 350
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 350 -> 375; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd350_to_375_20261027_032415.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 375
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk start: 375 -> 400; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\upd375_to_400_20261027_032919.log
+[chunked_resume:reference_continue_selfplay_seed0_seed1] chunk complete: update 400
+[chunked_resume:reference_continue_selfplay_seed0_seed1] complete: D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\models\ppo_agent_1027_0335_upd400_wins14332.pth
+[train_reference] complete: D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\final_checkpoint.pth
+[run_arms] 2026-10-27T03:35:19 train continue-selfplay-seed0 seed 2 in D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2
+[train_reference] bootstrap 0 -> 25; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\bootstrap_0_to_25_20261027_033519.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] start=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\bootstrap_models\ppo_agent_1027_0340_upd25_wins3091.pth current=25 target=400 chunk=25
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 25 -> 50; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd25_to_50_20261027_034033.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 50
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 50 -> 75; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd50_to_75_20261027_034603.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 75
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 75 -> 100; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd75_to_100_20261027_035129.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 100
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 100 -> 125; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd100_to_125_20261027_035646.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 125
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 125 -> 150; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd125_to_150_20261027_040218.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 150
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 150 -> 175; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd150_to_175_20261027_040753.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 175
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 175 -> 200; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd175_to_200_20261027_041308.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 200
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 200 -> 225; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd200_to_225_20261027_041747.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 225
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 225 -> 250; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd225_to_250_20261027_042604.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 250
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 250 -> 275; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd250_to_275_20261027_043429.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 275
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 275 -> 300; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd275_to_300_20261027_044053.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 300
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 300 -> 325; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd300_to_325_20261027_044622.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 325
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 325 -> 350; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd325_to_350_20261027_045034.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 350
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 350 -> 375; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd350_to_375_20261027_045449.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 375
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk start: 375 -> 400; log=D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\upd375_to_400_20261027_045849.log
+[chunked_resume:reference_continue_selfplay_seed0_seed2] chunk complete: update 400
+[chunked_resume:reference_continue_selfplay_seed0_seed2] complete: D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\models\ppo_agent_1027_0503_upd400_wins14409.pth
+[train_reference] complete: D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\final_checkpoint.pth
+[run_arms] 2026-10-27T05:03:17 score seed 2
+[run_arms] 2026-10-27T05:05:43 done

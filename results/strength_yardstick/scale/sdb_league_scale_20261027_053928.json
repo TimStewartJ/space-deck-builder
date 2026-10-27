@@ -1,0 +1,23 @@
+﻿{
+    "command":  "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\\sdb-yardstick-scratch\\league_scale.ps1 -Python \"E:\\space-deck-builder\\.venv\\Scripts\\python.exe\"",
+    "error_message":  null,
+    "job_object_assigned":  true,
+    "process_priority":  "Normal",
+    "repository":  "D:\\sdb-yardstick-run3",
+    "task_action_created_at":  "2026-10-27T05:39:28.3361390-07:00",
+    "state":  "complete",
+    "finished_at":  "2026-10-27T05:40:07.9530463-07:00",
+    "task_action_executable":  "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "schema_version":  2,
+    "exit_code":  0,
+    "processor_affinity":  "0xFFFFF",
+    "python":  "E:\\space-deck-builder\\.venv\\Scripts\\python.exe",
+    "launch_id":  "927f0abc-cb33-4a43-8352-692b3e842595",
+    "task":  "sdb_league_scale",
+    "log":  "D:\\sdb-yardstick-run3\\logs\\sdb_league_scale_20261027_053928.log",
+    "started_at":  "2026-10-27T05:39:29.1094398-07:00",
+    "train_args":  "",
+    "launched_at":  "2026-10-27T05:39:28.3138486-07:00",
+    "task_action_pid":  37456,
+    "task_path":  "\\"
+}

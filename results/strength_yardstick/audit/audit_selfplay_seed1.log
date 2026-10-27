@@ -1,0 +1,25 @@
+purchase audit: D:\sdb-yardstick-run3\results\optimized_selfplay_baseline\checkpoints\selfplay_seed1.pth decisions=1000 rollouts=256 seed=20260930 journaled=0
+  pass 1: games 0-1019
+    step 100: 1020 games still running
+    step 200: 908 games still running
+    step 300: 308 games still running
+    step 400: 64 games still running
+    step 500: 12 games still running
+    step 600: 1 games still running
+  pass 2: replaying 1020 games to their target decisions
+    step 100: 1020 games still running
+    step 200: 908 games still running
+    step 300: 308 games still running
+    step 400: 64 games still running
+    step 500: 12 games still running
+    step 600: 1 games still running
+  sampled 1000 decisions from 1000 games (0 without one, 0 diverged) in 93s
+  search choices done (0 greedy mismatches, 0 choice mismatches); 1000 decisions to roll out
+  chunk 1/7: 145 decisions, unfinished 0, 57s
+  chunk 2/7: 157 decisions, unfinished 0, 54s
+  chunk 3/7: 156 decisions, unfinished 0, 112s
+  chunk 4/7: 151 decisions, unfinished 0, 77s
+  chunk 5/7: 155 decisions, unfinished 0, 73s
+  chunk 6/7: 147 decisions, unfinished 0, 65s
+  chunk 7/7: 89 decisions, unfinished 0, 25s
+  override gain +0.578 points (SE 0.102); clear mistakes 37/1000; search gain +0.205 (SE 0.075); 558s

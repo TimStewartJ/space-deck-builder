@@ -14,6 +14,7 @@ as verified GitHub release bundles on the result's tag (see
 
 | Date | Writeup | Question | Outcome |
 |---|---|---|---|
+| 2026-10-27 | [`strength_yardstick.md`](strength_yardstick.md) | Can 400 updates of training against the frozen champion find a weakness that the same amount of ordinary training does not, and how do the checkpoints fare against held-out opponents and full-game rollouts of their purchases? | **Pre-registered: not shown exploitable** so far (decision 0013's fallback, an exploiter from random weights, is running), and further training narrowly misses the "helps" bar. The exploiter beat the champion 59.3% against the control's 54.8% (E - C +4.5 points, 95% CI -1.0 to +9.9; threshold 5); the control's 54.8% (51.7 to 57.8) falls just short of 55%. Both arms beat the champion in every seed, and the exploiter beat the control in every seed. The published self-play checkpoints' purchases give away 0.27 to 0.58 points of win probability per decision. The held-out league reproduces its prototype exactly and separates the fixed-opponent seeds (about 65.5%) from the self-play seeds (73.9% to 79.2%), which the gauntlet tied; every arm checkpoint outscores the champion there (exploiters 83.5%, controls 82.0%, champion 79.2%). Side finding: every OR ability in the engine gives both options. |
 | 2026-09-16 | [`expert_iteration_round1.md`](expert_iteration_round1.md) | Does training a checkpoint on its own search's improved policies and outcomes make its greedy play stronger? | **Pre-registered FAIL, narrowly.** The distilled checkpoint beat its source 52.8% at temperature 0 (+19 Elo, 95% CI +4 to +35) against a +20 Elo threshold, with no detectable gauntlet loss. It adopted only about one in five of search's move changes, and search on it adds no detectably less than on its source. |
 | 2026-09-16 | [`batched_search.md`](batched_search.md) | Can search run many games' decisions together from public-count roots without losing strength? | **Yes.** On identical deals: 34× less search time per decision and 7.6× faster wall time from two processes instead of eight; the two-worker topology plays 382 games/min in a separate benchmark. Paired strength against the previous implementation: −0.8pp (95% CI −2.1 to +0.5) over 2,000 deals; the greedy control reproduced all 1,000 published games. |
 | 2026-09-16 | [`search_uplift.md`](search_uplift.md) | Does turn-bounded information-set search beat the same checkpoint playing greedily, and how does it scale with rollouts? | **Yes, modestly.** At 64 rollouts per decision search wins 56.4% of 2,000 paired deals across three seeds (+44 Elo, McNemar p = 8 × 10⁻¹⁰). On one checkpoint, 256 rollouts showed no detectable gain over 64. |
@@ -37,10 +38,18 @@ as verified GitHub release bundles on the result's tag (see
   something below it changes.
 - **The fixed gauntlet is saturating.** `random` (~99.9%) and `simple`
   (~98.9%) no longer separate strong checkpoints; `heuristic` carries almost
-  all the discriminating signal. Cross-play Elo is the more sensitive metric.
+  all the discriminating signal. Cross-play Elo and the held-out league
+  (protocol `v0.2`) are more sensitive: the league scores the fixed-opponent
+  seeds about 65.5% and the self-play seeds 73.9% to 79.2%, which the gauntlet
+  tied ([`strength_yardstick.md`](strength_yardstick.md)).
 - **Snapshot self-play is the stronger checkpoint league.** Its three seeds
   occupy the top three positions against the fixed-baseline seeds even though
   the scripted gauntlet is statistically tied.
+- **The published champion is not at its ceiling.** 400 more updates of the
+  reference recipe beat it in every seed, and 400 updates against the frozen
+  champion beat it by more and beat the ordinary continuation in every seed;
+  both gains carry over to the held-out league
+  ([`strength_yardstick.md`](strength_yardstick.md)).
 - **Sampled evaluation understates the policies.** The locked protocol samples
   each checkpoint's policy; greedy decoding of the same checkpoints is a
   separate, stronger variant ([`greedy_inference.md`](greedy_inference.md)).
@@ -50,5 +59,13 @@ as verified GitHub release bundles on the result's tag (see
   evaluation limiting search, but the experiments do not isolate the cause
   ([`search_uplift.md`](search_uplift.md)).
 - **There is no absolute strength anchor.** Every number here is relative to
-  weak scripted opponents or to other checkpoints. Nothing establishes how
-  well these agents actually play Star Realms.
+  scripted opponents or to other checkpoints. The held-out league's six
+  opponents are stronger than Heuristic but untuned, so nothing establishes
+  how well these agents actually play Star Realms.
+- **The engine's rules differ from the published game.** Every OR ability
+  gives both of its options (10 of the 80 trade-deck cards), ship
+  primary-ability choices can wait until later in the turn, and Machine Base's
+  scrap is optional on the turn it is played. All agents and opponents play
+  the same rules, so comparisons between them stand, but no result here
+  measures the published game
+  ([`strength_yardstick.md`](strength_yardstick.md#side-finding-the-engines-rules-differ-from-the-rulebook)).

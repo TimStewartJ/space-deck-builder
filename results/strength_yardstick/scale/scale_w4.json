@@ -1,0 +1,96 @@
+{
+  "protocol": "docs/decisions/0013-strength-yardstick.md",
+  "config": {
+    "models": [
+      "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth"
+    ],
+    "opponents": [
+      "aggro",
+      "balanced",
+      "economy",
+      "scrapper"
+    ],
+    "games": 1000,
+    "seed": 101,
+    "batch_size": 256,
+    "calibration": false,
+    "calibration_games": 2000,
+    "calibration_seed": 103,
+    "workers": 4,
+    "device": "cuda"
+  },
+  "identity": {
+    "implementation": "held-out-league-v1",
+    "commit": "2784f95f2a489c429332947acab420d35169e150",
+    "dirty": false,
+    "device": "cuda"
+  },
+  "checkpoints": [
+    {
+      "model": "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth",
+      "label": "selfplay_seed0",
+      "sha256": "9d10dca5110c2bbe9cc0f8693e11578dee347a8c60e7ed63002af7d82e80a503",
+      "opponents": {
+        "aggro": {
+          "wins": 837,
+          "games": 1000,
+          "first_seat_games": 500,
+          "first_seat_wins": 433,
+          "mean_turns": 22.133,
+          "win_rate": 0.837,
+          "win_rate_ci95": [
+            0.8128247624397997,
+            0.858596002340936
+          ]
+        },
+        "balanced": {
+          "wins": 766,
+          "games": 1000,
+          "first_seat_games": 500,
+          "first_seat_wins": 399,
+          "mean_turns": 22.65,
+          "win_rate": 0.766,
+          "win_rate_ci95": [
+            0.7387721670475355,
+            0.7911919974381493
+          ]
+        },
+        "economy": {
+          "wins": 801,
+          "games": 1000,
+          "first_seat_games": 500,
+          "first_seat_wins": 414,
+          "mean_turns": 22.969,
+          "win_rate": 0.801,
+          "win_rate_ci95": [
+            0.7751234971811168,
+            0.824572794210579
+          ]
+        },
+        "scrapper": {
+          "wins": 759,
+          "games": 1000,
+          "first_seat_games": 500,
+          "first_seat_wins": 392,
+          "mean_turns": 22.661,
+          "win_rate": 0.759,
+          "win_rate_ci95": [
+            0.7315330470912914,
+            0.784484692013191
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 3163,
+        "games": 4000,
+        "win_rate": 0.79075,
+        "win_rate_ci95": [
+          0.7778682024260942,
+          0.8030738813009443
+        ],
+        "complete": true
+      }
+    }
+  ],
+  "calibration": {}
+}

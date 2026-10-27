@@ -1,0 +1,28 @@
+Participants (5): control_seed2@T0, exploiter_seed2@T0, selfplay_seed0@T0, selfplay_seed1@T0, selfplay_seed2@T0
+Running 10 pairings x 4000 games = 40000 total games
+Using 16 workers running pairings in parallel
+
+  [1/10] selfplay_seed0@T0 vs selfplay_seed2@T0: 2002/4000 (50%)  (141.2s)
+  [2/10] exploiter_seed2@T0 vs selfplay_seed2@T0: 2317/4000 (58%)  (142.1s)
+  [3/10] selfplay_seed1@T0 vs selfplay_seed2@T0: 1800/4000 (45%)  (142.2s)
+  [4/10] control_seed2@T0 vs exploiter_seed2@T0: 1873/4000 (47%)  (142.5s)
+  [5/10] exploiter_seed2@T0 vs selfplay_seed0@T0: 2328/4000 (58%)  (142.9s)
+  [6/10] control_seed2@T0 vs selfplay_seed2@T0: 2204/4000 (55%)  (143.2s)
+  [7/10] exploiter_seed2@T0 vs selfplay_seed1@T0: 2447/4000 (61%)  (143.2s)
+  [8/10] selfplay_seed0@T0 vs selfplay_seed1@T0: 2184/4000 (55%)  (143.8s)
+  [9/10] control_seed2@T0 vs selfplay_seed1@T0: 2392/4000 (60%)  (144.2s)
+  [10/10] control_seed2@T0 vs selfplay_seed0@T0: 2222/4000 (56%)  (144.4s)
+
+Games complete in 144.6s
+
+============================================================
+ELO LEADERBOARD
+============================================================
+Rank  Name               Elo     W     L   Win%
+------------------------------------------------------------
+1     exploiter_seed2@T0   1019  9219  6781  57.6%
+2     control_seed2@T0   1000  8691  7309  54.3%
+3     selfplay_seed2@T0    964  7677  8323  48.0%
+4     selfplay_seed0@T0    963  7636  8364  47.7%
+5     selfplay_seed1@T0    933  6777  9223  42.4%
+============================================================

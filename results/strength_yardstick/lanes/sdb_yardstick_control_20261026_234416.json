@@ -1,0 +1,23 @@
+﻿{
+    "exit_code":  0,
+    "python":  "E:\\space-deck-builder\\.venv\\Scripts\\python.exe",
+    "task_action_pid":  33716,
+    "train_args":  "",
+    "started_at":  "2026-10-26T23:44:17.0906250-07:00",
+    "launch_id":  "dd58d81a-4398-4444-8f7b-eb06cb5ccbbb",
+    "error_message":  null,
+    "log":  "D:\\sdb-yardstick-run\\logs\\sdb_yardstick_control_20261026_234416.log",
+    "task_action_created_at":  "2026-10-26T23:44:16.3885700-07:00",
+    "launched_at":  "2026-10-26T23:44:16.3629777-07:00",
+    "task_path":  "\\",
+    "command":  "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\\sdb-yardstick-run\\results\\strength_yardstick\\run_arms.ps1 -Python \"E:\\space-deck-builder\\.venv\\Scripts\\python.exe\" -Arm control -Seeds 0,1,2",
+    "state":  "complete",
+    "task":  "sdb_yardstick_control",
+    "job_object_assigned":  true,
+    "process_priority":  "Normal",
+    "processor_affinity":  "0xFFFF",
+    "finished_at":  "2026-10-27T05:05:44.0244871-07:00",
+    "schema_version":  2,
+    "task_action_executable":  "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "repository":  "D:\\sdb-yardstick-run"
+}

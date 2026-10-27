@@ -1,0 +1,8 @@
+league: 1 checkpoint(s) x 6 opponent(s), calibration=False, remaining matchups=6, workers=6
+            selfplay_seed0 vs aggro     837/1000 = 0.8370  (34s)
+            selfplay_seed0 vs scrapper  759/1000 = 0.7590  (34s)
+            selfplay_seed0 vs economy   801/1000 = 0.8010  (35s)
+            selfplay_seed0 vs blobrush  835/1000 = 0.8350  (35s)
+            selfplay_seed0 vs balanced  766/1000 = 0.7660  (36s)
+            selfplay_seed0 vs fortress  789/1000 = 0.7890  (37s)
+selfplay_seed0: league 4787/6000 = 0.7978 (95% CI 0.7875-0.8078)

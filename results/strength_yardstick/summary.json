@@ -1,0 +1,1253 @@
+{
+  "protocol": "docs/decisions/0013-strength-yardstick.md",
+  "seeds": {
+    "0": {
+      "E": 0.59325,
+      "C": 0.5545,
+      "exploiter_vs_control": 0.52225,
+      "O_exploiter": 0.615625,
+      "O_control": 0.571625,
+      "L_exploiter": 0.839875,
+      "L_control": 0.8177916666666667,
+      "ratings": {
+        "control_seed0@T0": 1000.0,
+        "exploiter_seed0@T0": 1024.2822090073955,
+        "selfplay_seed0@T0": 961.2227378793776,
+        "selfplay_seed1@T0": 932.3840070069583,
+        "selfplay_seed2@T0": 959.0105369135716
+      },
+      "E_minus_C": 0.03875000000000006,
+      "exploiter_training_win_rate": {
+        "update_1": 0.452,
+        "last_25_updates": 0.5426,
+        "by_update": {
+          "1": 0.452,
+          "25": 0.4535,
+          "50": 0.461,
+          "100": 0.442,
+          "200": 0.4775,
+          "300": 0.527,
+          "400": 0.5445
+        }
+      }
+    },
+    "1": {
+      "E": 0.60275,
+      "C": 0.53375,
+      "exploiter_vs_control": 0.53925,
+      "O_exploiter": 0.61675,
+      "O_control": 0.5765,
+      "L_exploiter": 0.8370833333333333,
+      "L_control": 0.81625,
+      "ratings": {
+        "control_seed1@T0": 1000.0,
+        "exploiter_seed1@T0": 1032.3580936976634,
+        "selfplay_seed0@T0": 966.6559296905706,
+        "selfplay_seed1@T0": 934.9033862693046,
+        "selfplay_seed2@T0": 962.6864773493393
+      },
+      "E_minus_C": 0.06900000000000006,
+      "exploiter_training_win_rate": {
+        "update_1": 0.4545,
+        "last_25_updates": 0.54072,
+        "by_update": {
+          "1": 0.4545,
+          "25": 0.434,
+          "50": 0.461,
+          "100": 0.4705,
+          "200": 0.487,
+          "300": 0.531,
+          "400": 0.56
+        }
+      }
+    },
+    "2": {
+      "E": 0.582,
+      "C": 0.5555,
+      "exploiter_vs_control": 0.53175,
+      "O_exploiter": 0.5955,
+      "O_control": 0.5745,
+      "L_exploiter": 0.8289583333333334,
+      "L_control": 0.8265,
+      "ratings": {
+        "control_seed2@T0": 1000.0,
+        "exploiter_seed2@T0": 1018.6568273154523,
+        "selfplay_seed0@T0": 963.0245329062604,
+        "selfplay_seed1@T0": 932.7462594762172,
+        "selfplay_seed2@T0": 964.4614671655999
+      },
+      "E_minus_C": 0.026499999999999968,
+      "exploiter_training_win_rate": {
+        "update_1": 0.4525,
+        "last_25_updates": 0.5268999999999999,
+        "by_update": {
+          "1": 0.4525,
+          "25": 0.4185,
+          "50": 0.47,
+          "100": 0.4625,
+          "200": 0.502,
+          "300": 0.497,
+          "400": 0.5335
+        }
+      }
+    }
+  },
+  "verdict": {
+    "provisional": false,
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "E_minus_C": {
+      "mean": 0.04475000000000003,
+      "low": -0.009593173957523717,
+      "high": 0.09909317395752379,
+      "n": 3
+    },
+    "E": {
+      "mean": 0.5926666666666667,
+      "low": 0.5668632030959788,
+      "high": 0.6184701302373545,
+      "n": 3
+    },
+    "C": {
+      "mean": 0.5479166666666666,
+      "low": 0.5174142439416964,
+      "high": 0.5784190893916368,
+      "n": 3
+    },
+    "O_exploiter": {
+      "mean": 0.6092916666666667,
+      "low": 0.5795884051800243,
+      "high": 0.638994928153309,
+      "n": 3
+    },
+    "O_control": {
+      "mean": 0.5742083333333333,
+      "low": 0.56812082305886,
+      "high": 0.5802958436078066,
+      "n": 3
+    },
+    "L_exploiter": {
+      "mean": 0.8353055555555556,
+      "low": 0.821217236997834,
+      "high": 0.8493938741132773,
+      "n": 3
+    },
+    "L_control": {
+      "mean": 0.8201805555555556,
+      "low": 0.806451178448181,
+      "high": 0.8339099326629301,
+      "n": 3
+    },
+    "exploitable": false,
+    "kind": null,
+    "control_helps": false
+  },
+  "league": {
+    "control_seed0": {
+      "wins": 19627,
+      "games": 24000,
+      "win_rate": 0.8177916666666667,
+      "win_rate_ci95": [
+        0.8128572465960738,
+        0.822624371051197
+      ],
+      "complete": true
+    },
+    "control_seed1": {
+      "wins": 19590,
+      "games": 24000,
+      "win_rate": 0.81625,
+      "win_rate_ci95": [
+        0.8112998392743427,
+        0.8210989384813654
+      ],
+      "complete": true
+    },
+    "control_seed2": {
+      "wins": 19836,
+      "games": 24000,
+      "win_rate": 0.8265,
+      "win_rate_ci95": [
+        0.8216569851804822,
+        0.8312385118542647
+      ],
+      "complete": true
+    },
+    "distilled_seed0": {
+      "wins": 19123,
+      "games": 24000,
+      "win_rate": 0.7967916666666667,
+      "win_rate_ci95": [
+        0.7916535602290014,
+        0.8018347788953608
+      ],
+      "complete": true
+    },
+    "exploiter_seed0": {
+      "wins": 20157,
+      "games": 24000,
+      "win_rate": 0.839875,
+      "win_rate_ci95": [
+        0.8351810729770096,
+        0.8444601431169708
+      ],
+      "complete": true
+    },
+    "exploiter_seed1": {
+      "wins": 20090,
+      "games": 24000,
+      "win_rate": 0.8370833333333333,
+      "win_rate_ci95": [
+        0.8323573780370762,
+        0.8417013982532634
+      ],
+      "complete": true
+    },
+    "exploiter_seed2": {
+      "wins": 19895,
+      "games": 24000,
+      "win_rate": 0.8289583333333334,
+      "win_rate_ci95": [
+        0.824141910063012,
+        0.8336694667988215
+      ],
+      "complete": true
+    },
+    "fixed_seed0": {
+      "wins": 15747,
+      "games": 24000,
+      "win_rate": 0.656125,
+      "win_rate_ci95": [
+        0.6500909749234456,
+        0.6621090540950838
+      ],
+      "complete": true
+    },
+    "fixed_seed1": {
+      "wins": 15677,
+      "games": 24000,
+      "win_rate": 0.6532083333333333,
+      "win_rate_ci95": [
+        0.6471627747579146,
+        0.6592048544657662
+      ],
+      "complete": true
+    },
+    "fixed_seed2": {
+      "wins": 15756,
+      "games": 24000,
+      "win_rate": 0.6565,
+      "win_rate_ci95": [
+        0.6504674759798049,
+        0.6624824330123479
+      ],
+      "complete": true
+    },
+    "selfplay_seed0": {
+      "wins": 19008,
+      "games": 24000,
+      "win_rate": 0.792,
+      "win_rate_ci95": [
+        0.7868185119669617,
+        0.7970880274944352
+      ],
+      "complete": true
+    },
+    "selfplay_seed1": {
+      "wins": 17747,
+      "games": 24000,
+      "win_rate": 0.7394583333333333,
+      "win_rate_ci95": [
+        0.7338671927240156,
+        0.7449728304330404
+      ],
+      "complete": true
+    },
+    "selfplay_seed2": {
+      "wins": 18830,
+      "games": 24000,
+      "win_rate": 0.7845833333333333,
+      "win_rate_ci95": [
+        0.7793368294662241,
+        0.789738750516844
+      ],
+      "complete": true
+    }
+  },
+  "league_by_opponent": {
+    "selfplay_seed0": {
+      "balanced": {
+        "wins": 3084,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 3321,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 3111,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 3055,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 3092,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 3345,
+        "games": 4000
+      }
+    },
+    "selfplay_seed1": {
+      "balanced": {
+        "wins": 2889,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 3111,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 2849,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 2922,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 2835,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 3141,
+        "games": 4000
+      }
+    },
+    "selfplay_seed2": {
+      "balanced": {
+        "wins": 3056,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 3292,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 3058,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 3087,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 3017,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 3320,
+        "games": 4000
+      }
+    },
+    "fixed_seed0": {
+      "balanced": {
+        "wins": 2567,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 2899,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 2439,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 2604,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 2305,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 2933,
+        "games": 4000
+      }
+    },
+    "fixed_seed1": {
+      "balanced": {
+        "wins": 2565,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 2906,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 2428,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 2637,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 2213,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 2928,
+        "games": 4000
+      }
+    },
+    "fixed_seed2": {
+      "balanced": {
+        "wins": 2570,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 2922,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 2431,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 2672,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 2237,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 2924,
+        "games": 4000
+      }
+    },
+    "distilled_seed0": {
+      "balanced": {
+        "wins": 3136,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 3309,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 3111,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 3111,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 3122,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 3334,
+        "games": 4000
+      }
+    },
+    "control_seed0": {
+      "balanced": {
+        "wins": 3194,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 3377,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 3213,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 3202,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 3226,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 3415,
+        "games": 4000
+      }
+    },
+    "control_seed1": {
+      "balanced": {
+        "wins": 3180,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 3380,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 3177,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 3194,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 3223,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 3436,
+        "games": 4000
+      }
+    },
+    "control_seed2": {
+      "balanced": {
+        "wins": 3216,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 3429,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 3247,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 3243,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 3229,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 3472,
+        "games": 4000
+      }
+    },
+    "exploiter_seed0": {
+      "balanced": {
+        "wins": 3271,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 3458,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 3284,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 3282,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 3347,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 3515,
+        "games": 4000
+      }
+    },
+    "exploiter_seed1": {
+      "balanced": {
+        "wins": 3258,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 3485,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 3307,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 3272,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 3274,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 3494,
+        "games": 4000
+      }
+    },
+    "exploiter_seed2": {
+      "balanced": {
+        "wins": 3237,
+        "games": 4000
+      },
+      "aggro": {
+        "wins": 3419,
+        "games": 4000
+      },
+      "economy": {
+        "wins": 3301,
+        "games": 4000
+      },
+      "scrapper": {
+        "wins": 3210,
+        "games": 4000
+      },
+      "fortress": {
+        "wins": 3286,
+        "games": 4000
+      },
+      "blobrush": {
+        "wins": 3442,
+        "games": 4000
+      }
+    }
+  },
+  "calibration": {
+    "balanced": {
+      "wins": 1683,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 873,
+      "mean_turns": 22.3985,
+      "opponent": "heuristic",
+      "win_rate": 0.8415,
+      "win_rate_ci95": [
+        0.8248415772937184,
+        0.8568490794131859
+      ]
+    },
+    "aggro": {
+      "wins": 1533,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 803,
+      "mean_turns": 21.8185,
+      "opponent": "heuristic",
+      "win_rate": 0.7665,
+      "win_rate_ci95": [
+        0.7474588661886875,
+        0.7845193476104045
+      ]
+    },
+    "economy": {
+      "wins": 1589,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 836,
+      "mean_turns": 22.8605,
+      "opponent": "heuristic",
+      "win_rate": 0.7945,
+      "win_rate_ci95": [
+        0.7762347355183078,
+        0.8116361236330342
+      ]
+    },
+    "scrapper": {
+      "wins": 1664,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 873,
+      "mean_turns": 22.408,
+      "opponent": "heuristic",
+      "win_rate": 0.832,
+      "win_rate_ci95": [
+        0.8149817735563052,
+        0.8477453070489427
+      ]
+    },
+    "fortress": {
+      "wins": 1670,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 861,
+      "mean_turns": 23.88,
+      "opponent": "heuristic",
+      "win_rate": 0.835,
+      "win_rate_ci95": [
+        0.8180932994996616,
+        0.8506222788218988
+      ]
+    },
+    "blobrush": {
+      "wins": 1479,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 778,
+      "mean_turns": 22.0515,
+      "opponent": "heuristic",
+      "win_rate": 0.7395,
+      "win_rate_ci95": [
+        0.7198182161636315,
+        0.7582635181886483
+      ]
+    }
+  },
+  "port_check": {
+    "passed": true,
+    "rows": [
+      {
+        "table": "champion",
+        "opponent": "balanced",
+        "expected": 3084,
+        "actual": 3084
+      },
+      {
+        "table": "champion",
+        "opponent": "aggro",
+        "expected": 3321,
+        "actual": 3321
+      },
+      {
+        "table": "champion",
+        "opponent": "economy",
+        "expected": 3111,
+        "actual": 3111
+      },
+      {
+        "table": "champion",
+        "opponent": "scrapper",
+        "expected": 3055,
+        "actual": 3055
+      },
+      {
+        "table": "champion",
+        "opponent": "fortress",
+        "expected": 3092,
+        "actual": 3092
+      },
+      {
+        "table": "champion",
+        "opponent": "blobrush",
+        "expected": 3345,
+        "actual": 3345
+      },
+      {
+        "table": "calibration",
+        "opponent": "balanced",
+        "expected": 1683,
+        "actual": 1683
+      },
+      {
+        "table": "calibration",
+        "opponent": "aggro",
+        "expected": 1533,
+        "actual": 1533
+      },
+      {
+        "table": "calibration",
+        "opponent": "economy",
+        "expected": 1589,
+        "actual": 1589
+      },
+      {
+        "table": "calibration",
+        "opponent": "scrapper",
+        "expected": 1664,
+        "actual": 1664
+      },
+      {
+        "table": "calibration",
+        "opponent": "fortress",
+        "expected": 1670,
+        "actual": 1670
+      },
+      {
+        "table": "calibration",
+        "opponent": "blobrush",
+        "expected": 1479,
+        "actual": 1479
+      }
+    ]
+  },
+  "audits": {
+    "control_seed0": {
+      "counts": {
+        "games": 1000,
+        "no_eligible_decision": 0,
+        "diverged": 0,
+        "search_greedy_mismatch": 0,
+        "search_choice_mismatch": 0,
+        "unfinished_rollouts": 1
+      },
+      "summary": {
+        "all": {
+          "decisions": 1000,
+          "override_gain_points": 0.23203125,
+          "override_gain_se_points": 0.058130078571645545,
+          "override_used_share": 0.059,
+          "clear_mistake_share": 0.016,
+          "clear_mistakes": 16,
+          "clear_mistake_mean_gain_points": 14.94140625,
+          "search_gain_points": 0.19921875,
+          "search_gain_se_points": 0.06168763906209446,
+          "search_differs_share": 0.108,
+          "search_gain_where_differs_points": 1.8446180555555556
+        },
+        "by_turn_counter": {
+          "0-3": {
+            "decisions": 184,
+            "override_gain_points": 0.3354279891304348,
+            "override_gain_se_points": 0.1334565428156257,
+            "override_used_share": 0.10869565217391304,
+            "clear_mistake_share": 0.021739130434782608,
+            "clear_mistakes": 4,
+            "clear_mistake_mean_gain_points": 14.94140625,
+            "search_gain_points": 0.20805027173913046,
+            "search_gain_se_points": 0.1960281739278665,
+            "search_differs_share": 0.08152173913043478,
+            "search_gain_where_differs_points": 2.5520833333333335
+          },
+          "4-9": {
+            "decisions": 249,
+            "override_gain_points": 0.294929718875502,
+            "override_gain_se_points": 0.15524840537872528,
+            "override_used_share": 0.060240963855421686,
+            "clear_mistake_share": 0.01606425702811245,
+            "clear_mistakes": 4,
+            "clear_mistake_mean_gain_points": 19.140625,
+            "search_gain_points": 0.18982178714859438,
+            "search_gain_se_points": 0.11095455461026366,
+            "search_differs_share": 0.07630522088353414,
+            "search_gain_where_differs_points": 2.4876644736842106
+          },
+          "10-15": {
+            "decisions": 286,
+            "override_gain_points": 0.17755681818181818,
+            "override_gain_se_points": 0.07808316459420885,
+            "override_used_share": 0.06643356643356643,
+            "clear_mistake_share": 0.017482517482517484,
+            "clear_mistakes": 5,
+            "clear_mistake_mean_gain_points": 10.9375,
+            "search_gain_points": 0.1625327797202797,
+            "search_gain_se_points": 0.07267642217126245,
+            "search_differs_share": 0.08741258741258741,
+            "search_gain_where_differs_points": 1.859375
+          },
+          "16+": {
+            "decisions": 281,
+            "override_gain_points": 0.1640346975088968,
+            "override_gain_se_points": 0.09992313270483547,
+            "override_used_share": 0.017793594306049824,
+            "clear_mistake_share": 0.010676156583629894,
+            "clear_mistakes": 3,
+            "clear_mistake_mean_gain_points": 16.015625,
+            "search_gain_points": 0.23910142348754448,
+            "search_gain_se_points": 0.1293303142199414,
+            "search_differs_share": 0.17437722419928825,
+            "search_gain_where_differs_points": 1.371173469387755
+          }
+        }
+      }
+    },
+    "control_seed1": {
+      "counts": {
+        "games": 1000,
+        "no_eligible_decision": 0,
+        "diverged": 0,
+        "search_greedy_mismatch": 0,
+        "search_choice_mismatch": 0,
+        "unfinished_rollouts": 0
+      },
+      "summary": {
+        "all": {
+          "decisions": 1000,
+          "override_gain_points": 0.188671875,
+          "override_gain_se_points": 0.05944803263325729,
+          "override_used_share": 0.053,
+          "clear_mistake_share": 0.013,
+          "clear_mistakes": 13,
+          "clear_mistake_mean_gain_points": 15.775240384615385,
+          "search_gain_points": 0.099609375,
+          "search_gain_se_points": 0.06906359833048513,
+          "search_differs_share": 0.116,
+          "search_gain_where_differs_points": 0.8587015086206896
+        },
+        "by_turn_counter": {
+          "0-3": {
+            "decisions": 177,
+            "override_gain_points": 0.22510593220338984,
+            "override_gain_se_points": 0.14805540921901084,
+            "override_used_share": 0.06779661016949153,
+            "clear_mistake_share": 0.011299435028248588,
+            "clear_mistakes": 2,
+            "clear_mistake_mean_gain_points": 16.2109375,
+            "search_gain_points": -0.3972457627118644,
+            "search_gain_se_points": 0.20503846289804625,
+            "search_differs_share": 0.07909604519774012,
+            "search_gain_where_differs_points": -5.022321428571429
+          },
+          "4-9": {
+            "decisions": 244,
+            "override_gain_points": 0.21612448770491804,
+            "override_gain_se_points": 0.12221856670604639,
+            "override_used_share": 0.04918032786885246,
+            "clear_mistake_share": 0.01639344262295082,
+            "clear_mistakes": 4,
+            "clear_mistake_mean_gain_points": 13.96484375,
+            "search_gain_points": 0.10245901639344263,
+            "search_gain_se_points": 0.09856726843259535,
+            "search_differs_share": 0.11065573770491803,
+            "search_gain_where_differs_points": 0.9259259259259258
+          },
+          "10-15": {
+            "decisions": 272,
+            "override_gain_points": 0.2340877757352941,
+            "override_gain_se_points": 0.13228316832758816,
+            "override_used_share": 0.05514705882352941,
+            "clear_mistake_share": 0.01838235294117647,
+            "clear_mistakes": 5,
+            "clear_mistake_mean_gain_points": 17.265625,
+            "search_gain_points": 0.3920611213235294,
+            "search_gain_se_points": 0.16094281594535062,
+            "search_differs_share": 0.125,
+            "search_gain_where_differs_points": 3.136488970588235
+          },
+          "16+": {
+            "decisions": 307,
+            "override_gain_points": 0.10560871335504886,
+            "override_gain_se_points": 0.08439042137007507,
+            "override_used_share": 0.04560260586319218,
+            "clear_mistake_share": 0.006514657980456026,
+            "clear_mistakes": 2,
+            "clear_mistake_mean_gain_points": 15.234375,
+            "search_gain_points": 0.12469462540716611,
+            "search_gain_se_points": 0.0980325993304452,
+            "search_differs_share": 0.13355048859934854,
+            "search_gain_where_differs_points": 0.9336890243902438
+          }
+        }
+      }
+    },
+    "control_seed2": {
+      "counts": {
+        "games": 1000,
+        "no_eligible_decision": 0,
+        "diverged": 0,
+        "search_greedy_mismatch": 0,
+        "search_choice_mismatch": 0,
+        "unfinished_rollouts": 0
+      },
+      "summary": {
+        "all": {
+          "decisions": 1000,
+          "override_gain_points": 0.3671875,
+          "override_gain_se_points": 0.12225273765718778,
+          "override_used_share": 0.046,
+          "clear_mistake_share": 0.02,
+          "clear_mistakes": 20,
+          "clear_mistake_mean_gain_points": 19.70703125,
+          "search_gain_points": 0.146484375,
+          "search_gain_se_points": 0.11901774414112345,
+          "search_differs_share": 0.088,
+          "search_gain_where_differs_points": 1.6645951704545456
+        },
+        "by_turn_counter": {
+          "0-3": {
+            "decisions": 161,
+            "override_gain_points": 0.13344332298136646,
+            "override_gain_se_points": 0.11953491260145105,
+            "override_used_share": 0.037267080745341616,
+            "clear_mistake_share": 0.012422360248447204,
+            "clear_mistakes": 2,
+            "clear_mistake_mean_gain_points": 15.234375,
+            "search_gain_points": -0.1892468944099379,
+            "search_gain_se_points": 0.21880246092862363,
+            "search_differs_share": 0.11801242236024845,
+            "search_gain_where_differs_points": -1.6036184210526316
+          },
+          "4-9": {
+            "decisions": 253,
+            "override_gain_points": 0.21770009881422925,
+            "override_gain_se_points": 0.09494318969618801,
+            "override_used_share": 0.05533596837944664,
+            "clear_mistake_share": 0.015810276679841896,
+            "clear_mistakes": 4,
+            "clear_mistake_mean_gain_points": 12.20703125,
+            "search_gain_points": 0.023159584980237152,
+            "search_gain_se_points": 0.05887086008469577,
+            "search_differs_share": 0.05138339920948617,
+            "search_gain_where_differs_points": 0.4507211538461538
+          },
+          "10-15": {
+            "decisions": 289,
+            "override_gain_points": 0.21626297577854672,
+            "override_gain_se_points": 0.0913658001783098,
+            "override_used_share": 0.04844290657439446,
+            "clear_mistake_share": 0.020761245674740483,
+            "clear_mistakes": 6,
+            "clear_mistake_mean_gain_points": 13.020833333333334,
+            "search_gain_points": 0.09866998269896193,
+            "search_gain_se_points": 0.08821272461274825,
+            "search_differs_share": 0.07612456747404844,
+            "search_gain_where_differs_points": 1.2961647727272727
+          },
+          "16+": {
+            "decisions": 297,
+            "override_gain_points": 0.7680976430976431,
+            "override_gain_se_points": 0.38785062731990777,
+            "override_used_share": 0.04040404040404041,
+            "clear_mistake_share": 0.026936026936026935,
+            "clear_mistakes": 8,
+            "clear_mistake_mean_gain_points": 29.58984375,
+            "search_gain_points": 0.480061026936027,
+            "search_gain_se_points": 0.3693587724377864,
+            "search_differs_share": 0.11447811447811448,
+            "search_gain_where_differs_points": 4.193474264705882
+          }
+        }
+      }
+    },
+    "selfplay_seed0": {
+      "counts": {
+        "games": 1000,
+        "no_eligible_decision": 0,
+        "diverged": 0,
+        "search_greedy_mismatch": 0,
+        "search_choice_mismatch": 0,
+        "unfinished_rollouts": 0
+      },
+      "summary": {
+        "all": {
+          "decisions": 1000,
+          "override_gain_points": 0.265234375,
+          "override_gain_se_points": 0.0616852360252433,
+          "override_used_share": 0.061,
+          "clear_mistake_share": 0.019,
+          "clear_mistakes": 19,
+          "clear_mistake_mean_gain_points": 14.412006578947366,
+          "search_gain_points": 0.08125,
+          "search_gain_se_points": 0.04249844280769095,
+          "search_differs_share": 0.082,
+          "search_gain_where_differs_points": 0.9908536585365854
+        },
+        "by_turn_counter": {
+          "0-3": {
+            "decisions": 179,
+            "override_gain_points": 0.6394029329608939,
+            "override_gain_se_points": 0.23113516620340666,
+            "override_used_share": 0.0670391061452514,
+            "clear_mistake_share": 0.03910614525139665,
+            "clear_mistakes": 7,
+            "clear_mistake_mean_gain_points": 16.629464285714285,
+            "search_gain_points": 0.030551675977653632,
+            "search_gain_se_points": 0.10271205185978623,
+            "search_differs_share": 0.061452513966480445,
+            "search_gain_where_differs_points": 0.4971590909090909
+          },
+          "4-9": {
+            "decisions": 242,
+            "override_gain_points": 0.23566632231404958,
+            "override_gain_se_points": 0.09215365383838847,
+            "override_used_share": 0.05785123966942149,
+            "clear_mistake_share": 0.01652892561983471,
+            "clear_mistakes": 4,
+            "clear_mistake_mean_gain_points": 12.3046875,
+            "search_gain_points": 0.07747933884297521,
+            "search_gain_se_points": 0.09743301857575305,
+            "search_differs_share": 0.06611570247933884,
+            "search_gain_where_differs_points": 1.171875
+          },
+          "10-15": {
+            "decisions": 270,
+            "override_gain_points": 0.37471064814814814,
+            "override_gain_se_points": 0.14184257109074713,
+            "override_used_share": 0.07037037037037037,
+            "clear_mistake_share": 0.02962962962962963,
+            "clear_mistakes": 8,
+            "clear_mistake_mean_gain_points": 13.525390625,
+            "search_gain_points": 0.18952546296296297,
+            "search_gain_se_points": 0.10269036045349002,
+            "search_differs_share": 0.07777777777777778,
+            "search_gain_where_differs_points": 2.4367559523809526
+          },
+          "16+": {
+            "decisions": 309,
+            "override_gain_points": -0.02401901294498382,
+            "override_gain_se_points": 0.03043729995854741,
+            "override_used_share": 0.05177993527508091,
+            "clear_mistake_share": 0.0,
+            "clear_mistakes": 0,
+            "clear_mistake_mean_gain_points": null,
+            "search_gain_points": 0.018962378640776698,
+            "search_gain_se_points": 0.03886812081246316,
+            "search_differs_share": 0.11003236245954692,
+            "search_gain_where_differs_points": 0.1723345588235294
+          }
+        }
+      }
+    },
+    "selfplay_seed1": {
+      "counts": {
+        "games": 1000,
+        "no_eligible_decision": 0,
+        "diverged": 0,
+        "search_greedy_mismatch": 0,
+        "search_choice_mismatch": 0,
+        "unfinished_rollouts": 0
+      },
+      "summary": {
+        "all": {
+          "decisions": 1000,
+          "override_gain_points": 0.577734375,
+          "override_gain_se_points": 0.10173316969064486,
+          "override_used_share": 0.076,
+          "clear_mistake_share": 0.037,
+          "clear_mistakes": 37,
+          "clear_mistake_mean_gain_points": 17.39864864864865,
+          "search_gain_points": 0.20468750000000002,
+          "search_gain_se_points": 0.07460211218934663,
+          "search_differs_share": 0.086,
+          "search_gain_where_differs_points": 2.3800872093023258
+        },
+        "by_turn_counter": {
+          "0-3": {
+            "decisions": 144,
+            "override_gain_points": 1.2966579861111112,
+            "override_gain_se_points": 0.41987489406666767,
+            "override_used_share": 0.13194444444444445,
+            "clear_mistake_share": 0.08333333333333333,
+            "clear_mistakes": 12,
+            "clear_mistake_mean_gain_points": 18.815104166666664,
+            "search_gain_points": 0.05967881944444445,
+            "search_gain_se_points": 0.07017842938120479,
+            "search_differs_share": 0.041666666666666664,
+            "search_gain_where_differs_points": 1.4322916666666665
+          },
+          "4-9": {
+            "decisions": 263,
+            "override_gain_points": 0.8317490494296578,
+            "override_gain_se_points": 0.21909736759942985,
+            "override_used_share": 0.10646387832699619,
+            "clear_mistake_share": 0.049429657794676805,
+            "clear_mistakes": 13,
+            "clear_mistake_mean_gain_points": 17.337740384615387,
+            "search_gain_points": 0.16634980988593154,
+            "search_gain_se_points": 0.1883387930858334,
+            "search_differs_share": 0.08365019011406843,
+            "search_gain_where_differs_points": 1.9886363636363635
+          },
+          "10-15": {
+            "decisions": 266,
+            "override_gain_points": 0.3304158834586466,
+            "override_gain_se_points": 0.14817422040675027,
+            "override_used_share": 0.05263157894736842,
+            "clear_mistake_share": 0.015037593984962405,
+            "clear_mistakes": 4,
+            "clear_mistake_mean_gain_points": 18.9453125,
+            "search_gain_points": 0.13069783834586465,
+            "search_gain_se_points": 0.11458285079687534,
+            "search_differs_share": 0.04887218045112782,
+            "search_gain_where_differs_points": 2.674278846153846
+          },
+          "16+": {
+            "decisions": 327,
+            "override_gain_points": 0.25802752293577985,
+            "override_gain_se_points": 0.12674710616270904,
+            "override_used_share": 0.045871559633027525,
+            "clear_mistake_share": 0.024464831804281346,
+            "clear_mistakes": 8,
+            "clear_mistake_mean_gain_points": 14.599609375,
+            "search_gain_points": 0.35956613149847094,
+            "search_gain_se_points": 0.13955375219367874,
+            "search_differs_share": 0.13761467889908258,
+            "search_gain_where_differs_points": 2.6128472222222223
+          }
+        }
+      }
+    },
+    "selfplay_seed2": {
+      "counts": {
+        "games": 1000,
+        "no_eligible_decision": 0,
+        "diverged": 0,
+        "search_greedy_mismatch": 0,
+        "search_choice_mismatch": 0,
+        "unfinished_rollouts": 0
+      },
+      "summary": {
+        "all": {
+          "decisions": 1000,
+          "override_gain_points": 0.39804687499999997,
+          "override_gain_se_points": 0.10203830394257508,
+          "override_used_share": 0.067,
+          "clear_mistake_share": 0.022,
+          "clear_mistakes": 22,
+          "clear_mistake_mean_gain_points": 18.909801136363637,
+          "search_gain_points": 0.253125,
+          "search_gain_se_points": 0.09919458719420446,
+          "search_differs_share": 0.086,
+          "search_gain_where_differs_points": 2.943313953488372
+        },
+        "by_turn_counter": {
+          "0-3": {
+            "decisions": 181,
+            "override_gain_points": 0.38630870165745856,
+            "override_gain_se_points": 0.16401775941456415,
+            "override_used_share": 0.08287292817679558,
+            "clear_mistake_share": 0.022099447513812154,
+            "clear_mistakes": 4,
+            "clear_mistake_mean_gain_points": 17.1875,
+            "search_gain_points": -0.002158149171270718,
+            "search_gain_se_points": 0.08697010916071389,
+            "search_differs_share": 0.03314917127071823,
+            "search_gain_where_differs_points": -0.06510416666666666
+          },
+          "4-9": {
+            "decisions": 276,
+            "override_gain_points": 0.36514945652173914,
+            "override_gain_se_points": 0.13163252299606107,
+            "override_used_share": 0.06521739130434782,
+            "clear_mistake_share": 0.025362318840579712,
+            "clear_mistakes": 7,
+            "clear_mistake_mean_gain_points": 14.955357142857142,
+            "search_gain_points": 0.22361865942028986,
+            "search_gain_se_points": 0.15688912438271121,
+            "search_differs_share": 0.11956521739130435,
+            "search_gain_where_differs_points": 1.8702651515151516
+          },
+          "10-15": {
+            "decisions": 254,
+            "override_gain_points": 0.2660556102362205,
+            "override_gain_se_points": 0.1363977191407419,
+            "override_used_share": 0.06692913385826772,
+            "clear_mistake_share": 0.015748031496062992,
+            "clear_mistakes": 4,
+            "clear_mistake_mean_gain_points": 17.3828125,
+            "search_gain_points": 0.1845472440944882,
+            "search_gain_se_points": 0.13505183196486603,
+            "search_differs_share": 0.07480314960629922,
+            "search_gain_where_differs_points": 2.4671052631578947
+          },
+          "16+": {
+            "decisions": 289,
+            "override_gain_points": 0.55282223183391,
+            "override_gain_se_points": 0.290057554126799,
+            "override_used_share": 0.058823529411764705,
+            "clear_mistake_share": 0.02422145328719723,
+            "clear_mistakes": 7,
+            "clear_mistake_mean_gain_points": 24.720982142857142,
+            "search_gain_points": 0.5014597750865052,
+            "search_gain_se_points": 0.27971158564150483,
+            "search_differs_share": 0.09688581314878893,
+            "search_gain_where_differs_points": 5.17578125
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+purchase audit: D:\sdb-yardstick-run3\results\optimized_selfplay_baseline\checkpoints\selfplay_seed0.pth decisions=1000 rollouts=256 seed=20260930 journaled=0
+  pass 1: games 0-1019
+    step 100: 1020 games still running
+    step 200: 933 games still running
+    step 300: 324 games still running
+    step 400: 52 games still running
+    step 500: 12 games still running
+    step 600: 2 games still running
+    step 700: 2 games still running
+  pass 2: replaying 1020 games to their target decisions
+    step 100: 1020 games still running
+    step 200: 933 games still running
+    step 300: 324 games still running
+    step 400: 52 games still running
+    step 500: 12 games still running
+    step 600: 2 games still running
+    step 700: 2 games still running
+  sampled 1000 decisions from 1000 games (0 without one, 0 diverged) in 552s
+  search choices done (0 greedy mismatches, 0 choice mismatches); 1000 decisions to roll out
+  chunk 1/7: 153 decisions, unfinished 0, 101s
+  chunk 2/7: 152 decisions, unfinished 0, 108s
+purchase audit: D:\sdb-yardstick-run3\results\optimized_selfplay_baseline\checkpoints\selfplay_seed0.pth decisions=1000 rollouts=256 seed=20260930 journaled=305
+  pass 1: games 0-1019
+    step 100: 1020 games still running
+    step 200: 933 games still running
+    step 300: 324 games still running
+    step 400: 52 games still running
+    step 500: 12 games still running
+    step 600: 2 games still running
+    step 700: 2 games still running
+  pass 2: replaying 1020 games to their target decisions
+    step 100: 1020 games still running
+    step 200: 933 games still running
+    step 300: 324 games still running
+    step 400: 52 games still running
+    step 500: 12 games still running
+    step 600: 2 games still running
+    step 700: 2 games still running
+  sampled 1000 decisions from 1000 games (0 without one, 0 diverged) in 97s
+  search choices done (0 greedy mismatches, 0 choice mismatches); 695 decisions to roll out
+  chunk 1/5: 156 decisions, unfinished 0, 56s
+  chunk 2/5: 151 decisions, unfinished 0, 105s
+  chunk 3/5: 159 decisions, unfinished 0, 134s
+  chunk 4/5: 160 decisions, unfinished 0, 110s
+  chunk 5/5: 69 decisions, unfinished 0, 30s
+  override gain +0.265 points (SE 0.062); clear mistakes 19/1000; search gain +0.081 (SE 0.042); 535s

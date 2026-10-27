@@ -1,0 +1,36 @@
+﻿{
+    "schema_version":  1,
+    "state":  "complete",
+    "invocation":  {
+                       "preset":  "continue-selfplay-seed0",
+                       "seed":  2,
+                       "target_update":  400,
+                       "chunk_size":  25,
+                       "interim_eval_games":  3200,
+                       "final_eval_games":  15000,
+                       "eval_num_workers":  16,
+                       "common_args":  [
+                                           "--preset",
+                                           "continue-selfplay-seed0",
+                                           "--seed",
+                                           "2"
+                                       ]
+                   },
+    "repository":  "D:\\sdb-yardstick-run",
+    "python":  "E:\\space-deck-builder\\.venv\\Scripts\\python.exe",
+    "started_at":  "2026-10-27T03:35:19.4481019-07:00",
+    "finished_at":  "2026-10-27T05:03:17.3488785-07:00",
+    "failure":  null,
+    "bootstrap":  {
+                      "state":  "complete",
+                      "target_update":  25,
+                      "log":  "D:\\sdb-yardstick-runs\\continue-selfplay-seed0_seed2\\bootstrap_0_to_25_20261027_033519.log",
+                      "error_log":  "D:\\sdb-yardstick-runs\\continue-selfplay-seed0_seed2\\bootstrap_0_to_25_20261027_033519.log.err",
+                      "checkpoint":  "D:\\sdb-yardstick-runs\\continue-selfplay-seed0_seed2\\bootstrap_models\\ppo_agent_1027_0340_upd25_wins3091.pth",
+                      "exit_code":  0,
+                      "started_at":  "2026-10-27T03:35:19.4511044-07:00",
+                      "finished_at":  "2026-10-27T03:40:29.4357804-07:00"
+                  },
+    "chunks_manifest":  "D:\\sdb-yardstick-runs\\continue-selfplay-seed0_seed2\\chunks\\manifest.json",
+    "final_checkpoint":  "D:\\sdb-yardstick-runs\\continue-selfplay-seed0_seed2\\chunks\\final_checkpoint.pth"
+}

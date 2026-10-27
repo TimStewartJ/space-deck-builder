@@ -1,0 +1,23 @@
+﻿{
+    "state":  "complete",
+    "log":  "D:\\sdb-yardstick-run3\\logs\\sdb_yardstick_measures_20261027_041458.log",
+    "repository":  "D:\\sdb-yardstick-run3",
+    "launched_at":  "2026-10-27T04:14:59.0956378-07:00",
+    "python":  "E:\\space-deck-builder\\.venv\\Scripts\\python.exe",
+    "task_action_executable":  "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "processor_affinity":  "0xFFFFF",
+    "job_object_assigned":  true,
+    "error_message":  null,
+    "task_path":  "\\",
+    "task":  "sdb_yardstick_measures",
+    "task_action_pid":  11640,
+    "process_priority":  "Normal",
+    "command":  "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\\sdb-yardstick-runs\\audits_below_normal.ps1 -Python \"E:\\space-deck-builder\\.venv\\Scripts\\python.exe\" -Seeds 1",
+    "finished_at":  "2026-10-27T04:24:21.0750145-07:00",
+    "train_args":  "",
+    "exit_code":  0,
+    "launch_id":  "d4808cf4-aee3-4aac-8486-c446f4419a6e",
+    "schema_version":  2,
+    "task_action_created_at":  "2026-10-27T04:14:59.1243670-07:00",
+    "started_at":  "2026-10-27T04:14:59.7691882-07:00"
+}

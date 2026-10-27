@@ -1,0 +1,27 @@
+purchase audit: D:\sdb-yardstick-runs\checkpoints\control_seed2.pth decisions=1000 rollouts=256 seed=20260930 journaled=0
+  pass 1: games 0-1019
+    step 100: 1020 games still running
+    step 200: 906 games still running
+    step 300: 312 games still running
+    step 400: 41 games still running
+    step 500: 8 games still running
+    step 600: 3 games still running
+    step 700: 1 games still running
+  pass 2: replaying 1020 games to their target decisions
+    step 100: 1020 games still running
+    step 200: 906 games still running
+    step 300: 312 games still running
+    step 400: 41 games still running
+    step 500: 8 games still running
+    step 600: 3 games still running
+    step 700: 1 games still running
+  sampled 1000 decisions from 1000 games (0 without one, 0 diverged) in 77s
+  search choices done (0 greedy mismatches, 0 choice mismatches); 1000 decisions to roll out
+  chunk 1/7: 154 decisions, unfinished 0, 88s
+  chunk 2/7: 156 decisions, unfinished 0, 63s
+  chunk 3/7: 151 decisions, unfinished 0, 58s
+  chunk 4/7: 146 decisions, unfinished 0, 62s
+  chunk 5/7: 155 decisions, unfinished 0, 49s
+  chunk 6/7: 153 decisions, unfinished 0, 38s
+  chunk 7/7: 85 decisions, unfinished 0, 22s
+  override gain +0.367 points (SE 0.122); clear mistakes 20/1000; search gain +0.146 (SE 0.119); 460s
