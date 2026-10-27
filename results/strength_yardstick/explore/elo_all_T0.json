@@ -1,0 +1,396 @@
+{
+  "anchor": "control_seed0@T0",
+  "anchor_elo": 1000.0,
+  "games_per_pair": 2000,
+  "participants": [
+    {
+      "index": 0,
+      "label": "control_seed0@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-runs\\checkpoints\\control_seed0.pth",
+      "temperature": 0.0,
+      "elo": 1000.0,
+      "wins": 8229,
+      "losses": 7771,
+      "games": 16000
+    },
+    {
+      "index": 1,
+      "label": "control_seed1@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-runs\\checkpoints\\control_seed1.pth",
+      "temperature": 0.0,
+      "elo": 1000.4407793920689,
+      "wins": 8240,
+      "losses": 7760,
+      "games": 16000
+    },
+    {
+      "index": 2,
+      "label": "control_seed2@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-runs\\checkpoints\\control_seed2.pth",
+      "temperature": 0.0,
+      "elo": 1003.9087021251461,
+      "wins": 8329,
+      "losses": 7671,
+      "games": 16000
+    },
+    {
+      "index": 3,
+      "label": "exploiter_seed0@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-runs\\checkpoints\\exploiter_seed0.pth",
+      "temperature": 0.0,
+      "elo": 1029.0393810070811,
+      "wins": 8971,
+      "losses": 7029,
+      "games": 16000
+    },
+    {
+      "index": 4,
+      "label": "exploiter_seed1@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-runs\\checkpoints\\exploiter_seed1.pth",
+      "temperature": 0.0,
+      "elo": 1023.7314761780493,
+      "wins": 8836,
+      "losses": 7164,
+      "games": 16000
+    },
+    {
+      "index": 5,
+      "label": "exploiter_seed2@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-runs\\checkpoints\\exploiter_seed2.pth",
+      "temperature": 0.0,
+      "elo": 1014.6036277609755,
+      "wins": 8603,
+      "losses": 7397,
+      "games": 16000
+    },
+    {
+      "index": 6,
+      "label": "selfplay_seed0@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth",
+      "temperature": 0.0,
+      "elo": 956.5721022553968,
+      "wins": 7116,
+      "losses": 8884,
+      "games": 16000
+    },
+    {
+      "index": 7,
+      "label": "selfplay_seed1@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed1.pth",
+      "temperature": 0.0,
+      "elo": 931.4339472759717,
+      "wins": 6482,
+      "losses": 9518,
+      "games": 16000
+    },
+    {
+      "index": 8,
+      "label": "selfplay_seed2@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed2.pth",
+      "temperature": 0.0,
+      "elo": 959.6355194090934,
+      "wins": 7194,
+      "losses": 8806,
+      "games": 16000
+    }
+  ],
+  "pairings": [
+    {
+      "i": 0,
+      "j": 1,
+      "label_i": "control_seed0@T0",
+      "label_j": "control_seed1@T0",
+      "wins_i": 1003,
+      "games": 2000
+    },
+    {
+      "i": 0,
+      "j": 2,
+      "label_i": "control_seed0@T0",
+      "label_j": "control_seed2@T0",
+      "wins_i": 975,
+      "games": 2000
+    },
+    {
+      "i": 0,
+      "j": 3,
+      "label_i": "control_seed0@T0",
+      "label_j": "exploiter_seed0@T0",
+      "wins_i": 932,
+      "games": 2000
+    },
+    {
+      "i": 0,
+      "j": 4,
+      "label_i": "control_seed0@T0",
+      "label_j": "exploiter_seed1@T0",
+      "wins_i": 908,
+      "games": 2000
+    },
+    {
+      "i": 0,
+      "j": 5,
+      "label_i": "control_seed0@T0",
+      "label_j": "exploiter_seed2@T0",
+      "wins_i": 964,
+      "games": 2000
+    },
+    {
+      "i": 0,
+      "j": 6,
+      "label_i": "control_seed0@T0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 1129,
+      "games": 2000
+    },
+    {
+      "i": 0,
+      "j": 7,
+      "label_i": "control_seed0@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 1203,
+      "games": 2000
+    },
+    {
+      "i": 0,
+      "j": 8,
+      "label_i": "control_seed0@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 1115,
+      "games": 2000
+    },
+    {
+      "i": 1,
+      "j": 2,
+      "label_i": "control_seed1@T0",
+      "label_j": "control_seed2@T0",
+      "wins_i": 979,
+      "games": 2000
+    },
+    {
+      "i": 1,
+      "j": 3,
+      "label_i": "control_seed1@T0",
+      "label_j": "exploiter_seed0@T0",
+      "wins_i": 921,
+      "games": 2000
+    },
+    {
+      "i": 1,
+      "j": 4,
+      "label_i": "control_seed1@T0",
+      "label_j": "exploiter_seed1@T0",
+      "wins_i": 932,
+      "games": 2000
+    },
+    {
+      "i": 1,
+      "j": 5,
+      "label_i": "control_seed1@T0",
+      "label_j": "exploiter_seed2@T0",
+      "wins_i": 964,
+      "games": 2000
+    },
+    {
+      "i": 1,
+      "j": 6,
+      "label_i": "control_seed1@T0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 1121,
+      "games": 2000
+    },
+    {
+      "i": 1,
+      "j": 7,
+      "label_i": "control_seed1@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 1214,
+      "games": 2000
+    },
+    {
+      "i": 1,
+      "j": 8,
+      "label_i": "control_seed1@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 1112,
+      "games": 2000
+    },
+    {
+      "i": 2,
+      "j": 3,
+      "label_i": "control_seed2@T0",
+      "label_j": "exploiter_seed0@T0",
+      "wins_i": 904,
+      "games": 2000
+    },
+    {
+      "i": 2,
+      "j": 4,
+      "label_i": "control_seed2@T0",
+      "label_j": "exploiter_seed1@T0",
+      "wins_i": 935,
+      "games": 2000
+    },
+    {
+      "i": 2,
+      "j": 5,
+      "label_i": "control_seed2@T0",
+      "label_j": "exploiter_seed2@T0",
+      "wins_i": 1006,
+      "games": 2000
+    },
+    {
+      "i": 2,
+      "j": 6,
+      "label_i": "control_seed2@T0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 1119,
+      "games": 2000
+    },
+    {
+      "i": 2,
+      "j": 7,
+      "label_i": "control_seed2@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 1188,
+      "games": 2000
+    },
+    {
+      "i": 2,
+      "j": 8,
+      "label_i": "control_seed2@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 1131,
+      "games": 2000
+    },
+    {
+      "i": 3,
+      "j": 4,
+      "label_i": "exploiter_seed0@T0",
+      "label_j": "exploiter_seed1@T0",
+      "wins_i": 1032,
+      "games": 2000
+    },
+    {
+      "i": 3,
+      "j": 5,
+      "label_i": "exploiter_seed0@T0",
+      "label_j": "exploiter_seed2@T0",
+      "wins_i": 1035,
+      "games": 2000
+    },
+    {
+      "i": 3,
+      "j": 6,
+      "label_i": "exploiter_seed0@T0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 1223,
+      "games": 2000
+    },
+    {
+      "i": 3,
+      "j": 7,
+      "label_i": "exploiter_seed0@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 1239,
+      "games": 2000
+    },
+    {
+      "i": 3,
+      "j": 8,
+      "label_i": "exploiter_seed0@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 1199,
+      "games": 2000
+    },
+    {
+      "i": 4,
+      "j": 5,
+      "label_i": "exploiter_seed1@T0",
+      "label_j": "exploiter_seed2@T0",
+      "wins_i": 1020,
+      "games": 2000
+    },
+    {
+      "i": 4,
+      "j": 6,
+      "label_i": "exploiter_seed1@T0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 1180,
+      "games": 2000
+    },
+    {
+      "i": 4,
+      "j": 7,
+      "label_i": "exploiter_seed1@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 1267,
+      "games": 2000
+    },
+    {
+      "i": 4,
+      "j": 8,
+      "label_i": "exploiter_seed1@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 1176,
+      "games": 2000
+    },
+    {
+      "i": 5,
+      "j": 6,
+      "label_i": "exploiter_seed2@T0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 1187,
+      "games": 2000
+    },
+    {
+      "i": 5,
+      "j": 7,
+      "label_i": "exploiter_seed2@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 1253,
+      "games": 2000
+    },
+    {
+      "i": 5,
+      "j": 8,
+      "label_i": "exploiter_seed2@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 1152,
+      "games": 2000
+    },
+    {
+      "i": 6,
+      "j": 7,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 1100,
+      "games": 2000
+    },
+    {
+      "i": 6,
+      "j": 8,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 975,
+      "games": 2000
+    },
+    {
+      "i": 7,
+      "j": 8,
+      "label_i": "selfplay_seed1@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 946,
+      "games": 2000
+    }
+  ]
+}

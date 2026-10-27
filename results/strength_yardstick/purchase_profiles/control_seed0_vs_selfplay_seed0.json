@@ -1,0 +1,202 @@
+{
+  "a": "control_seed0.pth",
+  "b": "selfplay_seed0.pth",
+  "games": 400,
+  "deal_seed": 20261027,
+  "a_win_rate": 0.5075,
+  "mean_turns": 23.5975,
+  "scraps_per_game": {
+    "a": 5.3675,
+    "b": 4.6675
+  },
+  "buys_per_game": {
+    "Imperial Fighter": {
+      "a": 0.4025,
+      "b": 0.7975
+    },
+    "Blob Wheel": {
+      "a": 0.315,
+      "b": 0.605
+    },
+    "Federation Shuttle": {
+      "a": 0.565,
+      "b": 0.3075
+    },
+    "Imperial Frigate": {
+      "a": 0.51,
+      "b": 0.6425
+    },
+    "Survey Ship": {
+      "a": 0.5925,
+      "b": 0.47
+    },
+    "Trade Bot": {
+      "a": 0.5,
+      "b": 0.385
+    },
+    "Battle Station": {
+      "a": 0.295,
+      "b": 0.4025
+    },
+    "Space Station": {
+      "a": 0.395,
+      "b": 0.2875
+    },
+    "Dreadnaught": {
+      "a": 0.1775,
+      "b": 0.0775
+    },
+    "Supply Bot": {
+      "a": 0.3825,
+      "b": 0.29
+    },
+    "Ram": {
+      "a": 0.4575,
+      "b": 0.37
+    },
+    "Trading Post": {
+      "a": 0.4075,
+      "b": 0.3225
+    },
+    "Battle Pod": {
+      "a": 0.435,
+      "b": 0.3525
+    },
+    "Barter World": {
+      "a": 0.3875,
+      "b": 0.305
+    },
+    "Blob World": {
+      "a": 0.1275,
+      "b": 0.0475
+    },
+    "Embassy Yacht": {
+      "a": 0.27,
+      "b": 0.3475
+    },
+    "Battlecruiser": {
+      "a": 0.1925,
+      "b": 0.125
+    },
+    "Stealth Needle": {
+      "a": 0.19,
+      "b": 0.125
+    },
+    "Trade Pod": {
+      "a": 0.3775,
+      "b": 0.315
+    },
+    "Defense Center": {
+      "a": 0.1375,
+      "b": 0.2
+    },
+    "Brain World": {
+      "a": 0.1125,
+      "b": 0.0525
+    },
+    "Command Ship": {
+      "a": 0.1375,
+      "b": 0.085
+    },
+    "War World": {
+      "a": 0.1375,
+      "b": 0.185
+    },
+    "Central Office": {
+      "a": 0.08,
+      "b": 0.035
+    },
+    "Patrol Mech": {
+      "a": 0.33,
+      "b": 0.2875
+    },
+    "Recycling Station": {
+      "a": 0.3575,
+      "b": 0.32
+    },
+    "Missile Bot": {
+      "a": 0.4975,
+      "b": 0.5325
+    },
+    "Port of Call": {
+      "a": 0.13,
+      "b": 0.0975
+    },
+    "Freighter": {
+      "a": 0.035,
+      "b": 0.0025
+    },
+    "Battle Blob": {
+      "a": 0.1575,
+      "b": 0.1875
+    },
+    "Machine Base": {
+      "a": 0.11,
+      "b": 0.08
+    },
+    "Blob Destroyer": {
+      "a": 0.3175,
+      "b": 0.3425
+    },
+    "Cutter": {
+      "a": 0.54,
+      "b": 0.565
+    },
+    "The Hive": {
+      "a": 0.175,
+      "b": 0.1525
+    },
+    "Flagship": {
+      "a": 0.15,
+      "b": 0.17
+    },
+    "Royal Redoubt": {
+      "a": 0.1325,
+      "b": 0.1125
+    },
+    "Blob Carrier": {
+      "a": 0.15,
+      "b": 0.13
+    },
+    "Corvette": {
+      "a": 0.3975,
+      "b": 0.4175
+    },
+    "Explorer": {
+      "a": 2.4325,
+      "b": 2.42
+    },
+    "Battle Mech": {
+      "a": 0.1575,
+      "b": 0.1675
+    },
+    "Blob Fighter": {
+      "a": 0.565,
+      "b": 0.575
+    },
+    "Trade Escort": {
+      "a": 0.1425,
+      "b": 0.1525
+    },
+    "Mech World": {
+      "a": 0.1475,
+      "b": 0.1375
+    },
+    "Fleet HQ": {
+      "a": 0.0175,
+      "b": 0.0225
+    },
+    "Junkyard": {
+      "a": 0.06,
+      "b": 0.0575
+    },
+    "Missile Mech": {
+      "a": 0.14,
+      "b": 0.1425
+    },
+    "Mothership": {
+      "a": 0.135,
+      "b": 0.135
+    }
+  }
+}

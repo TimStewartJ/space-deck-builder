@@ -1,0 +1,58 @@
+Participants (9): control_seed0@T0, control_seed1@T0, control_seed2@T0, exploiter_seed0@T0, exploiter_seed1@T0, exploiter_seed2@T0, selfplay_seed0@T0, selfplay_seed1@T0, selfplay_seed2@T0
+Running 36 pairings x 2000 games = 72000 total games
+Using 16 workers running pairings in parallel
+
+  [1/36] control_seed0@T0 vs control_seed1@T0: 1003/2000 (50%)  (129.9s)
+  [2/36] control_seed1@T0 vs exploiter_seed0@T0: 921/2000 (46%)  (154.6s)
+  [3/36] control_seed0@T0 vs control_seed2@T0: 975/2000 (49%)  (159.2s)
+  [4/36] control_seed1@T0 vs exploiter_seed1@T0: 932/2000 (47%)  (159.7s)
+  [5/36] control_seed0@T0 vs exploiter_seed1@T0: 908/2000 (45%)  (160.2s)
+  [6/36] control_seed0@T0 vs selfplay_seed2@T0: 1115/2000 (56%)  (161.2s)
+  [7/36] control_seed1@T0 vs selfplay_seed2@T0: 1112/2000 (56%)  (162.6s)
+  [8/36] control_seed1@T0 vs control_seed2@T0: 979/2000 (49%)  (162.9s)
+  [9/36] control_seed1@T0 vs selfplay_seed1@T0: 1214/2000 (61%)  (163.2s)
+  [10/36] control_seed1@T0 vs exploiter_seed2@T0: 964/2000 (48%)  (163.8s)
+  [11/36] control_seed1@T0 vs selfplay_seed0@T0: 1121/2000 (56%)  (164.0s)
+  [12/36] control_seed0@T0 vs exploiter_seed2@T0: 964/2000 (48%)  (164.8s)
+  [13/36] control_seed0@T0 vs selfplay_seed0@T0: 1129/2000 (56%)  (167.0s)
+  [14/36] control_seed0@T0 vs selfplay_seed1@T0: 1203/2000 (60%)  (168.6s)
+  [15/36] control_seed0@T0 vs exploiter_seed0@T0: 932/2000 (47%)  (169.7s)
+  [16/36] control_seed2@T0 vs exploiter_seed0@T0: 904/2000 (45%)  (170.3s)
+  [17/36] control_seed2@T0 vs exploiter_seed1@T0: 935/2000 (47%)  (279.8s)
+  [18/36] control_seed2@T0 vs exploiter_seed2@T0: 1006/2000 (50%)  (301.4s)
+  [19/36] exploiter_seed0@T0 vs exploiter_seed1@T0: 1032/2000 (52%)  (304.7s)
+  [20/36] exploiter_seed1@T0 vs exploiter_seed2@T0: 1020/2000 (51%)  (306.7s)
+  [21/36] exploiter_seed0@T0 vs exploiter_seed2@T0: 1035/2000 (52%)  (309.7s)
+  [22/36] exploiter_seed0@T0 vs selfplay_seed0@T0: 1223/2000 (61%)  (313.5s)
+  [23/36] control_seed2@T0 vs selfplay_seed2@T0: 1131/2000 (57%)  (314.3s)
+  [24/36] exploiter_seed0@T0 vs selfplay_seed1@T0: 1239/2000 (62%)  (314.5s)
+  [25/36] control_seed2@T0 vs selfplay_seed1@T0: 1188/2000 (59%)  (314.8s)
+  [26/36] exploiter_seed0@T0 vs selfplay_seed2@T0: 1199/2000 (60%)  (316.8s)
+  [27/36] control_seed2@T0 vs selfplay_seed0@T0: 1119/2000 (56%)  (317.3s)
+  [28/36] exploiter_seed1@T0 vs selfplay_seed0@T0: 1180/2000 (59%)  (317.5s)
+  [29/36] exploiter_seed1@T0 vs selfplay_seed1@T0: 1267/2000 (63%)  (318.4s)
+  [30/36] exploiter_seed1@T0 vs selfplay_seed2@T0: 1176/2000 (59%)  (319.5s)
+  [31/36] exploiter_seed2@T0 vs selfplay_seed0@T0: 1187/2000 (59%)  (319.9s)
+  [32/36] exploiter_seed2@T0 vs selfplay_seed1@T0: 1253/2000 (63%)  (320.7s)
+  [33/36] exploiter_seed2@T0 vs selfplay_seed2@T0: 1152/2000 (58%)  (375.7s)
+  [34/36] selfplay_seed0@T0 vs selfplay_seed2@T0: 975/2000 (49%)  (386.5s)
+  [35/36] selfplay_seed0@T0 vs selfplay_seed1@T0: 1100/2000 (55%)  (386.8s)
+  [36/36] selfplay_seed1@T0 vs selfplay_seed2@T0: 946/2000 (47%)  (386.8s)
+
+Games complete in 387.1s
+
+============================================================
+ELO LEADERBOARD
+============================================================
+Rank  Name               Elo     W     L   Win%
+------------------------------------------------------------
+1     exploiter_seed0@T0   1029  8971  7029  56.1%
+2     exploiter_seed1@T0   1024  8836  7164  55.2%
+3     exploiter_seed2@T0   1015  8603  7397  53.8%
+4     control_seed2@T0   1004  8329  7671  52.1%
+5     control_seed1@T0   1000  8240  7760  51.5%
+6     control_seed0@T0   1000  8229  7771  51.4%
+7     selfplay_seed2@T0    960  7194  8806  45.0%
+8     selfplay_seed0@T0    957  7116  8884  44.5%
+9     selfplay_seed1@T0    931  6482  9518  40.5%
+============================================================

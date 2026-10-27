@@ -101,6 +101,36 @@ For each opponent ∈ {random, heuristic, simple}:
   variants of the same seeds, never pooled.
 - Built-in opponents and training rollouts are unaffected.
 
+### Held-out league (from `v0.2`)
+- Measures a checkpoint against six scripted opponents that no agent
+  trains on (`src/ai/held_out_agents.py`: balanced, aggro, economy,
+  scrapper, fortress, blobrush). Keep them out of every training opponent
+  registry, and do not tune them against checkpoints.
+- `python -m src league --models <checkpoints> --output-json <file>`: the
+  checkpoint plays at **temperature 0**, **4,000 games per opponent**,
+  deals `game_seed(101, index)`, the checkpoint first on even indices, so
+  exactly 2,000 games in each seat.
+- Report wins with a Wilson 95% interval per opponent, and the pooled win
+  rate over the 24,000 games, which is the **league score**.
+- `--calibration` plays each held-out opponent against Heuristic (2,000
+  games, deal seed 103) as a check on the opponents themselves.
+
+### Purchase audit (from `v0.2`)
+- Measures how much win probability a checkpoint's purchase decisions give
+  away, scored by complete greedy rollouts rather than by the critic.
+- `python -m src purchase-audit --model <checkpoint> --output-json <file>`:
+  1,000 decisions, one per greedy self-play game sampled uniformly among its
+  eligible purchase decisions, 256 rollouts per candidate, master seed
+  20260930.
+- Headline: the **confident-override gain** per decision in points of win
+  probability, with its standard error. Also report the share of decisions
+  with a clear mistake and the gain of the one-turn search's choice, overall
+  and by turn counter.
+
+The full protocol of both measures, including eligibility, sampling, and
+formulas, is fixed in
+[`docs/decisions/0013-strength-yardstick.md`](decisions/0013-strength-yardstick.md).
+
 ## 6. Reporting format
 
 Every post in the series reports its results in **exactly this table
@@ -192,3 +222,12 @@ a version bump.
 - `v0.1.3` — adds inference temperature as an explicit variant attribute;
   **no result is invalidated**.
   - Temperature 1 remains the default and describes every prior result.
+- `v0.2` — adds two metrics, the **held-out league** and the **purchase
+  audit** (§5), defined by decision record 0013.
+  - The gauntlet, seat protocol, seed count, sample sizes, and cross-play
+    Elo are unchanged, so every earlier result stays valid for the metrics
+    it reports. Writeups produced before `v0.2` are tagged `v0.1.x` in
+    [`results/README.md`](../results/README.md); they do not report the new
+    metrics.
+  - The new metrics are measured for the published checkpoints in
+    [`results/strength_yardstick.md`](../results/strength_yardstick.md).

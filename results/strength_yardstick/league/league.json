@@ -1,0 +1,1281 @@
+{
+  "protocol": "docs/decisions/0013-strength-yardstick.md",
+  "config": {
+    "models": [
+      "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth",
+      "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed1.pth",
+      "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed2.pth",
+      "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed0.pth",
+      "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed1.pth",
+      "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed2.pth",
+      "D:\\space-deck-builder-archive\\expert-iteration-round1-20260916\\work\\distilled_seed0.pth",
+      "D:\\sdb-yardstick-runs\\checkpoints\\control_seed0.pth",
+      "D:\\sdb-yardstick-runs\\checkpoints\\control_seed1.pth",
+      "D:\\sdb-yardstick-runs\\checkpoints\\control_seed2.pth",
+      "D:\\sdb-yardstick-runs\\checkpoints\\exploiter_seed0.pth",
+      "D:\\sdb-yardstick-runs\\checkpoints\\exploiter_seed1.pth",
+      "D:\\sdb-yardstick-runs\\checkpoints\\exploiter_seed2.pth"
+    ],
+    "opponents": [
+      "balanced",
+      "aggro",
+      "economy",
+      "scrapper",
+      "fortress",
+      "blobrush"
+    ],
+    "games": 4000,
+    "seed": 101,
+    "batch_size": 256,
+    "calibration": true,
+    "calibration_games": 2000,
+    "calibration_seed": 103,
+    "workers": 6,
+    "device": "cuda"
+  },
+  "identity": {
+    "implementation": "held-out-league-v1",
+    "commit": "2784f95f2a489c429332947acab420d35169e150",
+    "dirty": false,
+    "device": "cuda"
+  },
+  "checkpoints": [
+    {
+      "model": "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth",
+      "label": "selfplay_seed0",
+      "sha256": "9d10dca5110c2bbe9cc0f8693e11578dee347a8c60e7ed63002af7d82e80a503",
+      "opponents": {
+        "balanced": {
+          "wins": 3084,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1614,
+          "mean_turns": 22.617,
+          "win_rate": 0.771,
+          "win_rate_ci95": [
+            0.7577220819528904,
+            0.7837578997840916
+          ]
+        },
+        "aggro": {
+          "wins": 3321,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1724,
+          "mean_turns": 22.18325,
+          "win_rate": 0.83025,
+          "win_rate_ci95": [
+            0.8183004537998354,
+            0.841565833907317
+          ]
+        },
+        "economy": {
+          "wins": 3111,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1631,
+          "mean_turns": 22.96725,
+          "win_rate": 0.77775,
+          "win_rate_ci95": [
+            0.7646026946085014,
+            0.7903643346440696
+          ]
+        },
+        "scrapper": {
+          "wins": 3055,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1593,
+          "mean_turns": 22.59475,
+          "win_rate": 0.76375,
+          "win_rate_ci95": [
+            0.7503370803679339,
+            0.7766568132967486
+          ]
+        },
+        "fortress": {
+          "wins": 3092,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1600,
+          "mean_turns": 24.148,
+          "win_rate": 0.773,
+          "win_rate_ci95": [
+            0.7597602801907836,
+            0.7857158637730396
+          ]
+        },
+        "blobrush": {
+          "wins": 3345,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1726,
+          "mean_turns": 22.36925,
+          "win_rate": 0.83625,
+          "win_rate_ci95": [
+            0.824460637638011,
+            0.8473941367496649
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 19008,
+        "games": 24000,
+        "win_rate": 0.792,
+        "win_rate_ci95": [
+          0.7868185119669617,
+          0.7970880274944352
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed1.pth",
+      "label": "selfplay_seed1",
+      "sha256": "c75f581620c2a267e0a63120c10f5f54f8e35e45f2a43892581c457f765da45f",
+      "opponents": {
+        "balanced": {
+          "wins": 2889,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1511,
+          "mean_turns": 22.29125,
+          "win_rate": 0.72225,
+          "win_rate_ci95": [
+            0.708161803156931,
+            0.7359117243007967
+          ]
+        },
+        "aggro": {
+          "wins": 3111,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1608,
+          "mean_turns": 21.92425,
+          "win_rate": 0.77775,
+          "win_rate_ci95": [
+            0.7646026946085014,
+            0.7903643346440696
+          ]
+        },
+        "economy": {
+          "wins": 2849,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1484,
+          "mean_turns": 22.50425,
+          "win_rate": 0.71225,
+          "win_rate_ci95": [
+            0.6980221179949142,
+            0.7260705983286075
+          ]
+        },
+        "scrapper": {
+          "wins": 2922,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1511,
+          "mean_turns": 22.512,
+          "win_rate": 0.7305,
+          "win_rate_ci95": [
+            0.7165335120709254,
+            0.7440241845725223
+          ]
+        },
+        "fortress": {
+          "wins": 2835,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1477,
+          "mean_turns": 23.84325,
+          "win_rate": 0.70875,
+          "win_rate_ci95": [
+            0.6944752110517526,
+            0.722624221374797
+          ]
+        },
+        "blobrush": {
+          "wins": 3141,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1613,
+          "mean_turns": 21.84475,
+          "win_rate": 0.78525,
+          "win_rate_ci95": [
+            0.772253576880795,
+            0.7976990607224304
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 17747,
+        "games": 24000,
+        "win_rate": 0.7394583333333333,
+        "win_rate_ci95": [
+          0.7338671927240156,
+          0.7449728304330404
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed2.pth",
+      "label": "selfplay_seed2",
+      "sha256": "dd9e24124d3b375d94f51f780a3b75c2568a758e8702ef90d0e2459e747c799d",
+      "opponents": {
+        "balanced": {
+          "wins": 3056,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1586,
+          "mean_turns": 22.162,
+          "win_rate": 0.764,
+          "win_rate_ci95": [
+            0.7505916463382638,
+            0.7769017676047738
+          ]
+        },
+        "aggro": {
+          "wins": 3292,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1690,
+          "mean_turns": 21.713,
+          "win_rate": 0.823,
+          "win_rate_ci95": [
+            0.8108638957951179,
+            0.8345163038397349
+          ]
+        },
+        "economy": {
+          "wins": 3058,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1600,
+          "mean_turns": 22.398,
+          "win_rate": 0.7645,
+          "win_rate_ci95": [
+            0.7511007972216953,
+            0.7773916572780525
+          ]
+        },
+        "scrapper": {
+          "wins": 3087,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1612,
+          "mean_turns": 22.17425,
+          "win_rate": 0.77175,
+          "win_rate_ci95": [
+            0.7584863572332207,
+            0.7844921853388268
+          ]
+        },
+        "fortress": {
+          "wins": 3017,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1569,
+          "mean_turns": 23.61325,
+          "win_rate": 0.75425,
+          "win_rate_ci95": [
+            0.7406681840567326,
+            0.7673439390304542
+          ]
+        },
+        "blobrush": {
+          "wins": 3320,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1711,
+          "mean_turns": 21.756,
+          "win_rate": 0.83,
+          "win_rate_ci95": [
+            0.8180438951496382,
+            0.8413228722791589
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 18830,
+        "games": 24000,
+        "win_rate": 0.7845833333333333,
+        "win_rate_ci95": [
+          0.7793368294662241,
+          0.789738750516844
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed0.pth",
+      "label": "fixed_seed0",
+      "sha256": "f1edec1ee8c63114ecbe18c0f7bc280b26ce7952c45fcfb3fbb73d587934c63e",
+      "opponents": {
+        "balanced": {
+          "wins": 2567,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1319,
+          "mean_turns": 22.84475,
+          "win_rate": 0.64175,
+          "win_rate_ci95": [
+            0.6267613505055499,
+            0.6564666473218198
+          ]
+        },
+        "aggro": {
+          "wins": 2899,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1487,
+          "mean_turns": 22.33475,
+          "win_rate": 0.72475,
+          "win_rate_ci95": [
+            0.7106980584714534,
+            0.7383706717698258
+          ]
+        },
+        "economy": {
+          "wins": 2439,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1243,
+          "mean_turns": 23.03675,
+          "win_rate": 0.60975,
+          "win_rate_ci95": [
+            0.5945345933596216,
+            0.624754808838289
+          ]
+        },
+        "scrapper": {
+          "wins": 2604,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1359,
+          "mean_turns": 22.81,
+          "win_rate": 0.651,
+          "win_rate_ci95": [
+            0.6360901132263496,
+            0.6656201349001606
+          ]
+        },
+        "fortress": {
+          "wins": 2305,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1213,
+          "mean_turns": 24.21775,
+          "win_rate": 0.57625,
+          "win_rate_ci95": [
+            0.5608703761292978,
+            0.5914833087690229
+          ]
+        },
+        "blobrush": {
+          "wins": 2933,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1513,
+          "mean_turns": 22.16125,
+          "win_rate": 0.73325,
+          "win_rate_ci95": [
+            0.7193254123360231,
+            0.7467270073693311
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 15747,
+        "games": 24000,
+        "win_rate": 0.656125,
+        "win_rate_ci95": [
+          0.6500909749234456,
+          0.6621090540950838
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed1.pth",
+      "label": "fixed_seed1",
+      "sha256": "f5e945e7ac3f5b70aa723d51833974b8cdb431fcc2d6bcf3c140e00317b585e2",
+      "opponents": {
+        "balanced": {
+          "wins": 2565,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1340,
+          "mean_turns": 22.66025,
+          "win_rate": 0.64125,
+          "win_rate_ci95": [
+            0.626257265043745,
+            0.6559716922269143
+          ]
+        },
+        "aggro": {
+          "wins": 2906,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1507,
+          "mean_turns": 22.2955,
+          "win_rate": 0.7265,
+          "win_rate_ci95": [
+            0.7124737596974526,
+            0.7400916124923127
+          ]
+        },
+        "economy": {
+          "wins": 2428,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1276,
+          "mean_turns": 22.8945,
+          "win_rate": 0.607,
+          "win_rate_ci95": [
+            0.5917683377712581,
+            0.6220263413647458
+          ]
+        },
+        "scrapper": {
+          "wins": 2637,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1372,
+          "mean_turns": 22.63875,
+          "win_rate": 0.65925,
+          "win_rate_ci95": [
+            0.6444155144042089,
+            0.6737789029080213
+          ]
+        },
+        "fortress": {
+          "wins": 2213,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1170,
+          "mean_turns": 24.13625,
+          "win_rate": 0.55325,
+          "win_rate_ci95": [
+            0.5377994657835469,
+            0.5685983535061
+          ]
+        },
+        "blobrush": {
+          "wins": 2928,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1522,
+          "mean_turns": 22.259,
+          "win_rate": 0.732,
+          "win_rate_ci95": [
+            0.7180562833471495,
+            0.7454985349664289
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 15677,
+        "games": 24000,
+        "win_rate": 0.6532083333333333,
+        "win_rate_ci95": [
+          0.6471627747579146,
+          0.6592048544657662
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-run3\\results\\optimized_selfplay_baseline\\checkpoints\\fixed_seed2.pth",
+      "label": "fixed_seed2",
+      "sha256": "1a380069457701b42888f7f4bbbe89a4d4fbd4607c9d19e6b117403bfeb9bb6a",
+      "opponents": {
+        "balanced": {
+          "wins": 2570,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1330,
+          "mean_turns": 22.8415,
+          "win_rate": 0.6425,
+          "win_rate_ci95": [
+            0.6275175115954235,
+            0.6572090470670116
+          ]
+        },
+        "aggro": {
+          "wins": 2922,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1520,
+          "mean_turns": 22.269,
+          "win_rate": 0.7305,
+          "win_rate_ci95": [
+            0.7165335120709254,
+            0.7440241845725223
+          ]
+        },
+        "economy": {
+          "wins": 2431,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1248,
+          "mean_turns": 23.06075,
+          "win_rate": 0.60775,
+          "win_rate_ci95": [
+            0.5925227212390434,
+            0.622770518732026
+          ]
+        },
+        "scrapper": {
+          "wins": 2672,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1411,
+          "mean_turns": 22.883,
+          "win_rate": 0.668,
+          "win_rate_ci95": [
+            0.6532508912593783,
+            0.6824267357952821
+          ]
+        },
+        "fortress": {
+          "wins": 2237,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1173,
+          "mean_turns": 24.32025,
+          "win_rate": 0.55925,
+          "win_rate_ci95": [
+            0.5438147308171652,
+            0.5745715751530052
+          ]
+        },
+        "blobrush": {
+          "wins": 2924,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1541,
+          "mean_turns": 22.232,
+          "win_rate": 0.731,
+          "win_rate_ci95": [
+            0.7170410803115905,
+            0.7445156568885674
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 15756,
+        "games": 24000,
+        "win_rate": 0.6565,
+        "win_rate_ci95": [
+          0.6504674759798049,
+          0.6624824330123479
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\space-deck-builder-archive\\expert-iteration-round1-20260916\\work\\distilled_seed0.pth",
+      "label": "distilled_seed0",
+      "sha256": "af1cbea817b23d63dd7d89feb2c2de3d7922006ac11b7da4bef1ef93e93b60ca",
+      "opponents": {
+        "balanced": {
+          "wins": 3136,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1637,
+          "mean_turns": 22.405,
+          "win_rate": 0.784,
+          "win_rate_ci95": [
+            0.770978000042915,
+            0.7964770361685347
+          ]
+        },
+        "aggro": {
+          "wins": 3309,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1702,
+          "mean_turns": 22.14175,
+          "win_rate": 0.82725,
+          "win_rate_ci95": [
+            0.8152223479508613,
+            0.838649696416029
+          ]
+        },
+        "economy": {
+          "wins": 3111,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1653,
+          "mean_turns": 22.83525,
+          "win_rate": 0.77775,
+          "win_rate_ci95": [
+            0.7646026946085014,
+            0.7903643346440696
+          ]
+        },
+        "scrapper": {
+          "wins": 3111,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1627,
+          "mean_turns": 22.48225,
+          "win_rate": 0.77775,
+          "win_rate_ci95": [
+            0.7646026946085014,
+            0.7903643346440696
+          ]
+        },
+        "fortress": {
+          "wins": 3122,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1615,
+          "mean_turns": 23.9015,
+          "win_rate": 0.7805,
+          "win_rate_ci95": [
+            0.7674073036373215,
+            0.793054448677156
+          ]
+        },
+        "blobrush": {
+          "wins": 3334,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1710,
+          "mean_turns": 22.208,
+          "win_rate": 0.8335,
+          "win_rate_ci95": [
+            0.8216365528503475,
+            0.8447234984754217
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 19123,
+        "games": 24000,
+        "win_rate": 0.7967916666666667,
+        "win_rate_ci95": [
+          0.7916535602290014,
+          0.8018347788953608
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-runs\\checkpoints\\control_seed0.pth",
+      "label": "control_seed0",
+      "sha256": "56802385471d366d77218c951a84c732036925c2356434cd15ffae8e3e95fd15",
+      "opponents": {
+        "balanced": {
+          "wins": 3194,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1646,
+          "mean_turns": 22.367,
+          "win_rate": 0.7985,
+          "win_rate_ci95": [
+            0.7857856422262405,
+            0.8106415701298076
+          ]
+        },
+        "aggro": {
+          "wins": 3377,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1737,
+          "mean_turns": 22.07925,
+          "win_rate": 0.84425,
+          "win_rate_ci95": [
+            0.8326828015971547,
+            0.8551566216978858
+          ]
+        },
+        "economy": {
+          "wins": 3213,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1672,
+          "mean_turns": 22.56675,
+          "win_rate": 0.80325,
+          "win_rate_ci95": [
+            0.7906418035782162,
+            0.81527629406658
+          ]
+        },
+        "scrapper": {
+          "wins": 3202,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1631,
+          "mean_turns": 22.3065,
+          "win_rate": 0.8005,
+          "win_rate_ci95": [
+            0.7878300081758152,
+            0.8125933664070744
+          ]
+        },
+        "fortress": {
+          "wins": 3226,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1667,
+          "mean_turns": 23.605,
+          "win_rate": 0.8065,
+          "win_rate_ci95": [
+            0.7939660352956842,
+            0.8184458259677289
+          ]
+        },
+        "blobrush": {
+          "wins": 3415,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1777,
+          "mean_turns": 22.11875,
+          "win_rate": 0.85375,
+          "win_rate_ci95": [
+            0.8424601547958848,
+            0.8643610390766514
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 19627,
+        "games": 24000,
+        "win_rate": 0.8177916666666667,
+        "win_rate_ci95": [
+          0.8128572465960738,
+          0.822624371051197
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-runs\\checkpoints\\control_seed1.pth",
+      "label": "control_seed1",
+      "sha256": "383bce04728630828a7fa3d3cc86353540c08e8c277920d4a650ffe0d5e5412f",
+      "opponents": {
+        "balanced": {
+          "wins": 3180,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1649,
+          "mean_turns": 22.328,
+          "win_rate": 0.795,
+          "win_rate_ci95": [
+            0.7822091514956321,
+            0.8072247769634441
+          ]
+        },
+        "aggro": {
+          "wins": 3380,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1717,
+          "mean_turns": 22.069,
+          "win_rate": 0.845,
+          "win_rate_ci95": [
+            0.8334541514009307,
+            0.8558838327291752
+          ]
+        },
+        "economy": {
+          "wins": 3177,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1655,
+          "mean_turns": 22.44375,
+          "win_rate": 0.79425,
+          "win_rate_ci95": [
+            0.7814429488232741,
+            0.8064924188007365
+          ]
+        },
+        "scrapper": {
+          "wins": 3194,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1643,
+          "mean_turns": 22.3425,
+          "win_rate": 0.7985,
+          "win_rate_ci95": [
+            0.7857856422262405,
+            0.8106415701298076
+          ]
+        },
+        "fortress": {
+          "wins": 3223,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1670,
+          "mean_turns": 23.60075,
+          "win_rate": 0.80575,
+          "win_rate_ci95": [
+            0.793198788267413,
+            0.8177145121609346
+          ]
+        },
+        "blobrush": {
+          "wins": 3436,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1747,
+          "mean_turns": 22.1405,
+          "win_rate": 0.859,
+          "win_rate_ci95": [
+            0.8478701321523141,
+            0.8694409875656803
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 19590,
+        "games": 24000,
+        "win_rate": 0.81625,
+        "win_rate_ci95": [
+          0.8112998392743427,
+          0.8210989384813654
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-runs\\checkpoints\\control_seed2.pth",
+      "label": "control_seed2",
+      "sha256": "5f4e322e8bd5e7255ceda0bcca13ab70060738cc67bf1c484de412be9625c991",
+      "opponents": {
+        "balanced": {
+          "wins": 3216,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1684,
+          "mean_turns": 22.4345,
+          "win_rate": 0.804,
+          "win_rate_ci95": [
+            0.7914088177375744,
+            0.8160078407422873
+          ]
+        },
+        "aggro": {
+          "wins": 3429,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1741,
+          "mean_turns": 22.18775,
+          "win_rate": 0.85725,
+          "win_rate_ci95": [
+            0.8460662564944947,
+            0.8677482212750136
+          ]
+        },
+        "economy": {
+          "wins": 3247,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1694,
+          "mean_turns": 22.68875,
+          "win_rate": 0.81175,
+          "win_rate_ci95": [
+            0.799338756968084,
+            0.8235630301407871
+          ]
+        },
+        "scrapper": {
+          "wins": 3243,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1681,
+          "mean_turns": 22.32575,
+          "win_rate": 0.81075,
+          "win_rate_ci95": [
+            0.7983151098965691,
+            0.8225885960988815
+          ]
+        },
+        "fortress": {
+          "wins": 3229,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1687,
+          "mean_turns": 23.67175,
+          "win_rate": 0.80725,
+          "win_rate_ci95": [
+            0.7947333528505196,
+            0.819177069247959
+          ]
+        },
+        "blobrush": {
+          "wins": 3472,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1770,
+          "mean_turns": 22.254,
+          "win_rate": 0.868,
+          "win_rate_ci95": [
+            0.8571562701515616,
+            0.8781375795872182
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 19836,
+        "games": 24000,
+        "win_rate": 0.8265,
+        "win_rate_ci95": [
+          0.8216569851804822,
+          0.8312385118542647
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-runs\\checkpoints\\exploiter_seed0.pth",
+      "label": "exploiter_seed0",
+      "sha256": "10f8338192ec4852df1171730b0a46864fa038cf04cbca84e1031ec4b6c5ab90",
+      "opponents": {
+        "balanced": {
+          "wins": 3271,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1682,
+          "mean_turns": 22.00375,
+          "win_rate": 0.81775,
+          "win_rate_ci95": [
+            0.8054833848395664,
+            0.8294068889498283
+          ]
+        },
+        "aggro": {
+          "wins": 3458,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1767,
+          "mean_turns": 21.765,
+          "win_rate": 0.8645,
+          "win_rate_ci95": [
+            0.8535431509272771,
+            0.8747574149145307
+          ]
+        },
+        "economy": {
+          "wins": 3284,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1696,
+          "mean_turns": 22.222,
+          "win_rate": 0.821,
+          "win_rate_ci95": [
+            0.808813732679081,
+            0.8325703047289306
+          ]
+        },
+        "scrapper": {
+          "wins": 3282,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1705,
+          "mean_turns": 21.979,
+          "win_rate": 0.8205,
+          "win_rate_ci95": [
+            0.8083012779220757,
+            0.8320837189292256
+          ]
+        },
+        "fortress": {
+          "wins": 3347,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1723,
+          "mean_turns": 23.09575,
+          "win_rate": 0.83675,
+          "win_rate_ci95": [
+            0.8249742308213879,
+            0.8478795841229982
+          ]
+        },
+        "blobrush": {
+          "wins": 3515,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1782,
+          "mean_turns": 21.81825,
+          "win_rate": 0.87875,
+          "win_rate_ci95": [
+            0.8682693367617137,
+            0.8885038849463375
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 20157,
+        "games": 24000,
+        "win_rate": 0.839875,
+        "win_rate_ci95": [
+          0.8351810729770096,
+          0.8444601431169708
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-runs\\checkpoints\\exploiter_seed1.pth",
+      "label": "exploiter_seed1",
+      "sha256": "de789e7d3625b49993635eb59db21551ecddef73334db11983474c65b535143c",
+      "opponents": {
+        "balanced": {
+          "wins": 3258,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1682,
+          "mean_turns": 22.095,
+          "win_rate": 0.8145,
+          "win_rate_ci95": [
+            0.8021544559848697,
+            0.8262420541859081
+          ]
+        },
+        "aggro": {
+          "wins": 3485,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1771,
+          "mean_turns": 21.80525,
+          "win_rate": 0.87125,
+          "win_rate_ci95": [
+            0.8605134923494372,
+            0.8812741210079594
+          ]
+        },
+        "economy": {
+          "wins": 3307,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1717,
+          "mean_turns": 22.33625,
+          "win_rate": 0.82675,
+          "win_rate_ci95": [
+            0.8147094562000092,
+            0.8381635476101708
+          ]
+        },
+        "scrapper": {
+          "wins": 3272,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1686,
+          "mean_turns": 22.119,
+          "win_rate": 0.818,
+          "win_rate_ci95": [
+            0.8057395146887746,
+            0.8296502793789752
+          ]
+        },
+        "fortress": {
+          "wins": 3274,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1697,
+          "mean_turns": 23.2275,
+          "win_rate": 0.8185,
+          "win_rate_ci95": [
+            0.8062517996280825,
+            0.8301370349963777
+          ]
+        },
+        "blobrush": {
+          "wins": 3494,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1765,
+          "mean_turns": 21.881,
+          "win_rate": 0.8735,
+          "win_rate_ci95": [
+            0.8628389909453654,
+            0.8834443049172277
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 20090,
+        "games": 24000,
+        "win_rate": 0.8370833333333333,
+        "win_rate_ci95": [
+          0.8323573780370762,
+          0.8417013982532634
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-runs\\checkpoints\\exploiter_seed2.pth",
+      "label": "exploiter_seed2",
+      "sha256": "c0a961b95076bf4644e314d590f8c1a984dec7f64b6b22ab002c39ff8bccc26b",
+      "opponents": {
+        "balanced": {
+          "wins": 3237,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1677,
+          "mean_turns": 22.08525,
+          "win_rate": 0.80925,
+          "win_rate_ci95": [
+            0.7967798801812696,
+            0.8211267041440502
+          ]
+        },
+        "aggro": {
+          "wins": 3419,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1745,
+          "mean_turns": 21.79275,
+          "win_rate": 0.85475,
+          "win_rate_ci95": [
+            0.8434902478719581,
+            0.8653290271139986
+          ]
+        },
+        "economy": {
+          "wins": 3301,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1719,
+          "mean_turns": 22.28325,
+          "win_rate": 0.82525,
+          "win_rate_ci95": [
+            0.8131709943026322,
+            0.836704887837417
+          ]
+        },
+        "scrapper": {
+          "wins": 3210,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1672,
+          "mean_turns": 22.0305,
+          "win_rate": 0.8025,
+          "win_rate_ci95": [
+            0.7898748586250599,
+            0.8145446781846708
+          ]
+        },
+        "fortress": {
+          "wins": 3286,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1712,
+          "mean_turns": 23.293,
+          "win_rate": 0.8215,
+          "win_rate_ci95": [
+            0.8093262217319109,
+            0.833056856232811
+          ]
+        },
+        "blobrush": {
+          "wins": 3442,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1747,
+          "mean_turns": 21.8485,
+          "win_rate": 0.8605,
+          "win_rate_ci95": [
+            0.8494167576505022,
+            0.8708914837376233
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 19895,
+        "games": 24000,
+        "win_rate": 0.8289583333333334,
+        "win_rate_ci95": [
+          0.824141910063012,
+          0.8336694667988215
+        ],
+        "complete": true
+      }
+    }
+  ],
+  "calibration": {
+    "balanced": {
+      "wins": 1683,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 873,
+      "mean_turns": 22.3985,
+      "opponent": "heuristic",
+      "win_rate": 0.8415,
+      "win_rate_ci95": [
+        0.8248415772937184,
+        0.8568490794131859
+      ]
+    },
+    "aggro": {
+      "wins": 1533,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 803,
+      "mean_turns": 21.8185,
+      "opponent": "heuristic",
+      "win_rate": 0.7665,
+      "win_rate_ci95": [
+        0.7474588661886875,
+        0.7845193476104045
+      ]
+    },
+    "economy": {
+      "wins": 1589,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 836,
+      "mean_turns": 22.8605,
+      "opponent": "heuristic",
+      "win_rate": 0.7945,
+      "win_rate_ci95": [
+        0.7762347355183078,
+        0.8116361236330342
+      ]
+    },
+    "scrapper": {
+      "wins": 1664,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 873,
+      "mean_turns": 22.408,
+      "opponent": "heuristic",
+      "win_rate": 0.832,
+      "win_rate_ci95": [
+        0.8149817735563052,
+        0.8477453070489427
+      ]
+    },
+    "fortress": {
+      "wins": 1670,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 861,
+      "mean_turns": 23.88,
+      "opponent": "heuristic",
+      "win_rate": 0.835,
+      "win_rate_ci95": [
+        0.8180932994996616,
+        0.8506222788218988
+      ]
+    },
+    "blobrush": {
+      "wins": 1479,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 778,
+      "mean_turns": 22.0515,
+      "opponent": "heuristic",
+      "win_rate": 0.7395,
+      "win_rate_ci95": [
+        0.7198182161636315,
+        0.7582635181886483
+      ]
+    }
+  }
+}

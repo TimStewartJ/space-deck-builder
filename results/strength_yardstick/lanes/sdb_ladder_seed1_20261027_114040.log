@@ -1,0 +1,5 @@
+[run_ladder] seeds=1 commit=761eb39a4aaff2779ed069c8f5a5d23a3461c4be runs=D:\sdb-yardstick-runs
+[run_ladder] 2026-10-27T11:40:41 train exploit-ladder-random seed 1 in D:\sdb-yardstick-runs\exploit-ladder-random_seed1
+[train_reference] already complete: D:\sdb-yardstick-runs\exploit-ladder-random_seed1\chunks\final_checkpoint.pth
+[run_ladder] 2026-10-27T11:40:41 score seed 1
+[run_ladder] 2026-10-27T11:43:01 done

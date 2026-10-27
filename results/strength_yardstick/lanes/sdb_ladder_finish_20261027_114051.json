@@ -1,0 +1,23 @@
+﻿{
+    "launched_at":  "2026-10-27T11:40:51.4259484-07:00",
+    "python":  "E:\\space-deck-builder\\.venv\\Scripts\\python.exe",
+    "task_action_created_at":  "2026-10-27T11:40:51.5082530-07:00",
+    "started_at":  "2026-10-27T11:40:52.3047137-07:00",
+    "process_priority":  "Normal",
+    "command":  "powershell.exe -NoProfile -ExecutionPolicy Bypass -File D:\\sdb-yardstick-runs\\finish_ladder.ps1 -Python \"\"E:\\space-deck-builder\\.venv\\Scripts\\python.exe\"\"",
+    "state":  "complete",
+    "job_object_assigned":  true,
+    "task_action_pid":  35704,
+    "error_message":  null,
+    "schema_version":  2,
+    "processor_affinity":  "0xFFFF",
+    "log":  "D:\\sdb-yardstick-run4\\logs\\sdb_ladder_finish_20261027_114051.log",
+    "repository":  "D:\\sdb-yardstick-run4",
+    "finished_at":  "2026-10-27T11:50:47.3124904-07:00",
+    "task":  "sdb_ladder_finish",
+    "task_path":  "\\",
+    "launch_id":  "21a3bd48-e746-4053-a5f1-f8885502e402",
+    "exit_code":  0,
+    "train_args":  "",
+    "task_action_executable":  "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"
+}

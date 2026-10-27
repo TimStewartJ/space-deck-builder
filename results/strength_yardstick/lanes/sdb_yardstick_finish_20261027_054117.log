@@ -1,0 +1,35 @@
+[finish] 2026-10-27T05:41:18 waiting for sdb_yardstick_measures, sdb_yardstick_control, sdb_yardstick_exploit, sdb_yardstick_exploit2
+[finish] 2026-10-27T05:41:20 none of them is running
+[finish] 2026-10-27T05:41:20 start: control arm, resuming any seed that did not finish
+[run_arms] arm=control seeds=0,1,2 commit=c2e1a89193161ba9a8dfcf326adc924fd8a262ba runs=D:\sdb-yardstick-runs
+[run_arms] 2026-10-27T05:41:20 train continue-selfplay-seed0 seed 0 in D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0
+[train_reference] already complete: D:\sdb-yardstick-runs\continue-selfplay-seed0_seed0\chunks\final_checkpoint.pth
+[run_arms] 2026-10-27T05:41:20 train continue-selfplay-seed0 seed 1 in D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1
+[train_reference] already complete: D:\sdb-yardstick-runs\continue-selfplay-seed0_seed1\chunks\final_checkpoint.pth
+[run_arms] 2026-10-27T05:41:20 train continue-selfplay-seed0 seed 2 in D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2
+[train_reference] already complete: D:\sdb-yardstick-runs\continue-selfplay-seed0_seed2\chunks\final_checkpoint.pth
+[run_arms] 2026-10-27T05:41:20 done
+[finish] 2026-10-27T05:41:20 done: control arm, resuming any seed that did not finish
+[finish] 2026-10-27T05:41:20 start: exploiter arm and any missing scores
+[run_arms] arm=exploiter seeds=0,1,2 commit=a792c963c3202b9cee1ceaee53d2f0e0596f5aef runs=D:\sdb-yardstick-runs
+[run_arms] 2026-10-27T05:41:20 train exploit-selfplay-seed0 seed 0 in D:\sdb-yardstick-runs\exploit-selfplay-seed0_seed0
+[train_reference] already complete: D:\sdb-yardstick-runs\exploit-selfplay-seed0_seed0\chunks\final_checkpoint.pth
+[run_arms] 2026-10-27T05:41:21 train exploit-selfplay-seed0 seed 1 in D:\sdb-yardstick-runs\exploit-selfplay-seed0_seed1
+[train_reference] already complete: D:\sdb-yardstick-runs\exploit-selfplay-seed0_seed1\chunks\final_checkpoint.pth
+[run_arms] 2026-10-27T05:41:21 train exploit-selfplay-seed0 seed 2 in D:\sdb-yardstick-runs\exploit-selfplay-seed0_seed2
+[train_reference] already complete: D:\sdb-yardstick-runs\exploit-selfplay-seed0_seed2\chunks\final_checkpoint.pth
+[run_arms] 2026-10-27T05:41:21 done
+[finish] 2026-10-27T05:41:21 done: exploiter arm and any missing scores
+[finish] 2026-10-27T05:41:21 start: league for the arm checkpoints, and any unfinished audit
+[run_measures] 2026-10-27T05:41:21 commit=2784f95f2a489c429332947acab420d35169e150 league of 13 checkpoints
+[run_measures] 2026-10-27T06:06:23 port check exit code 0
+[run_measures] 2026-10-27T06:06:23 done
+[finish] 2026-10-27T06:06:23 done: league for the arm checkpoints, and any unfinished audit
+[finish] 2026-10-27T06:06:23 start: summary
+[finish] 2026-10-27T06:06:23 done: summary
+[finish] 2026-10-27T06:06:23 start: purchase audits of the control checkpoints (optional)
+[finish] 2026-10-27T06:06:24 purchase audit control_seed0
+[finish] 2026-10-27T06:14:58 purchase audit control_seed1
+[finish] 2026-10-27T06:21:11 purchase audit control_seed2
+[finish] 2026-10-27T06:28:54 done: purchase audits of the control checkpoints (optional)
+[finish] 2026-10-27T06:28:54 all stages finished

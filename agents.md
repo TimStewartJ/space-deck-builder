@@ -89,6 +89,14 @@ execution context. Use `scripts\launch_training.ps1` (`-TrainArgs` for
 `python -m src train`, `-Command` for any other command with `{python}` as the
 interpreter placeholder) and stop runs with `scripts\stop_training.ps1`.
 
+Runs have no window: follow them through the log file the launcher prints and
+`Get-ScheduledTask -TaskName 'sdb_*'`. On this machine Windows schedules a
+process tree without a window onto the four efficiency cores even when the
+performance cores are idle, so keep the default `-ProcessorAffinityMask Auto`
+(the performance cores); the launcher refuses a mask that includes efficiency
+cores unless `-ShowWindow` is passed. With `-ShowWindow` the run opens in a
+console window (a Windows Terminal tab), and closing that window stops it.
+
 ### Self-Play Training
 ```bash
 python -m src train --self-play
@@ -111,6 +119,28 @@ python -m src train --opponents random,heuristic --self-play --self-play-ratio 0
 **Available opponent types:** `random`, `heuristic`, `simple`.
 
 When `--self-play` is combined with `--opponents`, `--self-play-ratio` controls the split: e.g., `--self-play-ratio 0.3` means 30% of training games use past PPO snapshots and 70% use the fixed opponent pool. The snapshot pool is capped (`snapshot_cap`, default 10) and evicts on a log-spaced age ladder, so the pool keeps a spread of old and recent selves instead of collapsing to near-clones of the current policy. `--pfsp {uniform,hard,variance}` changes how snapshots are sampled: `hard` favors opponents the agent loses to, `variance` favors opponents near a 50% win rate. **Evaluation** runs separately against each configured opponent type and reports per-type win rates.
+
+### Training Against Frozen Checkpoints
+```bash
+# Every training game against selfplay_seed0 playing its highest-scoring move:
+python -m src train --engine vec --model-path <start.pth> \
+    --frozen-opponents results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth \
+    --frozen-opponent-ratio 1 --frozen-opponent-temperature 0
+```
+
+`--frozen-opponents` loads checkpoints into the opponent pool at the start of
+every process, fresh or resumed; they never learn and are never written into a
+checkpoint's pool manifest. `--frozen-opponent-ratio` is the share of training
+games against them (the rest use `--opponents`), and
+`--frozen-opponent-temperature 0` makes them play their highest-scoring legal
+action. It requires `--engine vec` and excludes `--self-play`. The
+`exploit-selfplay-seed0` preset trains an exploiter of the published champion
+this way, and `continue-selfplay-seed0` is its control
+(`docs/decisions/0013-strength-yardstick.md`). `exploit-ladder-random` trains
+the fallback exploiter from random weights against the champion and five
+earlier checkpoints of its training run
+(`docs/decisions/0014-ladder-exploiter.md`); those five are published as
+release assets and go in `results/strength_yardstick/ladder/`.
 
 ### Reproducibility
 
@@ -222,8 +252,11 @@ Read it this way:
 - `src/search/uplift.py` — Search-versus-baseline match harness (`search-eval`)
 - `src/search/selfplay_data.py` — Search self-play training shards (`search-selfplay`)
 - `src/search/distill.py` — Distillation of search targets into a checkpoint (`distill`)
-- `src/ppo/opponent_pool.py` — Fixed opponents, self-play snapshots, PFSP weighting
+- `src/ppo/opponent_pool.py` — Fixed opponents, self-play snapshots, frozen checkpoints, PFSP weighting
 - `src/ppo/elo_tournament.py` — Cross-play Elo tournaments
+- `src/ai/held_out_agents.py` — Held-out scripted opponents, never used in training
+- `src/ppo/league.py` — Held-out league (`league`)
+- `src/search/purchase_audit.py` — Rollout audit of purchase decisions (`purchase-audit`)
 - `src/ppo/ppo_actor_critic.py` — Actor-Critic neural network
 - `src/ai/ppo_agent.py` — PPO agent (rollout buffers, GAE, PPO update)
 - `src/encoding/state_encoder.py` — Game state → tensor encoding
@@ -262,6 +295,24 @@ python -m src elo --checkpoints <ckpt-a> <ckpt-b> --checkpoint-temperatures 1,0 
 # Watch a model play, or collect replays for behavioral analysis
 python -m src simulate --model models/ppo_agent_XXXX.pth --games 100
 python -m src analyze --model models/ppo_agent_XXXX.pth
+```
+
+The held-out league and the purchase audit (protocol `v0.2`, decision 0013)
+measure strength against opponents no agent trains on and the win probability
+purchases give away. Both journal finished work and resume when re-run; launch
+large runs through `scripts/launch_training.ps1 -Command`. Each league worker
+is a separate process that uses the GPU and keeps about three CPU cores busy.
+On the project's machine (20 logical CPUs) six workers use all of the CPU, and
+twelve finished no 4,000-game matchup in 30 minutes, so keep `--workers` at 6
+and do not run the league or an audit beside training.
+
+```bash
+# Every checkpoint against the six held-out opponents, 4,000 games each
+python -m src league --models <ckpt-a> <ckpt-b> --calibration --workers 6 \
+    --output-json league.json
+
+# 1,000 purchase decisions scored by complete greedy rollouts
+python -m src purchase-audit --model <ckpt> --output-json audit.json
 ```
 
 ## Tips

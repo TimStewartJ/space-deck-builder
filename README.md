@@ -37,6 +37,8 @@ All commands go through `python -m src <command>`:
 | `train` | Run PPO training with configurable hyperparameters |
 | `eval` | Evaluate a checkpoint against the fixed opponent gauntlet |
 | `elo` | Cross-play Elo tournament between checkpoints and/or agents |
+| `league` | Play checkpoints against the held-out scripted opponents |
+| `purchase-audit` | Score a checkpoint's purchase decisions with complete rollouts |
 | `simulate` | Run a trained model against opponents |
 | `analyze` | Collect replays and analyze agent behavior |
 | `benchmark` | Compare sequential vs batched training throughput |
@@ -49,6 +51,15 @@ contract every result in `results/` is measured against. Both sample each
 checkpoint's policy by default; `eval --temperature 0` and
 `elo --checkpoint-temperatures 1,0` evaluate the highest-probability action
 as a separate variant, and `--output-json` writes machine-readable results.
+
+`league` and `purchase-audit` are the strength yardstick added in protocol
+`v0.2` ([`docs/decisions/0013-strength-yardstick.md`](docs/decisions/0013-strength-yardstick.md)).
+The league plays checkpoints at temperature 0 against six scripted opponents
+that no agent trains on (`src/ai/held_out_agents.py`); the audit samples one
+purchase decision per greedy self-play game and scores every alternative with
+complete rollouts. `train --frozen-opponents` trains against fixed
+checkpoints, which the `exploit-selfplay-seed0` and `exploit-ladder-random`
+presets use to look for weaknesses in the published champion.
 
 ### Reference Training Recipe
 
@@ -261,7 +272,8 @@ avoid that inherited execution context.
 For training, use `scripts/launch_training.ps1`. It also applies the measured
 P-core affinity on the project's i7-12700K host, and `-Command` launches any
 other workload (evaluation, tournaments, orchestration scripts) through the
-same boundary. Long self-play arcs should use 25-update
+same boundary. Runs start without a window; `-ShowWindow` opens one, and
+closing it stops the run. Long self-play arcs should use 25-update
 `scripts/chunked_resume.ps1` processes so ROCm latency cannot accumulate inside
 one Python runtime; `scripts/train_reference.ps1` combines both for the
 reference recipe.

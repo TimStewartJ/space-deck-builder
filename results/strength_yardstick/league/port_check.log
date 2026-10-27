@@ -1,0 +1,13 @@
+   champion balanced  expected 3084 actual 3084  ok
+   champion aggro     expected 3321 actual 3321  ok
+   champion economy   expected 3111 actual 3111  ok
+   champion scrapper  expected 3055 actual 3055  ok
+   champion fortress  expected 3092 actual 3092  ok
+   champion blobrush  expected 3345 actual 3345  ok
+calibration balanced  expected 1683 actual 1683  ok
+calibration aggro     expected 1533 actual 1533  ok
+calibration economy   expected 1589 actual 1589  ok
+calibration scrapper  expected 1664 actual 1664  ok
+calibration fortress  expected 1670 actual 1670  ok
+calibration blobrush  expected 1479 actual 1479  ok
+port check passed

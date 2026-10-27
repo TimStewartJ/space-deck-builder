@@ -11,8 +11,27 @@ import torch.nn as nn
 from torch.func import functional_call, stack_module_state, vmap
 
 from src.encoding.action_encoder import END_TURN_INDEX
+from src.ppo.action_selection import validate_temperature
 from src.ppo.mp_inference_server import _forward_and_sample
 from src.ppo.ppo_actor_critic import PPOActorCritic
+
+
+def _snapshot_actions(
+    masked_logits: torch.Tensor, temperature: float
+) -> torch.Tensor:
+    """Snapshot moves along the last axis of logits whose illegal entries are ``-inf``.
+
+    Temperature 1 samples the policy, other positive temperatures sample
+    ``softmax(logits / temperature)``, and 0 selects the highest-scoring legal
+    action (the lowest index on ties).
+    """
+    if temperature == 0.0:
+        return masked_logits.argmax(dim=-1)
+    logits = masked_logits if temperature == 1.0 else masked_logits / temperature
+    return torch.distributions.Categorical(
+        logits=logits,
+        validate_args=False,
+    ).sample()
 
 
 @dataclass(frozen=True)
@@ -162,17 +181,24 @@ class VectorPolicyEvaluator:
 
 
 class CurrentSnapshotEvaluator:
-    """Evaluate the learning policy and one snapshot with one synchronization."""
+    """Evaluate the learning policy and one snapshot with one synchronization.
+
+    The snapshot plays at ``snapshot_temperature``: 1 samples its policy, other
+    positive values sample ``softmax(logits / temperature)``, and 0 plays its
+    highest-scoring legal action.
+    """
 
     def __init__(
         self,
         current_model: PPOActorCritic,
         snapshot_model: PPOActorCritic,
         device: torch.device,
+        snapshot_temperature: float = 1.0,
     ):
         self.device = device
         self.current_model = current_model.to(device).eval()
         self.snapshot_model = snapshot_model.to(device).eval()
+        self.snapshot_temperature = validate_temperature(snapshot_temperature)
         self._current_capacity = 0
         self._snapshot_capacity = 0
         self._state_size = 0
@@ -380,10 +406,9 @@ class CurrentSnapshotEvaluator:
             snapshot_masks_device == 0,
             float("-inf"),
         )
-        snapshot_actions = torch.distributions.Categorical(
-            logits=snapshot_logits,
-            validate_args=False,
-        ).sample()
+        snapshot_actions = _snapshot_actions(
+            snapshot_logits, self.snapshot_temperature
+        )
         self.host_snapshot_actions[:snapshot_count].copy_(
             snapshot_actions, non_blocking=async_copy
         )
@@ -429,16 +454,22 @@ class _ActorOnlyPolicy(nn.Module):
 
 
 class StackedSnapshotEvaluator:
-    """Evaluate architecture-compatible snapshot actors in one GPU call."""
+    """Evaluate architecture-compatible snapshot actors in one GPU call.
+
+    Every snapshot plays at ``temperature``, as in
+    :class:`CurrentSnapshotEvaluator`.
+    """
 
     def __init__(
         self,
         models: list[PPOActorCritic],
         device: torch.device,
+        temperature: float = 1.0,
     ):
         if not models:
             raise ValueError("at least one snapshot model is required")
         self.device = device
+        self.temperature = validate_temperature(temperature)
         wrappers = [
             _ActorOnlyPolicy(model.to(device).eval())
             for model in models
@@ -591,11 +622,7 @@ class StackedSnapshotEvaluator:
             self.device_masks[:, :capacity] == 0,
             float("-inf"),
         )
-        distribution = torch.distributions.Categorical(
-            logits=logits,
-            validate_args=False,
-        )
-        actions = distribution.sample()
+        actions = _snapshot_actions(logits, self.temperature)
         self.host_actions[:, :capacity].copy_(
             actions,
             non_blocking=async_copy,

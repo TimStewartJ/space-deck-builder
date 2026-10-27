@@ -1,0 +1,6 @@
+{
+  "update": 200,
+  "sha256": "aa29c22bcce47104e300ed075cb98a91b48561da765e002fb2ce715f9bf03b92",
+  "source": "D:\\space-deck-builder-archive\\master-untracked\\results\\selfplay_strength\\optimized_400x2000_20260817_230304\\seed_0\\chunks\\models\\ppo_agent_0817_2337_upd200_wins2987.pth",
+  "run": "optimized_400x2000_20260817_230304 seed 0 (the reference self-play run that produced selfplay_seed0 at update 400)"
+}

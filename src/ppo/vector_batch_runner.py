@@ -162,6 +162,7 @@ class VectorBatchRunner:
         self_play_ratio: float = 0.0,
         pfsp_weights: list[float] | None = None,
         max_active_snapshots: int = 3,
+        snapshot_temperature: float = 1.0,
     ):
         self.opponent_entries = OpponentPool(
             opponent_spec=opponent_spec
@@ -182,6 +183,9 @@ class VectorBatchRunner:
             list(pfsp_weights) if pfsp_weights is not None else None
         )
         self.max_active_snapshots = max_active_snapshots
+        # Inference temperature of every snapshot opponent; 0 plays each
+        # snapshot's highest-scoring legal action.
+        self.snapshot_temperature = snapshot_temperature
         self.opponent_results: dict[str, list[int]] = {}
         self._batch_index = 0
         self._last_opponent_kinds = np.empty(0, dtype=np.int16)
@@ -230,6 +234,7 @@ class VectorBatchRunner:
                 for snapshot_index in snapshot_indices
             ],
             self.device,
+            temperature=self.snapshot_temperature,
         )
         self._stacked_snapshot_evaluators[snapshot_indices] = evaluator
         return evaluator
@@ -260,6 +265,7 @@ class VectorBatchRunner:
             self.model,
             self._load_snapshot_model(snapshot_index),
             self.device,
+            snapshot_temperature=self.snapshot_temperature,
         )
         self._joint_snapshot_evaluators[snapshot_index] = evaluator
         return evaluator

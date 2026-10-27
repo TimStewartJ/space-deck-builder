@@ -30,6 +30,36 @@ function Get-FullTrainingAffinityMask {
 }
 
 
+function Get-PerformanceCoreMask {
+    <#
+    .SYNOPSIS
+        Logical processors of the performance cores on a host whose hybrid
+        layout is known, or $null when it is not known.
+    #>
+    param(
+        [object[]] $Processors = $null
+    )
+
+    if ($null -eq $Processors) {
+        try {
+            $Processors = @(Get-CimInstance Win32_Processor)
+        } catch {
+            return $null
+        }
+    }
+    if (
+        $Processors.Count -eq 1 -and
+        $Processors[0].Name -match "i7-12700K" -and
+        [int]$Processors[0].NumberOfLogicalProcessors -eq 20
+    ) {
+        # Windows numbers the eight P-core hardware threads before the four
+        # E-cores on the project's i7-12700K host.
+        return [int64]0xFFFF
+    }
+    return $null
+}
+
+
 function Resolve-TrainingAffinityMask {
     param(
         [string] $ProcessorAffinityMask = "Auto"
@@ -66,14 +96,9 @@ function Resolve-TrainingAffinityMask {
             (Get-Process -Id $PID).ProcessorAffinity
         )
     }
-    if (
-        $processors.Count -eq 1 -and
-        $processors[0].Name -match "i7-12700K" -and
-        [int]$processors[0].NumberOfLogicalProcessors -eq 20
-    ) {
-        # Windows numbers the eight P-core hardware threads before the four
-        # E-cores on the project's i7-12700K host.
-        return [int64]0xFFFF
+    $performanceMask = Get-PerformanceCoreMask -Processors $processors
+    if ($null -ne $performanceMask) {
+        return $performanceMask
     }
     return Get-FullTrainingAffinityMask
 }

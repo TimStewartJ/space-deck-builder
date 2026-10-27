@@ -1,0 +1,103 @@
+{
+  "protocol": "docs/decisions/0013-strength-yardstick.md",
+  "config": {
+    "models": [],
+    "opponents": [
+      "balanced",
+      "aggro",
+      "economy",
+      "scrapper",
+      "fortress",
+      "blobrush"
+    ],
+    "games": 4000,
+    "seed": 101,
+    "batch_size": 256,
+    "calibration": true,
+    "calibration_games": 2000,
+    "calibration_seed": 103,
+    "workers": 6,
+    "device": "cuda"
+  },
+  "checkpoints": [],
+  "calibration": {
+    "balanced": {
+      "wins": 1683,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 873,
+      "mean_turns": 22.3985,
+      "opponent": "heuristic",
+      "win_rate": 0.8415,
+      "win_rate_ci95": [
+        0.8248415772937184,
+        0.8568490794131859
+      ]
+    },
+    "aggro": {
+      "wins": 1533,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 803,
+      "mean_turns": 21.8185,
+      "opponent": "heuristic",
+      "win_rate": 0.7665,
+      "win_rate_ci95": [
+        0.7474588661886875,
+        0.7845193476104045
+      ]
+    },
+    "economy": {
+      "wins": 1589,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 836,
+      "mean_turns": 22.8605,
+      "opponent": "heuristic",
+      "win_rate": 0.7945,
+      "win_rate_ci95": [
+        0.7762347355183078,
+        0.8116361236330342
+      ]
+    },
+    "scrapper": {
+      "wins": 1664,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 873,
+      "mean_turns": 22.408,
+      "opponent": "heuristic",
+      "win_rate": 0.832,
+      "win_rate_ci95": [
+        0.8149817735563052,
+        0.8477453070489427
+      ]
+    },
+    "fortress": {
+      "wins": 1670,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 861,
+      "mean_turns": 23.88,
+      "opponent": "heuristic",
+      "win_rate": 0.835,
+      "win_rate_ci95": [
+        0.8180932994996616,
+        0.8506222788218988
+      ]
+    },
+    "blobrush": {
+      "wins": 1479,
+      "games": 2000,
+      "first_seat_games": 1000,
+      "first_seat_wins": 778,
+      "mean_turns": 22.0515,
+      "opponent": "heuristic",
+      "win_rate": 0.7395,
+      "win_rate_ci95": [
+        0.7198182161636315,
+        0.7582635181886483
+      ]
+    }
+  }
+}

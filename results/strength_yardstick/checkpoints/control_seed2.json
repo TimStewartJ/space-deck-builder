@@ -1,0 +1,8 @@
+﻿{
+    "source":  "D:\\sdb-yardstick-runs\\continue-selfplay-seed0_seed2\\chunks\\final_checkpoint.pth",
+    "seed":  2,
+    "arm":  "control",
+    "preset":  "continue-selfplay-seed0",
+    "commit":  "c2e1a89193161ba9a8dfcf326adc924fd8a262ba",
+    "sha256":  "5f4e322e8bd5e7255ceda0bcca13ab70060738cc67bf1c484de412be9625c991"
+}

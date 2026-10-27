@@ -1,0 +1,71 @@
+## Exploiter versus control
+
+| Seed | E | C | E - C | Exploiter vs control | O exploiter | O control | L exploiter | L control | Exploiter training win rate, update 1 / last 25 |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| 0 | 59.3% | 55.5% | +3.9 | 52.2% | 61.6% | 57.2% | 84.0% | 81.8% | 45.2% / 54.3% |
+| 1 | 60.3% | 53.4% | +6.9 | 53.9% | 61.7% | 57.6% | 83.7% | 81.6% | 45.5% / 54.1% |
+| 2 | 58.2% | 55.5% | +2.6 | 53.2% | 59.6% | 57.5% | 82.9% | 82.7% | 45.2% / 52.7% |
+
+Verdict (final, seeds [0, 1, 2]); means in points with Student-t 95% intervals:
+
+- E - C: +4.5 (-1.0 to +9.9)
+- E: 59.3 (56.7 to 61.8); C: 54.8 (51.7 to 57.8)
+- O exploiter: 60.9 (58.0 to 63.9); O control: 57.4 (56.8 to 58.0)
+- L exploiter: 83.5 (82.1 to 84.9); L control: 82.0 (80.6 to 83.4)
+- exploitable: False; kind: None; control_helps: False
+
+## Held-out league
+
+| Checkpoint | balanced | aggro | economy | scrapper | fortress | blobrush | Pooled | 95% CI |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| control_seed0 | 79.8% | 84.4% | 80.3% | 80.0% | 80.7% | 85.4% | 81.8% | 81.3-82.3% |
+| control_seed1 | 79.5% | 84.5% | 79.4% | 79.8% | 80.6% | 85.9% | 81.6% | 81.1-82.1% |
+| control_seed2 | 80.4% | 85.7% | 81.2% | 81.1% | 80.7% | 86.8% | 82.7% | 82.2-83.1% |
+| distilled_seed0 | 78.4% | 82.7% | 77.8% | 77.8% | 78.0% | 83.4% | 79.7% | 79.2-80.2% |
+| exploiter_seed0 | 81.8% | 86.5% | 82.1% | 82.0% | 83.7% | 87.9% | 84.0% | 83.5-84.4% |
+| exploiter_seed1 | 81.5% | 87.1% | 82.7% | 81.8% | 81.8% | 87.4% | 83.7% | 83.2-84.2% |
+| exploiter_seed2 | 80.9% | 85.5% | 82.5% | 80.2% | 82.2% | 86.1% | 82.9% | 82.4-83.4% |
+| fixed_seed0 | 64.2% | 72.5% | 61.0% | 65.1% | 57.6% | 73.3% | 65.6% | 65.0-66.2% |
+| fixed_seed1 | 64.1% | 72.7% | 60.7% | 65.9% | 55.3% | 73.2% | 65.3% | 64.7-65.9% |
+| fixed_seed2 | 64.2% | 73.0% | 60.8% | 66.8% | 55.9% | 73.1% | 65.6% | 65.0-66.2% |
+| selfplay_seed0 | 77.1% | 83.0% | 77.8% | 76.4% | 77.3% | 83.6% | 79.2% | 78.7-79.7% |
+| selfplay_seed1 | 72.2% | 77.8% | 71.2% | 73.0% | 70.9% | 78.5% | 73.9% | 73.4-74.5% |
+| selfplay_seed2 | 76.4% | 82.3% | 76.4% | 77.2% | 75.4% | 83.0% | 78.5% | 77.9-79.0% |
+| *each opponent vs Heuristic* | 84.2% | 76.6% | 79.5% | 83.2% | 83.5% | 74.0% | | |
+
+Port check against the prototype: passed
+
+## Purchase audit
+
+| Checkpoint | Decisions | Override gain (SE) | Overrides | Clear mistakes | Their mean gain | Search gain (SE) | Search differs | Skipped |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| control_seed0 | 1000 | +0.23 (0.06) | 5.9% | 16 (1.6%) | +14.94 | +0.20 (0.06) | 10.8% | none |
+| control_seed1 | 1000 | +0.19 (0.06) | 5.3% | 13 (1.3%) | +15.78 | +0.10 (0.07) | 11.6% | none |
+| control_seed2 | 1000 | +0.37 (0.12) | 4.6% | 20 (2.0%) | +19.71 | +0.15 (0.12) | 8.8% | none |
+| selfplay_seed0 | 1000 | +0.27 (0.06) | 6.1% | 19 (1.9%) | +14.41 | +0.08 (0.04) | 8.2% | none |
+| selfplay_seed1 | 1000 | +0.58 (0.10) | 7.6% | 37 (3.7%) | +17.40 | +0.20 (0.07) | 8.6% | none |
+| selfplay_seed2 | 1000 | +0.40 (0.10) | 6.7% | 22 (2.2%) | +18.91 | +0.25 (0.10) | 8.6% | none |
+
+Override gain (SE) by turn counter, in points:
+
+| Checkpoint | turns 0-3 (decisions) | turns 4-9 (decisions) | turns 10-15 (decisions) | turns 16+ (decisions) |
+|---|---:|---:|---:|---:|
+| control_seed0 | +0.34 (0.13) (184) | +0.29 (0.16) (249) | +0.18 (0.08) (286) | +0.16 (0.10) (281) |
+| control_seed1 | +0.23 (0.15) (177) | +0.22 (0.12) (244) | +0.23 (0.13) (272) | +0.11 (0.08) (307) |
+| control_seed2 | +0.13 (0.12) (161) | +0.22 (0.09) (253) | +0.22 (0.09) (289) | +0.77 (0.39) (297) |
+| selfplay_seed0 | +0.64 (0.23) (179) | +0.24 (0.09) (242) | +0.37 (0.14) (270) | -0.02 (0.03) (309) |
+| selfplay_seed1 | +1.30 (0.42) (144) | +0.83 (0.22) (263) | +0.33 (0.15) (266) | +0.26 (0.13) (327) |
+| selfplay_seed2 | +0.39 (0.16) (181) | +0.37 (0.13) (276) | +0.27 (0.14) (254) | +0.55 (0.29) (289) |
+
+## Exploiter from random weights (decision 0014)
+
+| Seed | W: vs champion | O: vs seeds 1, 2 | L: league | Training win rate vs champion, update 1 / last 25 |
+|---:|---:|---:|---:|---|
+| 0 | 50.5% | 54.0% | 79.2% | 0.0% / 45.0% |
+| 1 | 51.3% | 54.3% | 80.2% | 0.0% / 46.5% |
+| 2 | 52.1% | 54.1% | 79.5% | 0.0% / 45.8% |
+
+Verdict (final, seeds [0, 1, 2]); means in points with Student-t 95% intervals:
+
+- W: 51.3 (49.4 to 53.3); O: 54.1 (53.8 to 54.5); L: 79.7 (78.4 to 80.9) (champion 79.2%)
+- exploitable: False; kind: None

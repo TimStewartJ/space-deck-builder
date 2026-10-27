@@ -1,13 +1,21 @@
 """Tests for published training presets and their CLI application."""
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
 
 from src.__main__ import _run_train, build_cli_parser, parse_cli_args
-from src.config import RunConfig, TRAINING_PRESETS, get_training_preset
+from src.config import (
+    CHAMPION_CHECKPOINT,
+    LADDER_CHECKPOINTS,
+    RunConfig,
+    TRAINING_PRESETS,
+    get_training_preset,
+)
 
 REPO = Path(__file__).resolve().parents[1]
+CHAMPION_SHA256 = "9d10dca5110c2bbe9cc0f8693e11578dee347a8c60e7ed63002af7d82e80a503"
 
 
 def _train_dests() -> set[str]:
@@ -104,3 +112,54 @@ def test_reference_preset_matches_published_baseline_manifest():
     assert preset.interim_eval_games == config["interim_eval_games"]
     assert preset.final_eval_games == config["final_eval_games"]
     assert (REPO / preset.results).is_file()
+
+
+def test_every_preset_points_at_an_existing_record():
+    for preset in TRAINING_PRESETS.values():
+        assert (REPO / preset.results).is_file(), preset.name
+
+
+def test_champion_checkpoint_is_the_published_selfplay_seed0():
+    digest = hashlib.sha256((REPO / CHAMPION_CHECKPOINT).read_bytes()).hexdigest()
+    assert digest == CHAMPION_SHA256
+
+
+def test_ladder_checkpoints_match_their_recorded_provenance():
+    for path in LADDER_CHECKPOINTS:
+        checkpoint = REPO / path
+        provenance = json.loads(checkpoint.with_suffix(".json").read_text(encoding="utf-8"))
+        assert checkpoint.stem == f"selfplay_seed0_upd{provenance['update']}"
+        if not checkpoint.is_file():
+            pytest.skip("ladder checkpoints are published as release assets, not committed")
+        assert hashlib.sha256(checkpoint.read_bytes()).hexdigest() == provenance["sha256"]
+
+
+def test_control_preset_is_the_reference_recipe_from_the_champion():
+    reference = get_training_preset("reference-selfplay")
+    control = get_training_preset("continue-selfplay-seed0")
+
+    assert control.train_defaults == {
+        **reference.train_defaults,
+        "model_path": CHAMPION_CHECKPOINT,
+    }
+    for field in (
+        "chunk_size", "interim_eval_games", "final_eval_games", "eval_num_workers",
+    ):
+        assert getattr(control, field) == getattr(reference, field), field
+
+
+def test_control_preset_starts_training_from_the_champion(monkeypatch):
+    captured = {}
+
+    def fake_train(data_cfg, ppo_cfg, run_cfg, dev_cfg, **kwargs):
+        captured.update(kwargs, run_cfg=run_cfg)
+
+    monkeypatch.setattr("src.ppo.ppo_trainer.train", fake_train)
+    _run_train(parse_cli_args(
+        ["train", "--preset", "continue-selfplay-seed0", "--seed", "1"]
+    ))
+
+    assert captured["model_path"] == CHAMPION_CHECKPOINT
+    assert captured["seed"] == 1
+    assert captured["run_cfg"].self_play is True
+    assert captured["run_cfg"].resume is None

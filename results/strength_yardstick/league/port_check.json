@@ -1,0 +1,77 @@
+{
+  "passed": true,
+  "rows": [
+    {
+      "table": "champion",
+      "opponent": "balanced",
+      "expected": 3084,
+      "actual": 3084
+    },
+    {
+      "table": "champion",
+      "opponent": "aggro",
+      "expected": 3321,
+      "actual": 3321
+    },
+    {
+      "table": "champion",
+      "opponent": "economy",
+      "expected": 3111,
+      "actual": 3111
+    },
+    {
+      "table": "champion",
+      "opponent": "scrapper",
+      "expected": 3055,
+      "actual": 3055
+    },
+    {
+      "table": "champion",
+      "opponent": "fortress",
+      "expected": 3092,
+      "actual": 3092
+    },
+    {
+      "table": "champion",
+      "opponent": "blobrush",
+      "expected": 3345,
+      "actual": 3345
+    },
+    {
+      "table": "calibration",
+      "opponent": "balanced",
+      "expected": 1683,
+      "actual": 1683
+    },
+    {
+      "table": "calibration",
+      "opponent": "aggro",
+      "expected": 1533,
+      "actual": 1533
+    },
+    {
+      "table": "calibration",
+      "opponent": "economy",
+      "expected": 1589,
+      "actual": 1589
+    },
+    {
+      "table": "calibration",
+      "opponent": "scrapper",
+      "expected": 1664,
+      "actual": 1664
+    },
+    {
+      "table": "calibration",
+      "opponent": "fortress",
+      "expected": 1670,
+      "actual": 1670
+    },
+    {
+      "table": "calibration",
+      "opponent": "blobrush",
+      "expected": 1479,
+      "actual": 1479
+    }
+  ]
+}

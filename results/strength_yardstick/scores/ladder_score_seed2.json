@@ -1,0 +1,101 @@
+{
+  "anchor": "ladder_seed2@T0",
+  "anchor_elo": 1000.0,
+  "games_per_pair": 4000,
+  "participants": [
+    {
+      "index": 0,
+      "label": "ladder_seed2@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-runs\\checkpoints\\ladder_seed2.pth",
+      "temperature": 0.0,
+      "elo": 1000.0,
+      "wins": 6416,
+      "losses": 5584,
+      "games": 12000
+    },
+    {
+      "index": 1,
+      "label": "selfplay_seed0@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-run4\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth",
+      "temperature": 0.0,
+      "elo": 987.4497522286206,
+      "wins": 6128,
+      "losses": 5872,
+      "games": 12000
+    },
+    {
+      "index": 2,
+      "label": "selfplay_seed1@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-run4\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed1.pth",
+      "temperature": 0.0,
+      "elo": 955.97837409236,
+      "wins": 5406,
+      "losses": 6594,
+      "games": 12000
+    },
+    {
+      "index": 3,
+      "label": "selfplay_seed2@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-yardstick-run4\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed2.pth",
+      "temperature": 0.0,
+      "elo": 984.0545591440851,
+      "wins": 6050,
+      "losses": 5950,
+      "games": 12000
+    }
+  ],
+  "pairings": [
+    {
+      "i": 0,
+      "j": 1,
+      "label_i": "ladder_seed2@T0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 2085,
+      "games": 4000
+    },
+    {
+      "i": 0,
+      "j": 2,
+      "label_i": "ladder_seed2@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 2228,
+      "games": 4000
+    },
+    {
+      "i": 0,
+      "j": 3,
+      "label_i": "ladder_seed2@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 2103,
+      "games": 4000
+    },
+    {
+      "i": 1,
+      "j": 2,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 2180,
+      "games": 4000
+    },
+    {
+      "i": 1,
+      "j": 3,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 2033,
+      "games": 4000
+    },
+    {
+      "i": 2,
+      "j": 3,
+      "label_i": "selfplay_seed1@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 1814,
+      "games": 4000
+    }
+  ]
+}

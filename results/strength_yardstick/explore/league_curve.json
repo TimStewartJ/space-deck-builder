@@ -1,0 +1,482 @@
+{
+  "protocol": "docs/decisions/0013-strength-yardstick.md",
+  "config": {
+    "models": [
+      "D:\\space-deck-builder-archive\\master-untracked\\results\\selfplay_strength\\optimized_400x2000_20260817_230304\\seed_0\\chunks\\models\\ppo_agent_0817_2314_upd50_wins2894.pth",
+      "D:\\space-deck-builder-archive\\master-untracked\\results\\selfplay_strength\\optimized_400x2000_20260817_230304\\seed_0\\chunks\\models\\ppo_agent_0817_2322_upd100_wins2939.pth",
+      "D:\\space-deck-builder-archive\\master-untracked\\results\\selfplay_strength\\optimized_400x2000_20260817_230304\\seed_0\\chunks\\models\\ppo_agent_0817_2337_upd200_wins2987.pth",
+      "D:\\space-deck-builder-archive\\master-untracked\\results\\selfplay_strength\\optimized_400x2000_20260817_230304\\seed_0\\chunks\\models\\ppo_agent_0817_2353_upd300_wins2999.pth",
+      "D:\\sdb-yardstick-runs\\continue-selfplay-seed0_seed0\\chunks\\models\\ppo_agent_1027_0023_upd200_wins3049.pth"
+    ],
+    "opponents": [
+      "balanced",
+      "aggro",
+      "economy",
+      "scrapper",
+      "fortress",
+      "blobrush"
+    ],
+    "games": 4000,
+    "seed": 101,
+    "batch_size": 256,
+    "calibration": false,
+    "calibration_games": 2000,
+    "calibration_seed": 103,
+    "workers": 6,
+    "device": "cuda"
+  },
+  "identity": {
+    "implementation": "held-out-league-v1",
+    "commit": "2784f95f2a489c429332947acab420d35169e150",
+    "dirty": false,
+    "device": "cuda"
+  },
+  "checkpoints": [
+    {
+      "model": "D:\\space-deck-builder-archive\\master-untracked\\results\\selfplay_strength\\optimized_400x2000_20260817_230304\\seed_0\\chunks\\models\\ppo_agent_0817_2314_upd50_wins2894.pth",
+      "label": "ppo_agent_0817_2314_upd50_wins2894",
+      "sha256": "0cb87174c6f3764ebe7b8537260e1a9cb10fec73d8ac815240407d818d46f674",
+      "opponents": {
+        "balanced": {
+          "wins": 2318,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1215,
+          "mean_turns": 22.764,
+          "win_rate": 0.5795,
+          "win_rate_ci95": [
+            0.5641331154098198,
+            0.5947143331071177
+          ]
+        },
+        "aggro": {
+          "wins": 2668,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1381,
+          "mean_turns": 22.487,
+          "win_rate": 0.667,
+          "win_rate_ci95": [
+            0.6522408489958939,
+            0.681438696945346
+          ]
+        },
+        "economy": {
+          "wins": 2154,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1157,
+          "mean_turns": 23.0155,
+          "win_rate": 0.5385,
+          "win_rate_ci95": [
+            0.5230215572298397,
+            0.5539045656368532
+          ]
+        },
+        "scrapper": {
+          "wins": 2307,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1210,
+          "mean_turns": 22.86325,
+          "win_rate": 0.57675,
+          "win_rate_ci95": [
+            0.5613722918896606,
+            0.5919804335653702
+          ]
+        },
+        "fortress": {
+          "wins": 2031,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1102,
+          "mean_turns": 24.34125,
+          "win_rate": 0.50775,
+          "win_rate_ci95": [
+            0.4922569822733866,
+            0.523228146355623
+          ]
+        },
+        "blobrush": {
+          "wins": 2691,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1388,
+          "mean_turns": 22.31575,
+          "win_rate": 0.67275,
+          "win_rate_ci95": [
+            0.6580496062927469,
+            0.6871189060506612
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 14169,
+        "games": 24000,
+        "win_rate": 0.590375,
+        "win_rate_ci95": [
+          0.5841394523785854,
+          0.5965816212646464
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\space-deck-builder-archive\\master-untracked\\results\\selfplay_strength\\optimized_400x2000_20260817_230304\\seed_0\\chunks\\models\\ppo_agent_0817_2322_upd100_wins2939.pth",
+      "label": "ppo_agent_0817_2322_upd100_wins2939",
+      "sha256": "57be678fa5ae6a32c89616cc22b69ed4a60e70505928e9643a21763f7924c1cd",
+      "opponents": {
+        "balanced": {
+          "wins": 2755,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1423,
+          "mean_turns": 23.26425,
+          "win_rate": 0.68875,
+          "win_rate_ci95": [
+            0.6742262431409904,
+            0.7029115670171473
+          ]
+        },
+        "aggro": {
+          "wins": 3123,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1621,
+          "mean_turns": 23.07175,
+          "win_rate": 0.78075,
+          "win_rate_ci95": [
+            0.7676623088138991,
+            0.7932989637789337
+          ]
+        },
+        "economy": {
+          "wins": 2702,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1418,
+          "mean_turns": 23.6865,
+          "win_rate": 0.6755,
+          "win_rate_ci95": [
+            0.660828580715881,
+            0.6898346546894337
+          ]
+        },
+        "scrapper": {
+          "wins": 2727,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1450,
+          "mean_turns": 23.21325,
+          "win_rate": 0.68175,
+          "win_rate_ci95": [
+            0.6671465574479666,
+            0.6960046849162268
+          ]
+        },
+        "fortress": {
+          "wins": 2599,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1372,
+          "mean_turns": 24.98725,
+          "win_rate": 0.64975,
+          "win_rate_ci95": [
+            0.6348291149143686,
+            0.6643835318203659
+          ]
+        },
+        "blobrush": {
+          "wins": 3147,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1637,
+          "mean_turns": 23.14425,
+          "win_rate": 0.78675,
+          "win_rate_ci95": [
+            0.7737844994431169,
+            0.7991652598302392
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 17053,
+        "games": 24000,
+        "win_rate": 0.7105416666666666,
+        "win_rate_ci95": [
+          0.7047707327016847,
+          0.7162452124893025
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\space-deck-builder-archive\\master-untracked\\results\\selfplay_strength\\optimized_400x2000_20260817_230304\\seed_0\\chunks\\models\\ppo_agent_0817_2337_upd200_wins2987.pth",
+      "label": "ppo_agent_0817_2337_upd200_wins2987",
+      "sha256": "aa29c22bcce47104e300ed075cb98a91b48561da765e002fb2ce715f9bf03b92",
+      "opponents": {
+        "balanced": {
+          "wins": 2944,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1533,
+          "mean_turns": 22.5745,
+          "win_rate": 0.736,
+          "win_rate_ci95": [
+            0.7221179886834865,
+            0.7494291540837743
+          ]
+        },
+        "aggro": {
+          "wins": 3226,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1666,
+          "mean_turns": 22.301,
+          "win_rate": 0.8065,
+          "win_rate_ci95": [
+            0.7939660352956842,
+            0.8184458259677289
+          ]
+        },
+        "economy": {
+          "wins": 2956,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1551,
+          "mean_turns": 22.917,
+          "win_rate": 0.739,
+          "win_rate_ci95": [
+            0.7251652146002145,
+            0.7523761715073081
+          ]
+        },
+        "scrapper": {
+          "wins": 2934,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1538,
+          "mean_turns": 22.579,
+          "win_rate": 0.7335,
+          "win_rate_ci95": [
+            0.7195792548758865,
+            0.746972685107823
+          ]
+        },
+        "fortress": {
+          "wins": 2899,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1516,
+          "mean_turns": 24.20625,
+          "win_rate": 0.72475,
+          "win_rate_ci95": [
+            0.7106980584714534,
+            0.7383706717698258
+          ]
+        },
+        "blobrush": {
+          "wins": 3235,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1676,
+          "mean_turns": 22.41675,
+          "win_rate": 0.80875,
+          "win_rate_ci95": [
+            0.7962682007938319,
+            0.8206393429747775
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 18194,
+        "games": 24000,
+        "win_rate": 0.7580833333333333,
+        "win_rate_ci95": [
+          0.7526243714199078,
+          0.7634596904271088
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\space-deck-builder-archive\\master-untracked\\results\\selfplay_strength\\optimized_400x2000_20260817_230304\\seed_0\\chunks\\models\\ppo_agent_0817_2353_upd300_wins2999.pth",
+      "label": "ppo_agent_0817_2353_upd300_wins2999",
+      "sha256": "d842642e20e3cfc32da258f307c336abaad5a6165d59203dc7204cd8d69f53f9",
+      "opponents": {
+        "balanced": {
+          "wins": 3016,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1586,
+          "mean_turns": 22.501,
+          "win_rate": 0.754,
+          "win_rate_ci95": [
+            0.7404138590435705,
+            0.7670987437652612
+          ]
+        },
+        "aggro": {
+          "wins": 3257,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1688,
+          "mean_turns": 22.18525,
+          "win_rate": 0.81425,
+          "win_rate_ci95": [
+            0.8018984424745523,
+            0.8259985474178704
+          ]
+        },
+        "economy": {
+          "wins": 3012,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1579,
+          "mean_turns": 22.917,
+          "win_rate": 0.753,
+          "win_rate_ci95": [
+            0.739396619426317,
+            0.7661179022690942
+          ]
+        },
+        "scrapper": {
+          "wins": 2997,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1580,
+          "mean_turns": 22.63275,
+          "win_rate": 0.74925,
+          "win_rate_ci95": [
+            0.7355828262571595,
+            0.7624388912629243
+          ]
+        },
+        "fortress": {
+          "wins": 2995,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1577,
+          "mean_turns": 24.12425,
+          "win_rate": 0.74875,
+          "win_rate_ci95": [
+            0.7350744218314551,
+            0.7619482551319186
+          ]
+        },
+        "blobrush": {
+          "wins": 3283,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1703,
+          "mean_turns": 22.25575,
+          "win_rate": 0.82075,
+          "win_rate_ci95": [
+            0.8085575010206058,
+            0.8323270161090507
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 18560,
+        "games": 24000,
+        "win_rate": 0.7733333333333333,
+        "win_rate_ci95": [
+          0.7679929593471151,
+          0.7785862214272519
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-runs\\continue-selfplay-seed0_seed0\\chunks\\models\\ppo_agent_1027_0023_upd200_wins3049.pth",
+      "label": "ppo_agent_1027_0023_upd200_wins3049",
+      "sha256": "64a0595c007a7156553ba1647f97020634fd2f4037a3eb72b2e600121c1d0dcc",
+      "opponents": {
+        "balanced": {
+          "wins": 3120,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1625,
+          "mean_turns": 22.4925,
+          "win_rate": 0.78,
+          "win_rate_ci95": [
+            0.766897313718419,
+            0.7925653980393483
+          ]
+        },
+        "aggro": {
+          "wins": 3347,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1703,
+          "mean_turns": 22.12625,
+          "win_rate": 0.83675,
+          "win_rate_ci95": [
+            0.8249742308213879,
+            0.8478795841229982
+          ]
+        },
+        "economy": {
+          "wins": 3156,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1643,
+          "mean_turns": 22.6955,
+          "win_rate": 0.789,
+          "win_rate_ci95": [
+            0.7760813584970554,
+            0.8013640832814972
+          ]
+        },
+        "scrapper": {
+          "wins": 3105,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1609,
+          "mean_turns": 22.58375,
+          "win_rate": 0.77625,
+          "win_rate_ci95": [
+            0.7630732514734513,
+            0.7888966561089887
+          ]
+        },
+        "fortress": {
+          "wins": 3133,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1609,
+          "mean_turns": 23.87225,
+          "win_rate": 0.78325,
+          "win_rate_ci95": [
+            0.7702127372138711,
+            0.7957437381625131
+          ]
+        },
+        "blobrush": {
+          "wins": 3387,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1730,
+          "mean_turns": 22.25925,
+          "win_rate": 0.84675,
+          "win_rate_ci95": [
+            0.8352543251142338,
+            0.8575803009643582
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 19248,
+        "games": 24000,
+        "win_rate": 0.802,
+        "win_rate_ci95": [
+          0.7969103123672329,
+          0.8069930263907873
+        ],
+        "complete": true
+      }
+    }
+  ],
+  "calibration": {}
+}

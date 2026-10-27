@@ -139,6 +139,37 @@ def _build_train_parser(sub: argparse._SubParsersAction):
     p.add_argument("--pfsp", type=str, default=_run.pfsp_mode,
                    choices=["uniform", "hard", "variance"],
                    help="PFSP snapshot weighting: uniform (default), hard, or variance")
+    p.add_argument(
+        "--frozen-opponents",
+        type=str,
+        nargs="+",
+        default=list(_run.frozen_opponents),
+        metavar="CHECKPOINT",
+        help=(
+            "Frozen checkpoints to train against (vector engine only, not "
+            "with --self-play). They are loaded into the opponent pool at the "
+            "start of every process, fresh or resumed, and never learn"
+        ),
+    )
+    p.add_argument(
+        "--frozen-opponent-ratio",
+        type=float,
+        default=_run.frozen_opponent_ratio,
+        help=(
+            "Share of training games against the frozen opponents; the rest "
+            f"use --opponents (default: {_run.frozen_opponent_ratio:g})"
+        ),
+    )
+    p.add_argument(
+        "--frozen-opponent-temperature",
+        type=_temperature_arg,
+        default=_run.frozen_opponent_temperature,
+        help=(
+            "Inference temperature of the frozen opponents: 1 samples their "
+            "policy, 0 plays their highest-scoring legal action "
+            f"(default: {_run.frozen_opponent_temperature:g})"
+        ),
+    )
     # Devices (defaults sourced from DeviceConfig dataclass)
     p.add_argument("--main-device",       type=str, default=_dev.main_device,
                    help="Device for training updates")
@@ -417,6 +448,75 @@ def _build_distill_parser(sub: argparse._SubParsersAction):
     return p
 
 
+def _build_league_parser(sub: argparse._SubParsersAction):
+    from src.ai.held_out_agents import HELD_OUT_STYLES
+    from src.ppo.league import LeagueConfig
+
+    defaults = LeagueConfig(calibration=True)
+    p = sub.add_parser(
+        "league",
+        help="Play checkpoints against the held-out scripted opponents",
+        description=(
+            "Held-out league of docs/decisions/0013-strength-yardstick.md: each "
+            "checkpoint plays every held-out opponent at temperature 0 with exact "
+            "seat alternation. Finished matchups are journaled next to the output, "
+            "so re-running resumes."
+        ),
+    )
+    p.add_argument("--models", nargs="*", default=[], metavar="CHECKPOINT",
+                   help="Checkpoints to measure")
+    p.add_argument("--opponents", type=str, default=",".join(defaults.opponents),
+                   help=f"Comma-separated held-out opponents (default: all of {', '.join(HELD_OUT_STYLES)})")
+    p.add_argument("--games", type=int, default=defaults.games,
+                   help=f"Games per checkpoint and opponent (default: {defaults.games})")
+    p.add_argument("--seed", type=int, default=defaults.seed,
+                   help=f"Master deal seed (default: {defaults.seed})")
+    p.add_argument("--batch-size", type=int, default=defaults.batch_size,
+                   help=f"Games in flight per process (default: {defaults.batch_size})")
+    p.add_argument("--calibration", action="store_true",
+                   help=(f"Also play each held-out opponent against Heuristic "
+                         f"({defaults.calibration_games} games, deal seed {defaults.calibration_seed})"))
+    p.add_argument("--workers", type=int, default=defaults.workers,
+                   help=f"Matchups played in parallel processes (default: {defaults.workers})")
+    p.add_argument("--simulation-device", type=str, default=defaults.device,
+                   help="Device for checkpoint inference")
+    p.add_argument("--output-json", type=str, required=True,
+                   help="League summary; its .journal.jsonl records finished matchups")
+    return p
+
+
+def _build_purchase_audit_parser(sub: argparse._SubParsersAction):
+    from src.search.purchase_audit import AuditConfig
+
+    defaults = AuditConfig(model_path="")
+    p = sub.add_parser(
+        "purchase-audit",
+        help="Measure the win probability a checkpoint's purchases give away",
+        description=(
+            "Purchase audit of docs/decisions/0013-strength-yardstick.md: one "
+            "uniformly sampled purchase decision per greedy self-play game, every "
+            "candidate scored by complete greedy rollouts from the acting player's "
+            "information set. Finished decisions are journaled next to the output, "
+            "so re-running resumes."
+        ),
+    )
+    p.add_argument("--model", type=str, required=True, help="Checkpoint to audit")
+    p.add_argument("--decisions", type=int, default=defaults.decisions,
+                   help=f"Decisions to audit, one per game (default: {defaults.decisions})")
+    p.add_argument("--rollouts", type=int, default=defaults.rollouts,
+                   help=f"Complete rollouts per candidate (default: {defaults.rollouts})")
+    p.add_argument("--seed", type=int, default=defaults.seed,
+                   help=f"Master seed for deals, targets, and rollouts (default: {defaults.seed})")
+    p.add_argument("--rows-per-chunk", type=int, default=defaults.rows_per_chunk,
+                   help=f"Rollout rows per vector population (default: {defaults.rows_per_chunk})")
+    p.add_argument("--numba-threads", type=int, default=defaults.numba_threads)
+    p.add_argument("--simulation-device", type=str, default=defaults.device,
+                   help="Device for policy inference")
+    p.add_argument("--output-json", type=str, required=True,
+                   help="Audit records and summary; its .journal.jsonl records finished decisions")
+    return p
+
+
 def build_cli_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     """Build the unified CLI parser and return it with the train subparser."""
     parser = argparse.ArgumentParser(
@@ -433,6 +533,8 @@ def build_cli_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser
     _build_search_eval_parser(sub)
     _build_search_selfplay_parser(sub)
     _build_distill_parser(sub)
+    _build_league_parser(sub)
+    _build_purchase_audit_parser(sub)
     return parser, train_parser
 
 
@@ -479,6 +581,51 @@ def main(argv=None):
         _run_search_selfplay(args)
     elif args.command == "distill":
         _run_distill(args)
+    elif args.command == "league":
+        _run_league(args)
+    elif args.command == "purchase-audit":
+        _run_purchase_audit(args)
+
+
+def _run_purchase_audit(args):
+    """Audit a checkpoint's purchase decisions with complete rollouts."""
+    from src.search.purchase_audit import AuditConfig, run_audit
+
+    try:
+        config = AuditConfig(
+            model_path=args.model,
+            decisions=args.decisions,
+            rollouts=args.rollouts,
+            seed=args.seed,
+            rows_per_chunk=args.rows_per_chunk,
+            numba_threads=args.numba_threads,
+            device=args.simulation_device,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
+    run_audit(config, args.output_json)
+
+
+def _run_league(args):
+    """Play checkpoints against the held-out opponents and write the league table."""
+    from src.ppo.league import LeagueConfig, run_league
+
+    try:
+        config = LeagueConfig(
+            models=tuple(args.models),
+            opponents=tuple(name.strip() for name in args.opponents.split(",") if name.strip()),
+            games=args.games,
+            seed=args.seed,
+            batch_size=args.batch_size,
+            calibration=args.calibration,
+            workers=args.workers,
+            device=args.simulation_device,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
+    run_league(config, args.output_json)
 
 
 def _run_search_selfplay(args):
@@ -596,6 +743,9 @@ def _run_train(args):
         self_play_schedule=args.self_play_schedule,
         self_play_horizon=args.self_play_horizon,
         pfsp_mode=args.pfsp,
+        frozen_opponents=list(args.frozen_opponents),
+        frozen_opponent_ratio=args.frozen_opponent_ratio,
+        frozen_opponent_temperature=args.frozen_opponent_temperature,
         num_workers=args.num_workers,
         num_concurrent=args.num_concurrent,
         resume=args.resume,

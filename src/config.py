@@ -6,6 +6,7 @@ their own defaults.
 """
 from __future__ import annotations
 
+import math
 from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
 from typing import Any
@@ -214,6 +215,16 @@ class RunConfig:
     # same horizon so linear and cosine curricula remain continuous.
     self_play_horizon: int | None = None
     pfsp_mode: str = "uniform"
+    # Frozen checkpoints trained against. They are loaded into the opponent
+    # pool at the start of every process, fresh or resumed, never learn, and
+    # are never saved into a checkpoint's pool manifest. A
+    # ``frozen_opponent_ratio`` share of training games faces them (the rest
+    # use ``opponents``), and they play at ``frozen_opponent_temperature``,
+    # where 0 selects each one's highest-scoring legal action. They require
+    # the vector engine and exclude self-play snapshots.
+    frozen_opponents: list[str] = field(default_factory=list)
+    frozen_opponent_ratio: float = 1.0
+    frozen_opponent_temperature: float = 1.0
     # Path to a checkpoint to resume training from.When set, model weights,
     # optimizer state, LR scheduler state, snapshot pool manifest, and the
     # update counter are restored. ``updates`` is interpreted as "additional
@@ -273,6 +284,30 @@ class RunConfig:
             raise ValueError(
                 "self_play_horizon must be positive when set, got "
                 f"{self.self_play_horizon}"
+            )
+        if not (0.0 <= self.frozen_opponent_ratio <= 1.0):
+            raise ValueError(
+                "frozen_opponent_ratio must be in [0, 1], got "
+                f"{self.frozen_opponent_ratio}"
+            )
+        temperature = self.frozen_opponent_temperature
+        if not (isinstance(temperature, (int, float)) and math.isfinite(temperature)
+                and temperature >= 0):
+            raise ValueError(
+                "frozen_opponent_temperature must be a finite non-negative "
+                f"number, got {temperature!r}"
+            )
+        if self.frozen_opponents:
+            if self.self_play:
+                raise ValueError(
+                    "frozen opponents cannot be combined with self-play"
+                )
+            if self.engine != "vec":
+                raise ValueError("frozen opponents require the vector engine")
+        elif self.frozen_opponent_ratio != 1.0 or temperature != 1.0:
+            raise ValueError(
+                "frozen_opponent_ratio and frozen_opponent_temperature need "
+                "frozen_opponents"
             )
 
     def to_dict(self) -> dict[str, Any]:
@@ -352,6 +387,42 @@ class TrainingPreset:
         return asdict(self)
 
 
+# The published self-play champion that the strength yardstick
+# (docs/decisions/0013-strength-yardstick.md) trains and measures against,
+# relative to the repository root.
+CHAMPION_CHECKPOINT = "results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth"
+
+# Earlier checkpoints of the champion's own training run (updates 25, 50, 100,
+# 200 and 300), the ladder of decision 0014's exploiter from random weights.
+# Like every checkpoint a result depends on, they are published as release
+# assets; results/strength_yardstick/ladder/*.json records their hashes.
+LADDER_CHECKPOINTS = [
+    f"results/strength_yardstick/ladder/selfplay_seed0_upd{update}.pth"
+    for update in (25, 50, 100, 200, 300)
+]
+
+# Size, schedule, and evaluation settings shared by every vector-engine
+# recipe derived from the reference self-play league.
+_REFERENCE_RUN_DEFAULTS: dict[str, Any] = {
+    "engine": "vec",
+    "vec_threads": 4,
+    "vec_max_active_snapshots": 3,
+    "episodes": 2000,
+    "updates": 400,
+    "eval_every": 25,
+    "eval_games": 3200,
+    "num_workers": 16,
+    "opponents": "random,heuristic,simple",
+}
+
+_REFERENCE_SELFPLAY_DEFAULTS: dict[str, Any] = {
+    **_REFERENCE_RUN_DEFAULTS,
+    "self_play": True,
+    "self_play_ratio": 0.5,
+    "self_play_schedule": "constant",
+    "pfsp": "variance",
+}
+
 TRAINING_PRESETS: dict[str, TrainingPreset] = {
     "reference-selfplay": TrainingPreset(
         name="reference-selfplay",
@@ -360,26 +431,72 @@ TRAINING_PRESETS: dict[str, TrainingPreset] = {
             "400 updates x 2,000 episodes, fixed opponents plus constant 50% "
             "variance-PFSP self-play with three active snapshots"
         ),
-        train_defaults={
-            "engine": "vec",
-            "vec_threads": 4,
-            "vec_max_active_snapshots": 3,
-            "episodes": 2000,
-            "updates": 400,
-            "eval_every": 25,
-            "eval_games": 3200,
-            "num_workers": 16,
-            "opponents": "random,heuristic,simple",
-            "self_play": True,
-            "self_play_ratio": 0.5,
-            "self_play_schedule": "constant",
-            "pfsp": "variance",
-        },
+        train_defaults=dict(_REFERENCE_SELFPLAY_DEFAULTS),
         chunk_size=25,
         interim_eval_games=3200,
         final_eval_games=15000,
         eval_num_workers=16,
         results="results/optimized_selfplay_baseline.md",
+    ),
+    "continue-selfplay-seed0": TrainingPreset(
+        name="continue-selfplay-seed0",
+        description=(
+            "Control arm of the exploiter experiment: the reference self-play "
+            "recipe for another 400 updates, starting from the published "
+            "selfplay_seed0 weights with a fresh optimizer"
+        ),
+        train_defaults={
+            **_REFERENCE_SELFPLAY_DEFAULTS,
+            "model_path": CHAMPION_CHECKPOINT,
+        },
+        chunk_size=25,
+        interim_eval_games=3200,
+        final_eval_games=15000,
+        eval_num_workers=16,
+        results="docs/decisions/0013-strength-yardstick.md",
+    ),
+    "exploit-selfplay-seed0": TrainingPreset(
+        name="exploit-selfplay-seed0",
+        description=(
+            "Exploiter arm of the strength yardstick: 400 updates x 2,000 "
+            "episodes from the published selfplay_seed0 weights with a fresh "
+            "optimizer, every training game against selfplay_seed0 frozen and "
+            "playing its highest-scoring legal action"
+        ),
+        train_defaults={
+            **_REFERENCE_RUN_DEFAULTS,
+            "model_path": CHAMPION_CHECKPOINT,
+            "frozen_opponents": [CHAMPION_CHECKPOINT],
+            "frozen_opponent_ratio": 1.0,
+            "frozen_opponent_temperature": 0.0,
+        },
+        chunk_size=25,
+        interim_eval_games=3200,
+        final_eval_games=15000,
+        eval_num_workers=16,
+        results="docs/decisions/0013-strength-yardstick.md",
+    ),
+    "exploit-ladder-random": TrainingPreset(
+        name="exploit-ladder-random",
+        description=(
+            "Fallback exploiter of the strength yardstick: 400 updates x "
+            "2,000 episodes from random weights, every training game against "
+            "a uniformly sampled frozen opponent from the champion's own run "
+            "(updates 25, 50, 100, 200, 300 and the champion), each playing "
+            "its highest-scoring legal action"
+        ),
+        train_defaults={
+            **_REFERENCE_RUN_DEFAULTS,
+            "vec_max_active_snapshots": 6,
+            "frozen_opponents": [*LADDER_CHECKPOINTS, CHAMPION_CHECKPOINT],
+            "frozen_opponent_ratio": 1.0,
+            "frozen_opponent_temperature": 0.0,
+        },
+        chunk_size=25,
+        interim_eval_games=3200,
+        final_eval_games=15000,
+        eval_num_workers=16,
+        results="docs/decisions/0014-ladder-exploiter.md",
     ),
 }
 
