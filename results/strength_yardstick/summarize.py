@@ -64,9 +64,18 @@ def mean_interval(values: list[float]) -> dict:
 
 
 def league_scores(league: dict | None) -> dict[str, dict]:
+    """Pooled league results of the checkpoints that finished every matchup.
+
+    The league rewrites its JSON after each matchup, so a run still in
+    progress leaves rows whose pooled rate covers only some opponents.
+    """
     if not league:
         return {}
-    return {row["label"]: row["pooled"] for row in league["checkpoints"] if row["pooled"]["games"]}
+    return {
+        row["label"]: row["pooled"]
+        for row in league["checkpoints"]
+        if row["pooled"]["games"] and row["pooled"].get("complete", True)
+    }
 
 
 def read_text(path: str) -> str:
