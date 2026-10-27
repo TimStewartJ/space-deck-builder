@@ -51,7 +51,9 @@ class LeagueConfig:
     calibration: bool = False
     calibration_games: int = CALIBRATION_GAMES
     calibration_seed: int = CALIBRATION_SEED
-    workers: int = 8
+    # Each worker is one GPU process; more than about six stall each other on
+    # the project's Windows/ROCm machine. The count does not affect results.
+    workers: int = 6
     device: str = "cuda"
 
     def __post_init__(self):

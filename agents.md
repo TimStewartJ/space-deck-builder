@@ -288,11 +288,14 @@ python -m src analyze --model models/ppo_agent_XXXX.pth
 The held-out league and the purchase audit (protocol `v0.2`, decision 0013)
 measure strength against opponents no agent trains on and the win probability
 purchases give away. Both journal finished work and resume when re-run; launch
-large runs through `scripts/launch_training.ps1 -Command`.
+large runs through `scripts/launch_training.ps1 -Command`. Each league worker
+is a separate GPU process, and on the project's Windows/ROCm machine more than
+about six GPU processes at once stall each other, so keep `--workers` at 6 and
+do not run the league or an audit beside training.
 
 ```bash
 # Every checkpoint against the six held-out opponents, 4,000 games each
-python -m src league --models <ckpt-a> <ckpt-b> --calibration --workers 12 \
+python -m src league --models <ckpt-a> <ckpt-b> --calibration --workers 6 \
     --output-json league.json
 
 # 1,000 purchase decisions scored by complete greedy rollouts

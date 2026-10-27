@@ -15,7 +15,7 @@ param(
     [string] $Python = ".venv\Scripts\python.exe",
     [string] $RunsDir = "D:\sdb-yardstick-runs",
     [string] $Distilled = "D:\space-deck-builder-archive\expert-iteration-round1-20260916\work\distilled_seed0.pth",
-    [int] $LeagueWorkers = 12,
+    [int] $LeagueWorkers = 6,
     [int] $AuditThreads = 12,
     [switch] $SkipAudit
 )
