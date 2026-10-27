@@ -3,10 +3,12 @@
 **Status:** Measures complete (2026-10-27). Decision 0013's fallback, an
 exploiter trained from random weights against a ladder of the champion's
 earlier checkpoints ([decision 0014](../docs/decisions/0014-ladder-exploiter.md)),
-is running; its result will be added here. **Pre-registered outcome so far:
-not shown exploitable** (mean E - C +4.5 points against a 5-point threshold),
-and **further training narrowly misses the "helps" bar** (mean C 54.8%
-against 55%).
+started at 07:21 and was stopped at 08:50, at updates 275, 275 and 300 of
+400, when the console window hosting its runs was closed. It resumes from
+those checkpoints when relaunched, and its result will be added here.
+**Pre-registered outcome so far: not shown exploitable** (mean E - C +4.5
+points against a 5-point threshold), and **further training narrowly misses
+the "helps" bar** (mean C 54.8% against 55%).
 **Design:** [`docs/decisions/0013-strength-yardstick.md`](../docs/decisions/0013-strength-yardstick.md),
 committed before any data was generated (`c2e1a89`). Its dated amendments
 change only when things ran; each was made before the results it concerns
@@ -25,7 +27,8 @@ existed or had been looked at.
   training against the frozen champion beat it 59.3% of the time; 400
   updates of the ordinary recipe beat it 54.8%. The difference, +4.5 points
   (95% CI -1.0 to +9.9), misses the pre-registered 5-point threshold, so the
-  champion is not shown exploitable and 0013's fallback adversary runs next.
+  champion is not shown exploitable, and 0013's fallback adversary was
+  started; it is paused partway (see Status).
 - **Both arms are stronger than the champion, and the exploiters are the
   strongest checkpoints measured.** Every arm checkpoint beats the champion in
   its seed's tournament and outscores it against held-out opponents
@@ -77,6 +80,7 @@ Everything ran through Task Scheduler on the RX 9070 with torch
 | Control arm | `c2e1a89` | preset `continue-selfplay-seed0`; this lane also scored seed 2 |
 | Exploiter arm | `a792c96` | preset `exploit-selfplay-seed0`; this lane scored seeds 0 and 1 |
 | League, port check and audits | `2784f95` | |
+| Fallback exploiter (decision 0014) | `761eb39` | preset `exploit-ladder-random`, one lane per seed; paused at updates 275, 275 and 300 of 400 (see Status) |
 
 The tournament code is the same at both scoring commits. Of what it imports,
 only `src/config.py` changed between them, gaining optional frozen-opponent
@@ -134,7 +138,7 @@ Exact wins of 4,000: E 2,373, 2,411 and 2,328; C 2,218, 2,135 and 2,222.
 - **Not shown exploitable.** The rule needs a mean E - C of at least 5 points
   with an interval that excludes zero; the mean is +4.5 points and the
   interval runs from -1.0 to +9.9. So "narrow or general" does not apply, and
-  0013's fallback runs (decision 0014).
+  0013's fallback (decision 0014) was started; it is paused partway.
 - **More training does not pass the bar, narrowly.** The rule needs a mean C
   of at least 55% with its interval above 50%; the mean is 54.8%, with its
   interval (51.7% to 57.8%) above 50%.
@@ -448,8 +452,8 @@ OR choice needs a change to the action space.
   weights and trained for 400 updates; another adversary might find more.
   This outcome is the condition for 0013's fallback, an exploiter from random
   weights trained against a ladder of the champion's earlier checkpoints
-  ([decision 0014](../docs/decisions/0014-ladder-exploiter.md)), which is
-  running.
+  ([decision 0014](../docs/decisions/0014-ladder-exploiter.md)), which was
+  started and is paused partway.
 - **The held-out opponents are scripted and untuned,** and were designed by
   the agent that ran the 2026-09-30 audit. They are stronger than Heuristic
   but say nothing about strength against people.
