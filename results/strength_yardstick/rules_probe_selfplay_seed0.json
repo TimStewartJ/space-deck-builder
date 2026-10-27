@@ -3,35 +3,42 @@
   "games": 400,
   "deal_seed": 20261027,
   "games_with_or": 377,
-  "games_with_both_or_options": 377,
+  "games_with_both_or_options_effective": 377,
   "or_by_card": {
     "Barter World": {
       "first_option": 718,
-      "second_option_afterwards": 715
+      "second_option_applied": 715,
+      "second_option_with_effect": 715
     },
     "Blob World": {
       "first_option": 117,
-      "second_option_afterwards": 116
+      "second_option_applied": 116,
+      "second_option_with_effect": 81
     },
     "Defense Center": {
       "first_option": 340,
-      "second_option_afterwards": 340
+      "second_option_applied": 340,
+      "second_option_with_effect": 340
     },
     "Patrol Mech": {
       "first_option": 598,
-      "second_option_afterwards": 597
+      "second_option_applied": 597,
+      "second_option_with_effect": 597
     },
     "Recycling Station": {
       "first_option": 667,
-      "second_option_afterwards": 663
+      "second_option_applied": 663,
+      "second_option_with_effect": 588
     },
     "Stealth Needle": {
       "first_option": 6,
-      "second_option_afterwards": 6
+      "second_option_applied": 6,
+      "second_option_with_effect": 6
     },
     "Trading Post": {
       "first_option": 671,
-      "second_option_afterwards": 671
+      "second_option_applied": 671,
+      "second_option_with_effect": 671
     }
   },
   "ship_choices": {

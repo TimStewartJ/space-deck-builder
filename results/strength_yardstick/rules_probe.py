@@ -15,8 +15,14 @@ gives one of its options. The engine differs:
 
 This plays greedy self-play games of a checkpoint on CPU (END_TURN suppressed
 while another action is available, as in production) and counts, per card,
-OR abilities used once and twice, ship choices taken on the next decision or
-later in the turn, and Machine Base plays whose scrap was used or skipped.
+OR abilities whose second option was applied after the first, and how many of
+those second options had an effect (Recycling Station's discard can be
+skipped or impossible, and Blob World can draw nothing); ship choices taken on
+the next decision or later in the turn; and Machine Base plays whose scrap was
+used or skipped. A ship choice is tracked through the ship whose action the
+policy takes, so the choice of a second copy of the same ship, a choice opened
+by Stealth Needle's copy, and choices still open when the game ends are not
+counted.
 
 Usage, from the repository root:
     python results/strength_yardstick/rules_probe.py <checkpoint> [games] [deal seed]
@@ -79,10 +85,11 @@ def probe(checkpoint: str, games: int, seed: int) -> dict:
         for name in SEATS:
             game.add_player(name, _External(name))
         game.start_game(first_player_name=SEATS[index % 2])
-        slots.append({"game": game, "index": index, "open_ship_choices": {}, "steps": 0})
+        slots.append({"game": game, "index": index, "open_ship_choices": {}, "open_or": None, "steps": 0})
 
     or_first = collections.Counter()
     or_second = collections.Counter()
+    or_second_effective = collections.Counter()
     games_with_or = set()
     games_with_both = set()
     ship_choices = collections.Counter()
@@ -111,6 +118,7 @@ def probe(checkpoint: str, games: int, seed: int) -> dict:
             open_choices = slot["open_ship_choices"]
             for key in open_choices:
                 open_choices[key] += 1
+            second_option = None
             if action.type == ActionType.APPLY_EFFECT and action.card_effect is not None:
                 effect, card = action.card_effect, action.card
                 if any(parent.is_or_effect and effect in (parent.child_effects or []) for parent in card.effects):
@@ -118,10 +126,12 @@ def probe(checkpoint: str, games: int, seed: int) -> dict:
                     games_with_or.add(slot["index"])
                 elif effect.is_or_effect:
                     or_second[card.name] += 1
-                    games_with_both.add(slot["index"])
+                    second_option = (card.name, _resources(player))
                 if id(card) in open_choices and not effect.faction_requirement:
                     age = open_choices.pop(id(card))
                     ship_choices["next decision" if age <= 1 else "later in the turn"] += 1
+            if slot["open_or"] is not None and action.type == ActionType.DISCARD_CARDS:
+                slot["open_or"]["discards"] += 1
             if action.type == ActionType.END_TURN:
                 ship_choices["never used"] += len(open_choices)
                 open_choices.clear()
@@ -130,6 +140,22 @@ def probe(checkpoint: str, games: int, seed: int) -> dict:
                         scrap = base.effects[0].child_effects[1]
                         machine_base["scrap used" if scrap.applied else "scrap skipped"] += 1
             game.apply_decision(action)
+            if second_option is not None:
+                name, before = second_option
+                if player.get_current_pending_set() is not None and _resources(player) == before:
+                    # A discard-then-draw option opens a choice; its effect is
+                    # known once the choice closes.
+                    slot["open_or"] = {"card": name, "discards": 0}
+                elif _resources(player) != before:
+                    or_second_effective[name] += 1
+                    games_with_both.add(slot["index"])
+            elif slot["open_or"] is not None and (
+                game.current_player is not player or player.get_current_pending_set() is None
+            ):
+                if slot["open_or"]["discards"]:
+                    or_second_effective[slot["open_or"]["card"]] += 1
+                    games_with_both.add(slot["index"])
+                slot["open_or"] = None
             if (
                 action.type == ActionType.PLAY_CARD
                 and action.card is not None
@@ -156,14 +182,22 @@ def probe(checkpoint: str, games: int, seed: int) -> dict:
         "games": games,
         "deal_seed": seed,
         "games_with_or": len(games_with_or),
-        "games_with_both_or_options": len(games_with_both),
+        "games_with_both_or_options_effective": len(games_with_both),
         "or_by_card": {
-            name: {"first_option": or_first[name], "second_option_afterwards": or_second[name]}
+            name: {
+                "first_option": or_first[name],
+                "second_option_applied": or_second[name],
+                "second_option_with_effect": or_second_effective[name],
+            }
             for name in sorted(set(or_first) | set(or_second))
         },
         "ship_choices": dict(ship_choices),
         "machine_base": dict(machine_base),
     }
+
+
+def _resources(player) -> tuple:
+    return (player.trade, player.combat, player.health, len(player.hand))
 
 
 def main(argv: list[str]) -> int:
