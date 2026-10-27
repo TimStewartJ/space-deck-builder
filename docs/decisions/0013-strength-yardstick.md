@@ -230,3 +230,11 @@ commit that adds this amendment. Before it, the code review found that the
 audit's first implementation left out decisions with a single legal purchase
 on which the one-turn search chooses something else; the text above counts
 them as eligible and is unchanged, and the code now follows it.
+
+**2026-10-27, run order, continued.** Also made before any score, league or
+audit result existed. Exploiter seed 2 trains in a third lane alongside the
+other two. The league and the audits run after all training has finished.
+While the league ran beside the trainings, their evaluation workers stalled
+for minutes, and one interim evaluation timed out and ended its chunk
+(exploiter seed 0, updates 100 to 125). That chunk was rerun from its starting
+checkpoint, which restores the random-number and optimizer state.
