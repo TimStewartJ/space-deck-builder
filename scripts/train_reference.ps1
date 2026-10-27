@@ -24,6 +24,10 @@
 .PARAMETER ChunkSize
     Override the preset's fresh-process chunk size, for smoke runs.
 
+.PARAMETER ShowWindow
+    Run in a visible console window (see launch_training.ps1). Closing that
+    window stops the run.
+
 .EXAMPLE
     .\scripts\train_reference.ps1 -Seed 0
 
@@ -47,6 +51,7 @@ param(
     [int] $NumWorkers = 0,
     [int] $EvalNumWorkers = 0,
     [string] $ProcessorAffinityMask = "Auto",
+    [switch] $ShowWindow,
     [switch] $Foreground
 )
 
@@ -111,6 +116,9 @@ if (-not $Foreground) {
     }
     if ($Python) {
         $launchArgs.Python = $Python
+    }
+    if ($ShowWindow) {
+        $launchArgs.ShowWindow = $true
     }
     & (Join-Path $PSScriptRoot "launch_training.ps1") @launchArgs
     Write-Host "  run root: $RunRoot"

@@ -272,7 +272,8 @@ avoid that inherited execution context.
 For training, use `scripts/launch_training.ps1`. It also applies the measured
 P-core affinity on the project's i7-12700K host, and `-Command` launches any
 other workload (evaluation, tournaments, orchestration scripts) through the
-same boundary. Long self-play arcs should use 25-update
+same boundary. Runs start without a window; `-ShowWindow` opens one, and
+closing it stops the run. Long self-play arcs should use 25-update
 `scripts/chunked_resume.ps1` processes so ROCm latency cannot accumulate inside
 one Python runtime; `scripts/train_reference.ps1` combines both for the
 reference recipe.

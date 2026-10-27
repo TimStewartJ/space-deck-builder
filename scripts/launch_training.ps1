@@ -9,6 +9,17 @@
     placement. On the project's i7-12700K host, Auto selects logical CPUs 0-15
     so training uses the P-cores instead of saturating the four E-cores.
 
+    The run has no window. Task Scheduler starts run_without_window.py with
+    the base interpreter's pythonw.exe, which joins a kill-on-close Job Object
+    and starts the PowerShell process with CREATE_NO_WINDOW; ending it, as
+    stopping the task does, ends the whole run. A console window would
+    otherwise open (on the project's machine, a Windows Terminal tab), and
+    closing it stops the run. Windows schedules a process tree without a
+    window onto the E-cores of a hybrid CPU even when the P-cores are idle, so
+    on a host whose P-cores are known, a hidden run must be restricted to
+    them; Auto does that, and a mask that includes E-cores is refused unless
+    ShowWindow is passed.
+
 .PARAMETER TrainArgs
     Command-line arguments appended to `python -m src train`.
 
@@ -20,6 +31,10 @@
 
 .PARAMETER ProcessorAffinityMask
     Auto, None, a decimal mask, or a hexadecimal mask such as 0xFFFF.
+
+.PARAMETER ShowWindow
+    Run in a visible console window instead. Closing that window stops the
+    run.
 
 .PARAMETER ReplaceExisting
     Replace an existing non-running task with the same name. Running tasks are
@@ -42,6 +57,7 @@ param(
     [ValidateSet("Normal", "AboveNormal", "High")]
     [string] $ProcessPriority = "Normal",
     [string] $ProcessorAffinityMask = "Auto",
+    [switch] $ShowWindow,
     [switch] $ReplaceExisting
 )
 
@@ -89,11 +105,41 @@ if (-not $python) {
         "Checked: $($pythonFailures -join '; ')"
     )
 }
+$starter = Join-Path $PSScriptRoot "run_without_window.py"
+$pythonw = $null
+if (-not $ShowWindow) {
+    # The base interpreter, not a virtual environment's launcher stub, so
+    # that stopping the task ends the starter itself.
+    $pythonw = (
+        & $python -c "import os, sys; print(os.path.join(sys.base_prefix, 'pythonw.exe'))"
+    ).Trim()
+    if (-not (Test-Path -LiteralPath $pythonw -PathType Leaf)) {
+        throw (
+            "$pythonw is missing, so the run cannot start without a window. " +
+            "Pass -ShowWindow to run in a console window."
+        )
+    }
+}
 $resolvedMask = Resolve-TrainingAffinityMask $ProcessorAffinityMask
 $affinityLabel = if ($null -eq $resolvedMask) {
     "all"
 } else {
     "0x{0:X}" -f $resolvedMask
+}
+$performanceMask = Get-PerformanceCoreMask
+if (
+    -not $ShowWindow -and
+    $null -ne $performanceMask -and
+    $null -ne $resolvedMask -and
+    ($resolvedMask -band (-bnot $performanceMask)) -ne 0
+) {
+    $performanceLabel = "0x{0:X}" -f $performanceMask
+    throw (
+        "Affinity $affinityLabel includes efficiency cores. Without a window, " +
+        "Windows runs the whole process tree on the efficiency cores even " +
+        "when the performance cores are idle. Use -ProcessorAffinityMask " +
+        "Auto ($performanceLabel) or pass -ShowWindow."
+    )
 }
 $taskLock = Enter-TrainingTaskLock -Name $Name
 try {
@@ -329,9 +375,17 @@ $encodedRunner = [Convert]::ToBase64String(
     [Text.Encoding]::Unicode.GetBytes($runner)
 )
 
-$action = New-ScheduledTaskAction `
-    -Execute "powershell.exe" `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedRunner"
+$runnerArguments = "-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encodedRunner"
+$starterErrors = $null
+$action = if ($ShowWindow) {
+    New-ScheduledTaskAction -Execute "powershell.exe" -Argument $runnerArguments
+} else {
+    $starterErrors = "$launchManifest.starter-error.txt"
+    $powershell = Join-Path $env:SystemRoot "System32\WindowsPowerShell\v1.0\powershell.exe"
+    New-ScheduledTaskAction `
+        -Execute $pythonw `
+        -Argument "`"$starter`" `"$starterErrors`" `"$powershell`" $runnerArguments"
+}
 $settings = New-ScheduledTaskSettingsSet `
     -Priority 4 `
     -AllowStartIfOnBatteries `
@@ -407,6 +461,12 @@ if (-not $started) {
         $startupFailure
     } else {
         "Startup handshake timed out."
+    }
+    if ($starterErrors -and (Test-Path -LiteralPath $starterErrors)) {
+        $cancellationMessage += (
+            " The windowless starter reported: " +
+            (Get-Content -LiteralPath $starterErrors -Raw).Trim()
+        )
     }
     $temporary = "$launchManifest.launcher-$PID.tmp"
     $backup = "$launchManifest.launcher-$PID.bak"
@@ -498,9 +558,10 @@ if (-not $started) {
     )
 }
 
+$windowLabel = if ($ShowWindow) { "visible" } else { "none" }
 Write-Host (
     "Launched '$Name' through Task Scheduler " +
-    "(priority=$ProcessPriority, affinity=$affinityLabel)."
+    "(priority=$ProcessPriority, affinity=$affinityLabel, window=$windowLabel)."
 )
 Write-Host "  log:    $log"
 Write-Host "  status: Get-ScheduledTask -TaskPath '\' -TaskName '$Name'"

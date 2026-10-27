@@ -89,6 +89,14 @@ execution context. Use `scripts\launch_training.ps1` (`-TrainArgs` for
 `python -m src train`, `-Command` for any other command with `{python}` as the
 interpreter placeholder) and stop runs with `scripts\stop_training.ps1`.
 
+Runs have no window: follow them through the log file the launcher prints and
+`Get-ScheduledTask -TaskName 'sdb_*'`. On this machine Windows schedules a
+process tree without a window onto the four efficiency cores even when the
+performance cores are idle, so keep the default `-ProcessorAffinityMask Auto`
+(the performance cores); the launcher refuses a mask that includes efficiency
+cores unless `-ShowWindow` is passed. With `-ShowWindow` the run opens in a
+console window (a Windows Terminal tab), and closing that window stops it.
+
 ### Self-Play Training
 ```bash
 python -m src train --self-play
