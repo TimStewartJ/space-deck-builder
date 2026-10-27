@@ -245,8 +245,8 @@ audit of `selfplay_seed0` started beside training at 03:09
 (from `2784f95`, at below-normal priority) and was stopped at 03:23, after 305
 of its 1,000 decisions were rolled out and journaled, when its memory and one
 ordinary training evaluation together brought committed memory past 70 GB of
-the machine's 73 GB limit. It finishes after all training, resuming from
-that journal. The audit of `selfplay_seed1` runs from 04:15 beside the last
-training lane (control seed 2), when no other job runs; `selfplay_seed2` is
-audited after all training. The audits' code, configuration and journal
-identity are unchanged.
+the machine's 73 GB limit. From 04:15 the audits run one at a time beside
+the last training lane (control seed 2), when no other job runs:
+`selfplay_seed1`, then `selfplay_seed0` resuming from that journal, then
+`selfplay_seed2`; any audit not finished when training ends finishes after
+it. The audits' code, configuration and journal identity are unchanged.
