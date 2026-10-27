@@ -6,7 +6,8 @@ Reads, under one runs directory:
   the champion, selfplay_seed1, selfplay_seed2, exploiter_seed<s> and
   control_seed<s>;
 - ``league/league.json``: the held-out league, and ``league/port_check.json``;
-- ``audit/audit_selfplay_seed<s>.json``: the purchase audits;
+- ``audit/audit_<checkpoint>.json``: the purchase audits (the three published
+  self-play seeds, and any optional ones);
 - each arm's run folder, whose logs name its per-update metrics files.
 
 Writes ``summary.json`` there and prints the tables the write-up uses. The
@@ -25,7 +26,7 @@ import re
 import statistics
 import sys
 
-T_975_DF2 = 4.302652729911275
+T_975 = {1: 12.706204736174698, 2: 4.302652729911275, 3: 3.182446305284263, 4: 2.776445105197799}
 SEEDS = (0, 1, 2)
 ARMS = {"exploiter": "exploit-selfplay-seed0", "control": "continue-selfplay-seed0"}
 CHAMPION = "selfplay_seed0@T0"
@@ -50,10 +51,11 @@ def win_rate(score: dict, player: str, opponent: str) -> float | None:
 
 
 def mean_interval(values: list[float]) -> dict:
+    """Mean and Student-t 95% interval; decision 0013 reads it with three seeds (df 2)."""
     mean = statistics.fmean(values)
     if len(values) < 2:
         return {"mean": mean, "low": None, "high": None, "n": len(values)}
-    half = (T_975_DF2 if len(values) == 3 else math.nan) * statistics.stdev(values) / math.sqrt(len(values))
+    half = T_975[len(values) - 1] * statistics.stdev(values) / math.sqrt(len(values))
     return {"mean": mean, "low": mean - half, "high": mean + half, "n": len(values)}
 
 
@@ -172,10 +174,13 @@ def summarize(runs: str) -> dict:
         }
 
     audits = {}
-    for seed in SEEDS:
-        audit = load(os.path.join(runs, "audit", f"audit_selfplay_seed{seed}.json"))
-        if audit:
-            audits[f"selfplay_seed{seed}"] = {"counts": audit["counts"], "summary": audit["summary"]}
+    for path in sorted(glob.glob(os.path.join(runs, "audit", "audit_*.json"))):
+        if path.endswith(".partial.json"):
+            continue
+        audit = load(path)
+        if audit and "summary" in audit:
+            label = os.path.splitext(os.path.basename(path))[0][len("audit_"):]
+            audits[label] = {"counts": audit["counts"], "summary": audit["summary"]}
 
     return {
         "protocol": "docs/decisions/0013-strength-yardstick.md",
@@ -185,7 +190,10 @@ def summarize(runs: str) -> dict:
             label: pooled for label, pooled in sorted(leagues.items())
         },
         "league_by_opponent": {
-            row["label"]: {name: cell["wins"] for name, cell in row["opponents"].items()}
+            row["label"]: {
+                name: {"wins": cell["wins"], "games": cell["games"]}
+                for name, cell in row["opponents"].items()
+            }
             for row in (league or {}).get("checkpoints", [])
         },
         "calibration": (league or {}).get("calibration"),
@@ -198,41 +206,112 @@ def _pct(value):
     return "n/a" if value is None else f"{100 * value:.1f}%"
 
 
+def _interval(stat: dict | None, signed: bool = False) -> str:
+    """A mean in points with its 95% interval, or n/a."""
+    if not stat:
+        return "n/a"
+    fmt = "{:+.1f}" if signed else "{:.1f}"
+    text = fmt.format(100 * stat["mean"])
+    if stat.get("low") is None:
+        return f"{text} (one seed)"
+    return f"{text} ({fmt.format(100 * stat['low'])} to {fmt.format(100 * stat['high'])})"
+
+
+def _points(value, se=None) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:+.2f}" + (f" ({se:.2f})" if se is not None else "")
+
+
 def print_report(summary: dict) -> None:
     verdict = summary["verdict"]
     if summary["seeds"]:
-        print("| Seed | E | C | E - C | Exploiter vs control | O exploiter | O control | L exploiter | L control |")
-        print("|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
+        print("## Exploiter versus control\n")
+        print("| Seed | E | C | E - C | Exploiter vs control | O exploiter | O control | L exploiter | L control | Exploiter training win rate, update 1 / last 25 |")
+        print("|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|")
         for seed, row in sorted(summary["seeds"].items()):
+            curve = row.get("exploiter_training_win_rate") or {}
             print(
                 f"| {seed} | {_pct(row['E'])} | {_pct(row['C'])} | {100 * row['E_minus_C']:+.1f} | "
                 f"{_pct(row['exploiter_vs_control'])} | {_pct(row['O_exploiter'])} | {_pct(row['O_control'])} | "
-                f"{_pct(row['L_exploiter'])} | {_pct(row['L_control'])} |"
+                f"{_pct(row['L_exploiter'])} | {_pct(row['L_control'])} | "
+                f"{_pct(curve.get('update_1'))} / {_pct(curve.get('last_25_updates'))} |"
             )
     if verdict:
-        d = verdict["E_minus_C"]
-        interval = (
-            f"{100 * d['low']:+.1f} to {100 * d['high']:+.1f}" if d["low"] is not None else "n/a"
-        )
+        state = "provisional" if verdict["provisional"] else "final"
+        print(f"\nVerdict ({state}, seeds {verdict['seeds']}); means in points with Student-t 95% intervals:\n")
+        print(f"- E - C: {_interval(verdict['E_minus_C'], signed=True)}")
+        print(f"- E: {_interval(verdict['E'])}; C: {_interval(verdict['C'])}")
+        print(f"- O exploiter: {_interval(verdict['O_exploiter'])}; O control: {_interval(verdict['O_control'])}")
+        print(f"- L exploiter: {_interval(verdict['L_exploiter'])}; L control: {_interval(verdict['L_control'])}")
         print(
-            f"\nverdict ({'provisional' if verdict['provisional'] else 'final'}, seeds {verdict['seeds']}): "
-            f"E - C mean {100 * d['mean']:+.1f} points (95% CI {interval}); exploitable={verdict['exploitable']} "
-            f"kind={verdict['kind']} control_helps={verdict['control_helps']}"
+            f"- exploitable: {verdict['exploitable']}; kind: {verdict['kind']}; "
+            f"control_helps: {verdict['control_helps']}"
         )
+
     if summary["league"]:
-        print("\n| Checkpoint | League wins | Win rate | 95% CI |")
-        print("|---|---:|---:|---|")
+        opponents = []
+        for cells in summary["league_by_opponent"].values():
+            opponents.extend(name for name in cells if name not in opponents)
+        print("\n## Held-out league\n")
+        print("| Checkpoint | " + " | ".join(opponents) + " | Pooled | 95% CI |")
+        print("|---|" + "---:|" * len(opponents) + "---:|---|")
         for label, pooled in summary["league"].items():
+            cells = summary["league_by_opponent"].get(label, {})
+            rates = [
+                _pct(cells[name]["wins"] / cells[name]["games"]) if name in cells else "n/a"
+                for name in opponents
+            ]
             low, high = pooled["win_rate_ci95"]
-            print(f"| {label} | {pooled['wins']}/{pooled['games']} | {_pct(pooled['win_rate'])} | {100 * low:.1f}-{100 * high:.1f}% |")
-    for label, audit in summary["audits"].items():
-        headline = audit["summary"]["all"]
-        print(
-            f"\n{label}: override {headline['override_gain_points']:+.2f} points "
-            f"(SE {headline['override_gain_se_points']:.2f}), clear mistakes "
-            f"{headline['clear_mistakes']}/{headline['decisions']}, search "
-            f"{headline['search_gain_points']:+.2f} (SE {headline['search_gain_se_points']:.2f})"
-        )
+            print(
+                f"| {label} | " + " | ".join(rates) +
+                f" | {_pct(pooled['win_rate'])} | {100 * low:.1f}-{100 * high:.1f}% |"
+            )
+        calibration = summary.get("calibration") or {}
+        if calibration:
+            rates = [
+                _pct(calibration[name]["win_rate"]) if name in calibration else "n/a"
+                for name in opponents
+            ]
+            print("| *each opponent vs Heuristic* | " + " | ".join(rates) + " | | |")
+        port = summary.get("port_check")
+        if port is not None:
+            print(f"\nPort check against the prototype: {'passed' if port['passed'] else 'FAILED'}")
+
+    if summary["audits"]:
+        print("\n## Purchase audit\n")
+        print("| Checkpoint | Decisions | Override gain (SE) | Overrides | Clear mistakes | Their mean gain | Search gain (SE) | Search differs | Skipped |")
+        print("|---|---:|---:|---:|---:|---:|---:|---:|---|")
+        for label, audit in summary["audits"].items():
+            headline = audit["summary"]["all"]
+            counts = audit["counts"]
+            skipped = ", ".join(
+                f"{key} {counts[key]}" for key in (
+                    "no_eligible_decision", "diverged", "search_greedy_mismatch", "search_choice_mismatch",
+                ) if counts.get(key)
+            ) or "none"
+            print(
+                f"| {label} | {headline['decisions']} | "
+                f"{_points(headline['override_gain_points'], headline['override_gain_se_points'])} | "
+                f"{_pct(headline['override_used_share'])} | "
+                f"{headline['clear_mistakes']} ({_pct(headline['clear_mistake_share'])}) | "
+                f"{_points(headline['clear_mistake_mean_gain_points'])} | "
+                f"{_points(headline['search_gain_points'], headline['search_gain_se_points'])} | "
+                f"{_pct(headline['search_differs_share'])} | {skipped} |"
+            )
+        bins = list(next(iter(summary["audits"].values()))["summary"]["by_turn_counter"])
+        print("\nOverride gain (SE) by turn counter, in points:\n")
+        print("| Checkpoint | " + " | ".join(f"turns {name} (decisions)" for name in bins) + " |")
+        print("|---|" + "---:|" * len(bins))
+        for label, audit in summary["audits"].items():
+            by_turn = audit["summary"]["by_turn_counter"]
+            print(
+                f"| {label} | " + " | ".join(
+                    f"{_points(by_turn[name]['override_gain_points'], by_turn[name]['override_gain_se_points'])} "
+                    f"({by_turn[name]['decisions']})"
+                    for name in bins
+                ) + " |"
+            )
 
 
 def main(argv: list[str]) -> int:
