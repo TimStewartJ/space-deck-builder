@@ -56,3 +56,16 @@ Override gain (SE) by turn counter, in points:
 | selfplay_seed0 | +0.64 (0.23) (179) | +0.24 (0.09) (242) | +0.37 (0.14) (270) | -0.02 (0.03) (309) |
 | selfplay_seed1 | +1.30 (0.42) (144) | +0.83 (0.22) (263) | +0.33 (0.15) (266) | +0.26 (0.13) (327) |
 | selfplay_seed2 | +0.39 (0.16) (181) | +0.37 (0.13) (276) | +0.27 (0.14) (254) | +0.55 (0.29) (289) |
+
+## Exploiter from random weights (decision 0014)
+
+| Seed | W: vs champion | O: vs seeds 1, 2 | L: league | Training win rate vs champion, update 1 / last 25 |
+|---:|---:|---:|---:|---|
+| 0 | 50.5% | 54.0% | 79.2% | 0.0% / 45.0% |
+| 1 | 51.3% | 54.3% | 80.2% | 0.0% / 46.5% |
+| 2 | 52.1% | 54.1% | 79.5% | 0.0% / 45.8% |
+
+Verdict (final, seeds [0, 1, 2]); means in points with Student-t 95% intervals:
+
+- W: 51.3 (49.4 to 53.3); O: 54.1 (53.8 to 54.5); L: 79.7 (78.4 to 80.9) (champion 79.2%)
+- exploitable: False; kind: None

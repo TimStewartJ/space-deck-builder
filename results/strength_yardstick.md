@@ -1,21 +1,21 @@
 # Strength yardstick: held-out league, purchase audit, exploiter versus control
 
-**Status:** Measures complete (2026-10-27). Decision 0013's fallback, an
-exploiter trained from random weights against a ladder of the champion's
-earlier checkpoints ([decision 0014](../docs/decisions/0014-ladder-exploiter.md)),
-started at 07:21 and was stopped at 08:50, at updates 275, 275 and 300 of
-400, when the console window hosting its runs was closed. It resumes from
-those checkpoints when relaunched, and its result will be added here.
-**Pre-registered outcome so far: not shown exploitable** (mean E - C +4.5
-points against a 5-point threshold), and **further training narrowly misses
-the "helps" bar** (mean C 54.8% against 55%).
+**Status:** Complete (2026-10-27). **Pre-registered outcome: not shown
+exploitable by either adversary.** An exploiter started from the champion
+beat it by +4.5 points more than the control did, against a 5-point
+threshold (decision 0013). The fallback, an exploiter trained from random
+weights against a ladder of the champion's earlier checkpoints
+([decision 0014](../docs/decisions/0014-ladder-exploiter.md)), beat it 51.3%
+of the time, against a 55% threshold. **Further training narrowly misses the
+"helps" bar** (mean C 54.8% against 55%).
 **Design:** [`docs/decisions/0013-strength-yardstick.md`](../docs/decisions/0013-strength-yardstick.md),
 committed before any data was generated (`c2e1a89`). Its dated amendments
 change only when things ran; each was made before the results it concerns
 existed or had been looked at.
 **Evidence:** [`strength_yardstick/`](strength_yardstick/), produced by
-[`run_arms.ps1`](strength_yardstick/run_arms.ps1) and
-[`run_measures.ps1`](strength_yardstick/run_measures.ps1), checked by
+[`run_arms.ps1`](strength_yardstick/run_arms.ps1),
+[`run_measures.ps1`](strength_yardstick/run_measures.ps1) and
+[`run_ladder.ps1`](strength_yardstick/run_ladder.ps1), checked by
 [`check_port.py`](strength_yardstick/check_port.py) and summarized by
 [`summarize.py`](strength_yardstick/summarize.py)
 ([`summary.md`](strength_yardstick/summary.md)).
@@ -23,12 +23,13 @@ existed or had been looked at.
 
 ## Results in brief
 
-- **No exploit of the champion was found by this adversary.** 400 updates of
-  training against the frozen champion beat it 59.3% of the time; 400
-  updates of the ordinary recipe beat it 54.8%. The difference, +4.5 points
-  (95% CI -1.0 to +9.9), misses the pre-registered 5-point threshold, so the
-  champion is not shown exploitable, and 0013's fallback adversary was
-  started; it is paused partway (see Status).
+- **No exploit of the champion was found.** 400 updates of training against
+  the frozen champion beat it 59.3% of the time; 400 updates of the ordinary
+  recipe beat it 54.8%. The difference, +4.5 points (95% CI -1.0 to +9.9),
+  misses the pre-registered 5-point threshold. The fallback adversary,
+  trained from random weights against the champion and five earlier
+  checkpoints of its own run, ended level with it: 51.3% (95% CI 49.4 to
+  53.3) against a 55% threshold.
 - **Both arms are stronger than the champion, and the exploiters are the
   strongest checkpoints measured.** Every arm checkpoint beats the champion in
   its seed's tournament and outscores it against held-out opponents
@@ -80,7 +81,7 @@ Everything ran through Task Scheduler on the RX 9070 with torch
 | Control arm | `c2e1a89` | preset `continue-selfplay-seed0`; this lane also scored seed 2 |
 | Exploiter arm | `a792c96` | preset `exploit-selfplay-seed0`; this lane scored seeds 0 and 1 |
 | League, port check and audits | `2784f95` | |
-| Fallback exploiter (decision 0014) | `761eb39` | preset `exploit-ladder-random`, one lane per seed; paused at updates 275, 275 and 300 of 400 (see Status) |
+| Fallback exploiter (decision 0014) | `761eb39` | preset `exploit-ladder-random`, one lane per seed, each scoring its own seed; interrupted and resumed (see Deviations) |
 
 The tournament code is the same at both scoring commits. Of what it imports,
 only `src/config.py` changed between them, gaining optional frozen-opponent
@@ -138,7 +139,8 @@ Exact wins of 4,000: E 2,373, 2,411 and 2,328; C 2,218, 2,135 and 2,222.
 - **Not shown exploitable.** The rule needs a mean E - C of at least 5 points
   with an interval that excludes zero; the mean is +4.5 points and the
   interval runs from -1.0 to +9.9. So "narrow or general" does not apply, and
-  0013's fallback (decision 0014) was started; it is paused partway.
+  0013's fallback (decision 0014) ran; it found no weakness either (see the
+  next section).
 - **More training does not pass the bar, narrowly.** The rule needs a mean C
   of at least 55% with its interval above 50%; the mean is 54.8%, with its
   interval (51.7% to 57.8%) above 50%.
@@ -184,6 +186,99 @@ arms differ, the exploiters buy fewer Blob Fighters than the controls (0.12
 to 0.19 fewer than the champion, against 0.01 to 0.09) and drop fewer Blob
 Wheels (0.06 to 0.11 fewer than the champion, against 0.23 to 0.29). With 400
 games per profile, differences below about 0.1 per game are within noise.
+
+## Fallback: exploiter from random weights
+
+Decision 0013 prescribes a fallback when the champion is not shown
+exploitable: an exploiter trained from random weights for 400 updates against
+a ladder of frozen opponents, under its own decision record.
+[Decision 0014](../docs/decisions/0014-ladder-exploiter.md) was committed
+(`761eb39`) before any of its runs. Each of three seeds trained from random
+weights with the exploiter's recipe, except that every training game was
+against one of six frozen opponents sampled uniformly, all playing their
+highest-scoring legal move: the champion's own training run at updates 25,
+50, 100, 200 and 300 ([`ladder/`](strength_yardstick/ladder/), with each
+file's source and SHA-256 beside it) and the champion. Each seed was then
+scored in a temperature-0 tournament with the champion, `selfplay_seed1` and
+`selfplay_seed2` (4,000 games per pairing, exact seat alternation;
+`ladder_score_seed*.json` in [`scores/`](strength_yardstick/scores/)), and
+after all training each played the held-out league
+([`league/league_ladder.json`](strength_yardstick/league/league_ladder.json)).
+
+| Seed | W: vs champion | O: vs seeds 1, 2 | L: league | Training win rate vs champion, update 1 / last 25 | Final gauntlet, wins of 15,000 |
+|---:|---:|---:|---:|---:|---:|
+| 0 | 50.5% | 54.0% | 79.2% | 0.0% / 45.0% | 14,397 |
+| 1 | 51.3% | 54.3% | 80.2% | 0.0% / 46.5% | 14,451 |
+| 2 | 52.1% | 54.1% | 79.5% | 0.0% / 45.8% | 14,453 |
+| Mean (t95) | 51.3% (49.4 to 53.3) | 54.1% (53.8 to 54.5) | 79.7% (78.4 to 80.9) | | |
+
+Exact wins of 4,000 against the champion: 2,022, 2,052 and 2,085.
+
+**Pre-registered verdict: not shown exploitable.** The rule needs a mean W of
+at least 55% with its interval above 50%; the mean is 51.3% and its interval
+runs from 49.4% to 53.3%. So "narrow or general" does not apply. Neither
+adversary found a weakness, and under decision 0014 no further fallback runs.
+
+**What the data show beyond the verdict.** Starting from random weights, all
+three seeds reached the champion's strength within its own budget of 400
+updates: each won at least half of its games against the champion, and each
+beat the other two published self-play checkpoints more often (54.0% to
+54.3%) than the champion did in the same tournaments (52.5% to 53.1%).
+Against the held-out opponents they scored 79.2% to 80.2% (79.7% on
+average), level with the champion's 79.2% and below the phase 1 arms
+(controls 81.6% to 82.7%, exploiters 82.9% to 84.0%). For comparison, the
+reference recipe's own three seeds, trained for the same 400 updates,
+produced the champion, a checkpoint level with it (`selfplay_seed2`) and a
+weaker one (`selfplay_seed1`). This is consistent with the exploiter-versus-
+control result that strong frozen opponents make a useful training signal,
+but it does not compare recipes fairly: the ladder is the output of a
+complete reference run, so these agents rest on twice its training compute.
+
+**Training against the ladder.** The learner's win rate in its training games
+against each rung (it samples its moves; every rung plays greedily), as the
+mean over the three seeds of the 25 updates ending at each update shown:
+
+| Opponent | Update 100 | 200 | 300 | 400 |
+|---|---:|---:|---:|---:|
+| The champion's run at update 25 | 62.3% | 73.9% | 77.5% | 79.2% |
+| at update 50 | 48.3% | 62.5% | 67.3% | 68.6% |
+| at update 100 | 37.7% | 51.8% | 56.9% | 57.7% |
+| at update 200 | 33.0% | 45.4% | 50.8% | 52.2% |
+| at update 300 | 29.7% | 40.8% | 46.3% | 48.1% |
+| The champion (update 400) | 28.6% | 39.7% | 44.2% | 45.7% |
+
+At update 1 the learners won none of their roughly 333 games against the
+champion in any seed. In these means each later rung was harder than the one
+before it at every update shown, and the gains slowed over the last 100
+updates as the learning rate fell toward 1e-5. Playing greedily, the final
+checkpoints won 50.5% to 52.1% against the champion, 4.8 to 6.4 points more
+than their sampled training games against it over the last 25 updates.
+
+**Diagnostics outside the rule.** The locked final gauntlet (sampled play,
+15,000 games against Random, Heuristic and Simple) gave 14,397, 14,451 and
+14,453 wins, about the controls' level (14,332 to 14,421) and below the
+exploiters' (14,501 to 14,559); against Heuristic they won 4,493, 4,546 and
+4,550 of 5,000. Each seed's tournament ratings, anchored at that seed's ladder
+exploiter = 1000:
+
+| Seed | Ladder exploiter | `selfplay_seed0` (champion) | `selfplay_seed1` | `selfplay_seed2` |
+|---:|---:|---:|---:|---:|
+| 0 | 1000 | 995 | 956 | 990 |
+| 1 | 1000 | 989 | 958 | 984 |
+| 2 | 1000 | 987 | 956 | 984 |
+
+**Held-out league.** Win rates against each opponent over 4,000 games at
+temperature 0, with the champion's row from the main league for comparison.
+This league ran from the worktree at `761eb39`; since the main league's
+`2784f95` its code changed only its default number of worker processes,
+which does not affect the counts.
+
+| Checkpoint | balanced | aggro | economy | scrapper | fortress | blobrush | Pooled (95% CI) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `ladder_seed1` | 77.5% | 84.5% | 78.0% | 78.0% | 78.7% | 84.7% | **80.2%** (79.7 to 80.7) |
+| `ladder_seed2` | 77.6% | 82.4% | 77.2% | 78.2% | 77.6% | 83.8% | **79.5%** (79.0 to 80.0) |
+| `ladder_seed0` | 76.2% | 82.8% | 76.3% | 77.2% | 78.8% | 84.2% | **79.2%** (78.7 to 79.8) |
+| `selfplay_seed0` (champion) | 77.1% | 83.0% | 77.8% | 76.4% | 77.3% | 83.6% | **79.2%** (78.7 to 79.7) |
 
 ## Held-out league
 
@@ -412,6 +507,19 @@ no override or clear-mistake call.
   legal purchase on which the one-turn search chooses something else. 0013
   counts those as eligible. `7d872d1` makes the code follow the record; on 40
   champion games it adds the 3 decisions the review found missing.
+- **The fallback was interrupted, then paused.** Its three lanes started at
+  07:21. At 08:50 all of its tasks stopped when the console window hosting
+  them was closed: Task Scheduler had opened each launch as a Windows Terminal
+  tab. The lanes resumed at 09:23 from their last completed chunks (seeds 0
+  and 1 from update 275, seed 2 from 300), whose checkpoints restore the
+  random-number and optimizer state; the updates trained after those
+  checkpoints were trained again, and only the later attempts' metrics count
+  (0014's amendment, `ea1a714`, committed before any fallback score existed).
+  From then on the runs had no window and were restricted to the performance
+  cores, as the training chunks had always been. All three finished training
+  by 10:12. GPU work then paused until 11:40 at the owner's request: seed 2
+  had been scored, the scoring of seeds 0 and 1 had just started and was
+  rerun from the beginning, and the league had not started.
 
 ## Side finding: the engine's rules differ from the rulebook
 
@@ -448,12 +556,12 @@ OR choice needs a change to the action space.
   are wide. Both pre-registered thresholds were missed narrowly (E - C +4.5
   against 5 points; C 54.8% against 55%); the verdicts are as the rule reads
   them, not evidence that the effects are absent.
-- **An exploiter is a lower bound.** It started from the champion's own
-  weights and trained for 400 updates; another adversary might find more.
-  This outcome is the condition for 0013's fallback, an exploiter from random
-  weights trained against a ladder of the champion's earlier checkpoints
-  ([decision 0014](../docs/decisions/0014-ladder-exploiter.md)), which was
-  started and is paused partway.
+- **An exploiter is a lower bound.** Two adversaries found nothing: one
+  started from the champion's weights and trained against it alone, the other
+  trained from random weights against a ladder of its own run
+  ([decision 0014](../docs/decisions/0014-ladder-exploiter.md)), each for 400
+  updates. A longer-trained or differently designed adversary might still
+  find a weakness.
 - **The held-out opponents are scripted and untuned,** and were designed by
   the agent that ran the 2026-09-30 audit. They are stronger than Heuristic
   but say nothing about strength against people.

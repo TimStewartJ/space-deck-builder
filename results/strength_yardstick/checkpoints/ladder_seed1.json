@@ -1,0 +1,8 @@
+﻿{
+    "source":  "D:\\sdb-yardstick-runs\\exploit-ladder-random_seed1\\chunks\\final_checkpoint.pth",
+    "seed":  1,
+    "arm":  "ladder",
+    "preset":  "exploit-ladder-random",
+    "commit":  "761eb39a4aaff2779ed069c8f5a5d23a3461c4be",
+    "sha256":  "30166d58b01b8754fd5af4ad984d2f2d66f2ad978996933072d11147abbadc11"
+}

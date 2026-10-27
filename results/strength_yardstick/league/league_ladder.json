@@ -1,0 +1,302 @@
+{
+  "protocol": "docs/decisions/0013-strength-yardstick.md",
+  "config": {
+    "models": [
+      "D:\\sdb-yardstick-runs\\checkpoints\\ladder_seed0.pth",
+      "D:\\sdb-yardstick-runs\\checkpoints\\ladder_seed1.pth",
+      "D:\\sdb-yardstick-runs\\checkpoints\\ladder_seed2.pth"
+    ],
+    "opponents": [
+      "balanced",
+      "aggro",
+      "economy",
+      "scrapper",
+      "fortress",
+      "blobrush"
+    ],
+    "games": 4000,
+    "seed": 101,
+    "batch_size": 256,
+    "calibration": false,
+    "calibration_games": 2000,
+    "calibration_seed": 103,
+    "workers": 6,
+    "device": "cuda"
+  },
+  "identity": {
+    "implementation": "held-out-league-v1",
+    "commit": "761eb39a4aaff2779ed069c8f5a5d23a3461c4be",
+    "dirty": false,
+    "device": "cuda"
+  },
+  "checkpoints": [
+    {
+      "model": "D:\\sdb-yardstick-runs\\checkpoints\\ladder_seed0.pth",
+      "label": "ladder_seed0",
+      "sha256": "39a7ac73e74692060c1f3298253f0b32b2e7b61793076ce20335261c513ba1ad",
+      "opponents": {
+        "balanced": {
+          "wins": 3050,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1590,
+          "mean_turns": 22.668,
+          "win_rate": 0.7625,
+          "win_rate_ci95": [
+            0.7490643449542084,
+            0.7754319473186982
+          ]
+        },
+        "aggro": {
+          "wins": 3310,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1706,
+          "mean_turns": 22.198,
+          "win_rate": 0.8275,
+          "win_rate_ci95": [
+            0.81547880722941,
+            0.8388927574158355
+          ]
+        },
+        "economy": {
+          "wins": 3054,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1583,
+          "mean_turns": 23.014,
+          "win_rate": 0.7635,
+          "win_rate_ci95": [
+            0.7500825207026377,
+            0.7764118526836895
+          ]
+        },
+        "scrapper": {
+          "wins": 3087,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1615,
+          "mean_turns": 22.64675,
+          "win_rate": 0.77175,
+          "win_rate_ci95": [
+            0.7584863572332207,
+            0.7844921853388268
+          ]
+        },
+        "fortress": {
+          "wins": 3150,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1643,
+          "mean_turns": 23.9275,
+          "win_rate": 0.7875,
+          "win_rate_ci95": [
+            0.7745500555222655,
+            0.7998982645861561
+          ]
+        },
+        "blobrush": {
+          "wins": 3369,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1739,
+          "mean_turns": 22.32775,
+          "win_rate": 0.84225,
+          "win_rate_ci95": [
+            0.8306263129543626,
+            0.8532169481138369
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 19020,
+        "games": 24000,
+        "win_rate": 0.7925,
+        "win_rate_ci95": [
+          0.7873229875242086,
+          0.7975833919020193
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-runs\\checkpoints\\ladder_seed1.pth",
+      "label": "ladder_seed1",
+      "sha256": "30166d58b01b8754fd5af4ad984d2f2d66f2ad978996933072d11147abbadc11",
+      "opponents": {
+        "balanced": {
+          "wins": 3101,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1618,
+          "mean_turns": 22.88425,
+          "win_rate": 0.77525,
+          "win_rate_ci95": [
+            0.7620537563361472,
+            0.7879180701328722
+          ]
+        },
+        "aggro": {
+          "wins": 3380,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1723,
+          "mean_turns": 22.33,
+          "win_rate": 0.845,
+          "win_rate_ci95": [
+            0.8334541514009307,
+            0.8558838327291752
+          ]
+        },
+        "economy": {
+          "wins": 3119,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1637,
+          "mean_turns": 23.09725,
+          "win_rate": 0.77975,
+          "win_rate_ci95": [
+            0.7666423289594312,
+            0.792320862519981
+          ]
+        },
+        "scrapper": {
+          "wins": 3118,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1636,
+          "mean_turns": 22.8935,
+          "win_rate": 0.7795,
+          "win_rate_ci95": [
+            0.7663873509896842,
+            0.7920763202113726
+          ]
+        },
+        "fortress": {
+          "wins": 3149,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1650,
+          "mean_turns": 24.04325,
+          "win_rate": 0.78725,
+          "win_rate_ci95": [
+            0.7742948631164942,
+            0.7996539367135723
+          ]
+        },
+        "blobrush": {
+          "wins": 3386,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1735,
+          "mean_turns": 22.412,
+          "win_rate": 0.8465,
+          "win_rate_ci95": [
+            0.8349971266150285,
+            0.8573379791852085
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 19253,
+        "games": 24000,
+        "win_rate": 0.8022083333333333,
+        "win_rate_ci95": [
+          0.7971206103807658,
+          0.8071993283626004
+        ],
+        "complete": true
+      }
+    },
+    {
+      "model": "D:\\sdb-yardstick-runs\\checkpoints\\ladder_seed2.pth",
+      "label": "ladder_seed2",
+      "sha256": "ad7cd01baf60b7f56065cc5552abcedaefd092ca664966f6e0de5ee828f8a475",
+      "opponents": {
+        "balanced": {
+          "wins": 3104,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1629,
+          "mean_turns": 22.6735,
+          "win_rate": 0.776,
+          "win_rate_ci95": [
+            0.762818367695524,
+            0.7886520196085609
+          ]
+        },
+        "aggro": {
+          "wins": 3297,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1698,
+          "mean_turns": 22.17925,
+          "win_rate": 0.82425,
+          "win_rate_ci95": [
+            0.8121455296314101,
+            0.8357322713952186
+          ]
+        },
+        "economy": {
+          "wins": 3090,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1630,
+          "mean_turns": 22.9985,
+          "win_rate": 0.7725,
+          "win_rate_ci95": [
+            0.7592506913387315,
+            0.7852264120683813
+          ]
+        },
+        "scrapper": {
+          "wins": 3129,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1656,
+          "mean_turns": 22.69325,
+          "win_rate": 0.78225,
+          "win_rate_ci95": [
+            0.7691924834418861,
+            0.7947659108210775
+          ]
+        },
+        "fortress": {
+          "wins": 3104,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1641,
+          "mean_turns": 23.998,
+          "win_rate": 0.776,
+          "win_rate_ci95": [
+            0.762818367695524,
+            0.7886520196085609
+          ]
+        },
+        "blobrush": {
+          "wins": 3351,
+          "games": 4000,
+          "first_seat_games": 2000,
+          "first_seat_wins": 1732,
+          "mean_turns": 22.22175,
+          "win_rate": 0.83775,
+          "win_rate_ci95": [
+            0.826001532119657,
+            0.8488503639381497
+          ]
+        }
+      },
+      "pooled": {
+        "wins": 19075,
+        "games": 24000,
+        "win_rate": 0.7947916666666667,
+        "win_rate_ci95": [
+          0.7896353193125999,
+          0.7998536599524376
+        ],
+        "complete": true
+      }
+    }
+  ],
+  "calibration": {}
+}

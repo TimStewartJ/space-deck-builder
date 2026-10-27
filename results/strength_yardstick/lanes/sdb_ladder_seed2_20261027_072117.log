@@ -1,0 +1,28 @@
+[run_ladder] seeds=2 commit=761eb39a4aaff2779ed069c8f5a5d23a3461c4be runs=D:\sdb-yardstick-runs
+[run_ladder] 2026-10-27T07:21:18 train exploit-ladder-random seed 2 in D:\sdb-yardstick-runs\exploit-ladder-random_seed2
+[train_reference] bootstrap 0 -> 25; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\bootstrap_0_to_25_20261027_072118.log
+[chunked_resume:reference_exploit_ladder_random_seed2] start=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\bootstrap_models\ppo_agent_1027_0733_upd25_wins1999.pth current=25 target=400 chunk=25
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk start: 25 -> 50; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\upd25_to_50_20261027_073405.log
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk complete: update 50
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk start: 50 -> 75; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\upd50_to_75_20261027_073932.log
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk complete: update 75
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk start: 75 -> 100; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\upd75_to_100_20261027_074558.log
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk complete: update 100
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk start: 100 -> 125; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\upd100_to_125_20261027_075454.log
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk complete: update 125
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk start: 125 -> 150; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\upd125_to_150_20261027_080111.log
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk complete: update 150
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk start: 150 -> 175; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\upd150_to_175_20261027_081049.log
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk complete: update 175
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk start: 175 -> 200; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\upd175_to_200_20261027_081751.log
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk complete: update 200
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk start: 200 -> 225; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\upd200_to_225_20261027_082357.log
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk complete: update 225
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk start: 225 -> 250; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\upd225_to_250_20261027_083013.log
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk complete: update 250
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk start: 250 -> 275; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\upd250_to_275_20261027_083649.log
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk complete: update 275
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk start: 275 -> 300; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\upd275_to_300_20261027_084342.log
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk complete: update 300
+[chunked_resume:reference_exploit_ladder_random_seed2] chunk start: 300 -> 325; log=D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\upd300_to_325_20261027_085024.log
+^C

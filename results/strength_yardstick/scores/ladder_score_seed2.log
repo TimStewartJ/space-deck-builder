@@ -1,0 +1,23 @@
+Participants (4): ladder_seed2@T0, selfplay_seed0@T0, selfplay_seed1@T0, selfplay_seed2@T0
+Running 6 pairings x 4000 games = 24000 total games
+Using 16 workers running pairings in parallel
+
+  [1/6] selfplay_seed1@T0 vs selfplay_seed2@T0: 1814/4000 (45%)  (162.4s)
+  [2/6] selfplay_seed0@T0 vs selfplay_seed2@T0: 2033/4000 (51%)  (162.5s)
+  [3/6] ladder_seed2@T0 vs selfplay_seed2@T0: 2103/4000 (53%)  (165.8s)
+  [4/6] selfplay_seed0@T0 vs selfplay_seed1@T0: 2180/4000 (55%)  (168.8s)
+  [5/6] ladder_seed2@T0 vs selfplay_seed0@T0: 2085/4000 (52%)  (169.3s)
+  [6/6] ladder_seed2@T0 vs selfplay_seed1@T0: 2228/4000 (56%)  (169.3s)
+
+Games complete in 169.7s
+
+============================================================
+ELO LEADERBOARD
+============================================================
+Rank  Name               Elo     W     L   Win%
+------------------------------------------------------------
+1     ladder_seed2@T0   1000  6416  5584  53.5%
+2     selfplay_seed0@T0    987  6128  5872  51.1%
+3     selfplay_seed2@T0    984  6050  5950  50.4%
+4     selfplay_seed1@T0    956  5406  6594  45.1%
+============================================================

@@ -1,0 +1,16 @@
+[ladder-finish] 2026-10-27T11:40:52 waiting for sdb_ladder_seed0, sdb_ladder_seed1, sdb_ladder_seed2
+[ladder-finish] 2026-10-27T11:44:00 start: training and scores, filling any gap
+[run_ladder] seeds=0,1,2 commit=761eb39a4aaff2779ed069c8f5a5d23a3461c4be runs=D:\sdb-yardstick-runs
+[run_ladder] 2026-10-27T11:44:00 train exploit-ladder-random seed 0 in D:\sdb-yardstick-runs\exploit-ladder-random_seed0
+[train_reference] already complete: D:\sdb-yardstick-runs\exploit-ladder-random_seed0\chunks\final_checkpoint.pth
+[run_ladder] 2026-10-27T11:44:01 train exploit-ladder-random seed 1 in D:\sdb-yardstick-runs\exploit-ladder-random_seed1
+[train_reference] already complete: D:\sdb-yardstick-runs\exploit-ladder-random_seed1\chunks\final_checkpoint.pth
+[run_ladder] 2026-10-27T11:44:01 train exploit-ladder-random seed 2 in D:\sdb-yardstick-runs\exploit-ladder-random_seed2
+[train_reference] already complete: D:\sdb-yardstick-runs\exploit-ladder-random_seed2\chunks\final_checkpoint.pth
+[run_ladder] 2026-10-27T11:44:01 done
+[ladder-finish] 2026-10-27T11:44:01 done: training and scores, filling any gap
+[ladder-finish] 2026-10-27T11:44:01 start: held-out league of the ladder checkpoints
+[run_ladder] 2026-10-27T11:44:01 commit=761eb39a4aaff2779ed069c8f5a5d23a3461c4be league of 3 checkpoints
+[run_ladder] 2026-10-27T11:50:46 done
+[ladder-finish] 2026-10-27T11:50:46 done: held-out league of the ladder checkpoints
+[ladder-finish] 2026-10-27T11:50:47 all stages finished
