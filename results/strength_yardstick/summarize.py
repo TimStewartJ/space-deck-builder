@@ -73,8 +73,13 @@ def read_text(path: str) -> str:
 
 
 def training_curve(run_root: str, frozen: str = "frozen:selfplay_seed0") -> dict | None:
-    """Per-update rollout win rate against the frozen champion, from a run's metrics."""
-    logs = glob.glob(os.path.join(run_root, "**", "*.log"), recursive=True)
+    """Per-update rollout win rate against the frozen champion, from a run's metrics.
+
+    Chunk logs are read in name order, which is chronological because their
+    names end in a timestamp, so a rerun chunk's rows replace those of the
+    attempt it repeats.
+    """
+    logs = sorted(glob.glob(os.path.join(run_root, "**", "*.log"), recursive=True), key=os.path.basename)
     metrics_files = []
     for log in logs:
         for line in read_text(log).splitlines():
