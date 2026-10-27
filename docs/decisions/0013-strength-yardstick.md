@@ -238,3 +238,12 @@ While the league ran beside the trainings, their evaluation workers stalled
 for minutes, and one interim evaluation timed out and ended its chunk
 (exploiter seed 0, updates 100 to 125). That chunk was rerun from its starting
 checkpoint, which restores the random-number and optimizer state.
+
+**2026-10-27, audits, continued.** Made before any audit result was computed
+or looked at. The audit of `selfplay_seed0` started beside training at 03:09
+(from `2784f95`, at below-normal priority) and was stopped at 03:23, after 305
+of its 1,000 decisions were rolled out and journaled, when its memory and one
+ordinary training evaluation together brought committed memory past 70 GB of
+the machine's 73 GB limit. The audits finish after all training, resuming
+from that journal; the audit's code, configuration and journal identity are
+unchanged.
