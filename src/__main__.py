@@ -448,6 +448,43 @@ def _build_distill_parser(sub: argparse._SubParsersAction):
     return p
 
 
+def _build_league_parser(sub: argparse._SubParsersAction):
+    from src.ai.held_out_agents import HELD_OUT_STYLES
+    from src.ppo.league import LeagueConfig
+
+    defaults = LeagueConfig(calibration=True)
+    p = sub.add_parser(
+        "league",
+        help="Play checkpoints against the held-out scripted opponents",
+        description=(
+            "Held-out league of docs/decisions/0013-strength-yardstick.md: each "
+            "checkpoint plays every held-out opponent at temperature 0 with exact "
+            "seat alternation. Finished matchups are journaled next to the output, "
+            "so re-running resumes."
+        ),
+    )
+    p.add_argument("--models", nargs="*", default=[], metavar="CHECKPOINT",
+                   help="Checkpoints to measure")
+    p.add_argument("--opponents", type=str, default=",".join(defaults.opponents),
+                   help=f"Comma-separated held-out opponents (default: all of {', '.join(HELD_OUT_STYLES)})")
+    p.add_argument("--games", type=int, default=defaults.games,
+                   help=f"Games per checkpoint and opponent (default: {defaults.games})")
+    p.add_argument("--seed", type=int, default=defaults.seed,
+                   help=f"Master deal seed (default: {defaults.seed})")
+    p.add_argument("--batch-size", type=int, default=defaults.batch_size,
+                   help=f"Games in flight per process (default: {defaults.batch_size})")
+    p.add_argument("--calibration", action="store_true",
+                   help=(f"Also play each held-out opponent against Heuristic "
+                         f"({defaults.calibration_games} games, deal seed {defaults.calibration_seed})"))
+    p.add_argument("--workers", type=int, default=defaults.workers,
+                   help=f"Matchups played in parallel processes (default: {defaults.workers})")
+    p.add_argument("--simulation-device", type=str, default=defaults.device,
+                   help="Device for checkpoint inference")
+    p.add_argument("--output-json", type=str, required=True,
+                   help="League summary; its .journal.jsonl records finished matchups")
+    return p
+
+
 def build_cli_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     """Build the unified CLI parser and return it with the train subparser."""
     parser = argparse.ArgumentParser(
@@ -464,6 +501,7 @@ def build_cli_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser
     _build_search_eval_parser(sub)
     _build_search_selfplay_parser(sub)
     _build_distill_parser(sub)
+    _build_league_parser(sub)
     return parser, train_parser
 
 
@@ -510,6 +548,29 @@ def main(argv=None):
         _run_search_selfplay(args)
     elif args.command == "distill":
         _run_distill(args)
+    elif args.command == "league":
+        _run_league(args)
+
+
+def _run_league(args):
+    """Play checkpoints against the held-out opponents and write the league table."""
+    from src.ppo.league import LeagueConfig, run_league
+
+    try:
+        config = LeagueConfig(
+            models=tuple(args.models),
+            opponents=tuple(name.strip() for name in args.opponents.split(",") if name.strip()),
+            games=args.games,
+            seed=args.seed,
+            batch_size=args.batch_size,
+            calibration=args.calibration,
+            workers=args.workers,
+            device=args.simulation_device,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
+    run_league(config, args.output_json)
 
 
 def _run_search_selfplay(args):
