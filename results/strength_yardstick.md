@@ -19,6 +19,14 @@ existed or had been looked at.
 [`check_port.py`](strength_yardstick/check_port.py) and summarized by
 [`summarize.py`](strength_yardstick/summarize.py)
 ([`summary.md`](strength_yardstick/summary.md)).
+**Checkpoints:** the nine arm and fallback checkpoints and the five ladder
+rungs, with SHA-256s in [`ARTIFACTS.sha256`](strength_yardstick/ARTIFACTS.sha256),
+are published as `strength_yardstick-checkpoints.zip` in the
+`strength-yardstick/2026-10-27` release. Restore them beside their JSON
+descriptions with
+`python scripts/release_artifacts.py fetch --tag strength-yardstick/2026-10-27 --bundle strength_yardstick-checkpoints --dest results/strength_yardstick`.
+The training runs, with a checkpoint for every update, and the run logs are
+archived off-repo under `D:\space-deck-builder-archive\strength-yardstick-20261027`.
 **Protocol:** [`docs/eval_protocol.md`](../docs/eval_protocol.md) v0.2.
 
 ## Results in brief
