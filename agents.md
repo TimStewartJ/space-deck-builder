@@ -289,9 +289,10 @@ The held-out league and the purchase audit (protocol `v0.2`, decision 0013)
 measure strength against opponents no agent trains on and the win probability
 purchases give away. Both journal finished work and resume when re-run; launch
 large runs through `scripts/launch_training.ps1 -Command`. Each league worker
-is a separate GPU process, and on the project's Windows/ROCm machine more than
-about six GPU processes at once stall each other, so keep `--workers` at 6 and
-do not run the league or an audit beside training.
+is a separate process that uses the GPU and keeps about three CPU cores busy.
+On the project's machine (20 logical CPUs) six workers use all of the CPU, and
+twelve finished no 4,000-game matchup in 30 minutes, so keep `--workers` at 6
+and do not run the league or an audit beside training.
 
 ```bash
 # Every checkpoint against the six held-out opponents, 4,000 games each

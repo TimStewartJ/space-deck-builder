@@ -51,8 +51,9 @@ class LeagueConfig:
     calibration: bool = False
     calibration_games: int = CALIBRATION_GAMES
     calibration_seed: int = CALIBRATION_SEED
-    # Each worker is one GPU process; more than about six stall each other on
-    # the project's Windows/ROCm machine. The count does not affect results.
+    # Each worker uses the GPU and about three CPU cores. On the project's
+    # machine (20 logical CPUs) six use all of the CPU, and twelve finished no
+    # 4,000-game matchup in 30 minutes. The count does not affect results.
     workers: int = 6
     device: str = "cuda"
 
