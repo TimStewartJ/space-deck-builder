@@ -352,6 +352,33 @@ class TrainingPreset:
         return asdict(self)
 
 
+# The published self-play champion that the strength yardstick
+# (docs/decisions/0013-strength-yardstick.md) trains and measures against,
+# relative to the repository root.
+CHAMPION_CHECKPOINT = "results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth"
+
+# Size, schedule, and evaluation settings shared by every vector-engine
+# recipe derived from the reference self-play league.
+_REFERENCE_RUN_DEFAULTS: dict[str, Any] = {
+    "engine": "vec",
+    "vec_threads": 4,
+    "vec_max_active_snapshots": 3,
+    "episodes": 2000,
+    "updates": 400,
+    "eval_every": 25,
+    "eval_games": 3200,
+    "num_workers": 16,
+    "opponents": "random,heuristic,simple",
+}
+
+_REFERENCE_SELFPLAY_DEFAULTS: dict[str, Any] = {
+    **_REFERENCE_RUN_DEFAULTS,
+    "self_play": True,
+    "self_play_ratio": 0.5,
+    "self_play_schedule": "constant",
+    "pfsp": "variance",
+}
+
 TRAINING_PRESETS: dict[str, TrainingPreset] = {
     "reference-selfplay": TrainingPreset(
         name="reference-selfplay",
@@ -360,26 +387,29 @@ TRAINING_PRESETS: dict[str, TrainingPreset] = {
             "400 updates x 2,000 episodes, fixed opponents plus constant 50% "
             "variance-PFSP self-play with three active snapshots"
         ),
-        train_defaults={
-            "engine": "vec",
-            "vec_threads": 4,
-            "vec_max_active_snapshots": 3,
-            "episodes": 2000,
-            "updates": 400,
-            "eval_every": 25,
-            "eval_games": 3200,
-            "num_workers": 16,
-            "opponents": "random,heuristic,simple",
-            "self_play": True,
-            "self_play_ratio": 0.5,
-            "self_play_schedule": "constant",
-            "pfsp": "variance",
-        },
+        train_defaults=dict(_REFERENCE_SELFPLAY_DEFAULTS),
         chunk_size=25,
         interim_eval_games=3200,
         final_eval_games=15000,
         eval_num_workers=16,
         results="results/optimized_selfplay_baseline.md",
+    ),
+    "continue-selfplay-seed0": TrainingPreset(
+        name="continue-selfplay-seed0",
+        description=(
+            "Control arm of the exploiter experiment: the reference self-play "
+            "recipe for another 400 updates, starting from the published "
+            "selfplay_seed0 weights with a fresh optimizer"
+        ),
+        train_defaults={
+            **_REFERENCE_SELFPLAY_DEFAULTS,
+            "model_path": CHAMPION_CHECKPOINT,
+        },
+        chunk_size=25,
+        interim_eval_games=3200,
+        final_eval_games=15000,
+        eval_num_workers=16,
+        results="docs/decisions/0013-strength-yardstick.md",
     ),
 }
 
