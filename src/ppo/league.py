@@ -13,7 +13,9 @@ Calibration plays each held-out opponent against Heuristic (2,000 games, deal
 seed 103, the held-out opponent first on even indices) with no network.
 
 Finished matchups are appended to ``<output>.journal.jsonl``, so an
-interrupted league resumes where it stopped.
+interrupted league resumes where it stopped. The journal's first line records
+the implementation, the source commit and the inference device; a league
+refuses to resume a journal written by different code or on another device.
 """
 from __future__ import annotations
 
@@ -28,6 +30,7 @@ from dataclasses import asdict, dataclass
 
 from src.ai.held_out_agents import HELD_OUT_STYLES, held_out_agent_factory
 
+LEAGUE_IMPLEMENTATION = "held-out-league-v1"
 LEAGUE_GAMES = 4000
 LEAGUE_SEED = 101
 LEAGUE_BATCH_SIZE = 256
@@ -232,7 +235,8 @@ def wilson(wins: int, games: int) -> list[float]:
     return list(wilson_interval(wins, games))
 
 
-def summarize(config: LeagueConfig, records: list[dict], models: list[dict]) -> dict:
+def summarize(config: LeagueConfig, records: list[dict], models: list[dict],
+              identity: dict | None = None) -> dict:
     """League table per checkpoint plus the optional calibration table."""
     by_key = {_task_key(record): record for record in records}
     checkpoints = []
@@ -278,6 +282,7 @@ def summarize(config: LeagueConfig, records: list[dict], models: list[dict]) -> 
     return {
         "protocol": "docs/decisions/0013-strength-yardstick.md",
         "config": {key: (list(value) if isinstance(value, tuple) else value) for key, value in asdict(config).items()},
+        "identity": identity,
         "checkpoints": checkpoints,
         "calibration": calibration,
     }
@@ -293,6 +298,18 @@ def _write_json(path: str, payload: dict) -> None:
     os.replace(temporary, path)
 
 
+def league_identity(config: LeagueConfig) -> dict:
+    """What a journal's records depend on besides each matchup's own key."""
+    from src.config import DeviceConfig
+    from src.utils.source_revision import source_revision
+
+    return {
+        "implementation": LEAGUE_IMPLEMENTATION,
+        **source_revision(),
+        "device": DeviceConfig.resolve(config.device),
+    }
+
+
 def run_league(config: LeagueConfig, output_json: str, log_fn=print) -> dict:
     """Play every missing matchup, journal it, and write the league summary."""
     models = []
@@ -304,11 +321,23 @@ def run_league(config: LeagueConfig, output_json: str, log_fn=print) -> dict:
             "label": os.path.splitext(os.path.basename(path))[0],
             "sha256": file_sha256(path),
         })
+    identity = league_identity(config)
     journal = f"{output_json}.journal.jsonl"
     records: list[dict] = []
     if os.path.exists(journal):
         with open(journal, encoding="utf-8") as fh:
-            records = [json.loads(line) for line in fh if line.strip()]
+            lines = [json.loads(line) for line in fh if line.strip()]
+        if not lines or lines[0].get("identity") != identity:
+            found = lines[0].get("identity") if lines else None
+            raise ValueError(
+                f"existing journal {journal} was written by {found}, not {identity}; "
+                "use a new output path to measure with this code and device"
+            )
+        records = lines[1:]
+    else:
+        os.makedirs(os.path.dirname(os.path.abspath(journal)), exist_ok=True)
+        with open(journal, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps({"identity": identity}) + "\n")
     done = {_task_key(record) for record in records}
 
     tasks = []
@@ -345,7 +374,7 @@ def run_league(config: LeagueConfig, output_json: str, log_fn=print) -> dict:
             f"  {name:>24} vs {result['opponent']:<9} {result['wins']}/{result['games']} "
             f"= {result['wins'] / result['games']:.4f}  ({time.perf_counter() - started:.0f}s)"
         )
-        _write_json(output_json, summarize(config, records, models))
+        _write_json(output_json, summarize(config, records, models, identity))
 
     if tasks and config.workers == 1:
         for task in tasks:
@@ -355,7 +384,7 @@ def run_league(config: LeagueConfig, output_json: str, log_fn=print) -> dict:
         with context.Pool(processes=min(config.workers, len(tasks)), maxtasksperchild=1) as pool:
             for result in pool.imap_unordered(_worker, tasks):
                 record(result)
-    summary = summarize(config, records, models)
+    summary = summarize(config, records, models, identity)
     _write_json(output_json, summary)
     for checkpoint in summary["checkpoints"]:
         pooled = checkpoint["pooled"]

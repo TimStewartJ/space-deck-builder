@@ -155,3 +155,26 @@ def test_league_plays_exact_seats_repeatably_and_resumes(setup, tmp_path, monkey
     monkeypatch.setattr(league, "run_task", fail)
     resumed = run_league(config, str(output), log_fn=lambda message: None)
     assert resumed == summary
+
+
+def test_league_journal_records_its_identity_and_refuses_other_code(tmp_path, monkeypatch):
+    from src.utils import source_revision as revision
+
+    config = LeagueConfig(
+        opponents=("aggro",), calibration=True, calibration_games=2, workers=1, device="cpu",
+    )
+    output = tmp_path / "league.json"
+
+    summary = run_league(config, str(output), log_fn=lambda message: None)
+
+    lines = (tmp_path / "league.json.journal.jsonl").read_text(encoding="utf-8").splitlines()
+    identity = json.loads(lines[0])["identity"]
+    assert identity == summary["identity"] == league.league_identity(config)
+    assert identity["implementation"] == league.LEAGUE_IMPLEMENTATION
+    assert identity["device"] == "cpu"
+    assert set(identity) == {"implementation", "commit", "dirty", "device"}
+    assert len(lines) == 2
+
+    monkeypatch.setattr(revision, "source_revision", lambda: {"commit": "0" * 40, "dirty": False})
+    with pytest.raises(ValueError, match="new output path"):
+        run_league(config, str(output), log_fn=lambda message: None)

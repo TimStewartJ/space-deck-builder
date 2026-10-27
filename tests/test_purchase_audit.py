@@ -11,17 +11,19 @@ import numpy as np
 import pytest
 
 from src.config import DataConfig
+from src.encoding.action_encoder import END_TURN_INDEX
 from src.search import purchase_audit
 from src.search.purchase_audit import (
     AuditConfig,
     decision_measures,
+    play_greedy_selfplay,
     rollout_wins,
     run_audit,
     sample_decisions,
     summarize_records,
     target_index,
 )
-from src.search.turn_search import PolicyValueEvaluator
+from src.search.turn_search import PolicyValueEvaluator, TurnSearch, TurnSearchConfig
 from src.search.uplift import _load_model
 from src.search.vector_root import SearchRootBuilder
 from src.utils.logger import set_disabled
@@ -43,10 +45,20 @@ def setup():
 
 
 @pytest.fixture(scope="module")
-def sampled(setup):
+def search(setup):
+    _, registry, rules, model, _ = setup
+    turn_search = TurnSearch(
+        model, rules, registry.card_index_map, device="cpu",
+        config=TurnSearchConfig(budget=64, max_candidates=8, seed=0),
+    )
+    return lambda games, contexts: [int(result.action) for result in turn_search.choose_many(games, contexts=contexts)]
+
+
+@pytest.fixture(scope="module")
+def sampled(setup, search):
     cards, registry, _, _, evaluator = setup
     config = AuditConfig(model_path=CHECKPOINT, decisions=3, rollouts=8, device="cpu")
-    decisions, counts = sample_decisions(config, evaluator, cards, registry, log_fn=lambda message: None)
+    decisions, counts = sample_decisions(config, evaluator, cards, registry, search, log_fn=lambda message: None)
     return decisions, counts
 
 
@@ -128,10 +140,62 @@ def test_sampled_decisions_are_eligible_purchases(setup, sampled):
         game = decision["game"]
         assert not game.is_game_over
         assert game.current_player.get_current_pending_set() is None
-        assert len(decision["candidates"]) >= 2
+        if len(decision["candidates"]) < 2:
+            assert decision["first_pass_search"] not in (None, *decision["candidates"])
+        else:
+            assert decision["first_pass_search"] is None
         assert decision["greedy"] in decision["candidates"]
         assert any(buy_offset <= action < buy_offset + len(registry.card_names) for action in decision["candidates"])
         assert 1 <= decision["target"] <= decision["eligible"]
+
+
+def test_single_purchase_decisions_are_eligible_when_the_search_differs(setup):
+    cards, registry, _, _, evaluator = setup
+    num_cards = len(registry.card_names)
+    buy_offset = 3 + num_cards
+    asked = []
+
+    def agreeing(games, contexts):
+        actions = []
+        for game, context in zip(games, contexts):
+            legal = np.flatnonzero(context.mask)
+            purchases = [int(a) for a in legal if buy_offset <= a < buy_offset + num_cards]
+            assert len(purchases) == 1 and not game.is_game_over
+            asked.append(purchases[0])
+            actions.append(purchases[0])
+        return actions
+
+    def differing(games, contexts):
+        return [END_TURN_INDEX] * len(games)
+
+    indices = list(range(12))
+    agree = play_greedy_selfplay(evaluator, cards, registry, indices, 20260930, search=agreeing)
+    differ = play_greedy_selfplay(evaluator, cards, registry, indices, 20260930, search=differing)
+
+    assert asked
+    assert sum(slot.count for slot in differ.values()) == sum(slot.count for slot in agree.values()) + len(asked)
+    extra = []
+    for index in indices:
+        assert all(action is None for action in agree[index].search_actions)
+        kept = set(agree[index].eligible_steps)
+        assert kept <= set(differ[index].eligible_steps)
+        for position, step in enumerate(differ[index].eligible_steps):
+            if step not in kept:
+                assert differ[index].search_actions[position] == END_TURN_INDEX
+                extra.append((index, position))
+    assert len(extra) == len(asked)
+
+    index, position = extra[0]
+    replay = play_greedy_selfplay(
+        evaluator, cards, registry, indices, 20260930, {index: differ[index].eligible_steps[position]},
+    )
+    snapshot = replay[index].snapshot
+    assert snapshot["fingerprint"] == differ[index].fingerprints[position]
+    assert len(snapshot["candidates"]) == 1
+    assert snapshot["greedy"] == snapshot["candidates"][0]
+
+    with pytest.raises(ValueError, match="one-turn search"):
+        play_greedy_selfplay(evaluator, cards, registry, indices[:1], 20260930)
 
 
 def test_rollouts_finish_and_repeat_a_duplicated_candidate(setup, sampled):
@@ -197,6 +261,9 @@ def test_run_audit_writes_records_and_resumes(tmp_path, monkeypatch):
 
     assert len(payload["records"]) == 2
     assert payload["counts"]["unfinished_rollouts"] == 0
+    assert payload["identity"]["implementation"] == "purchase-audit-v2"
+    assert payload["identity"]["device"] == "cpu"
+    assert {"commit", "dirty"} <= set(payload["identity"])
     for record in payload["records"]:
         assert len(record["wins_a"]) == len(record["candidates"]) == len(record["paired_sd"])
         assert all(0 <= wins <= 2 for wins in record["wins_a"] + record["wins_b"])

@@ -6,16 +6,23 @@ The protocol is fixed by docs/decisions/0013-strength-yardstick.md.
    ``game_seed(seed, index)``, seat A first on even indices. A decision is
    eligible when the acting player has no pending choice, a purchase is
    legal, the greedy move is a purchase or END_TURN, and there are at least
-   two candidates: every legal purchase and END_TURN when it is legal after
-   the production suppression.
-2. **Sampling.** One decision per game, uniform among that game's eligible
-   decisions of both seats. A first pass plays every game to the end and
-   counts them; the target comes from a hash of the master seed and game
+   two candidates.
+2. **Candidates** are every legal purchase, END_TURN when it is legal after
+   the production suppression, and the one-turn search's choice
+   (:class:`TurnSearch`) when it is not already among them. A decision whose
+   only other candidate is a single purchase is therefore eligible exactly
+   when the search chooses something else.
+3. **Sampling.** One decision per game, uniform among that game's eligible
+   decisions of both seats. A first pass plays every game to the end, asks the
+   search about every single-purchase decision, and records each eligible
+   decision's step; the target comes from a hash of the master seed and game
    index. A second pass replays the same games in the same batches and copies
-   each game at its target, which a fingerprint of the observation and legal
-   actions confirms; a mismatch, or a missing decision, skips the game. The
-   audit uses the first ``decisions`` games, in index order, that yield one.
-3. **Candidates** add the one-turn search's choice (:class:`TurnSearch`).
+   each game at its target step, which a fingerprint of the observation and
+   legal actions confirms; a mismatch, or a missing decision, skips the game.
+   The audit uses the first ``decisions`` games, in index order, that yield
+   one. The search runs again on the sampled decisions together; a decision
+   is dropped and counted when that search's greedy move differs from the
+   audit's, or when it leaves fewer than two candidates.
 4. **Rollouts.** Every candidate gets ``rollouts`` complete games in the
    vector engine with both seats greedy, from the acting player's
    information set. Rollout ``r`` re-deals the opponent's hidden hand and
@@ -25,7 +32,9 @@ The protocol is fixed by docs/decisions/0013-strength-yardstick.md.
    clear mistakes, and the search's choice; see :func:`decision_measures`.
 
 Finished decisions are appended to ``<output>.journal.jsonl`` so an
-interrupted audit resumes.
+interrupted audit resumes. The journal's first line records the configuration,
+the checkpoint's hash, the implementation, the source commit and the device; an
+audit refuses to resume a journal written for anything else.
 """
 from __future__ import annotations
 
@@ -39,7 +48,7 @@ from dataclasses import asdict, dataclass
 
 import numpy as np
 
-AUDIT_IMPLEMENTATION = "purchase-audit-v1"
+AUDIT_IMPLEMENTATION = "purchase-audit-v2"
 TURN_BINS = ((0, 3), (4, 9), (10, 15), (16, None))
 SEAT_NAMES = ("A", "B")
 ROLLOUT_STEP_LIMIT = 20_000
@@ -197,6 +206,8 @@ class _Slot:
     game: object
     count: int = 0
     fingerprints: list | None = None
+    eligible_steps: list | None = None
+    search_actions: list | None = None
     snapshot: dict | None = None
     steps: int = 0
 
@@ -215,19 +226,30 @@ def _new_game(cards, registry, seed: int, index: int):
     return game
 
 
+def _fingerprint(observation: np.ndarray, mask: np.ndarray) -> str:
+    return hashlib.sha1(observation.tobytes() + mask.tobytes()).hexdigest()
+
+
 def play_greedy_selfplay(evaluator, cards, registry, indices, seed: int, targets: dict | None = None,
-                         log_fn=None) -> dict[int, _Slot]:
+                         log_fn=None, search=None) -> dict[int, _Slot]:
     """Play greedy self-play games together and find their eligible decisions.
 
-    Without *targets* every eligible decision's fingerprint is recorded. With
-    *targets* (game index to 1-based eligible decision), each game is copied
-    at that decision. Games are always played to the end, so both passes
-    evaluate identical batches.
+    Without *targets* every eligible decision is found, and its decision step,
+    fingerprint and (for a single-purchase decision) the search's choice are
+    recorded. *search* maps a list of games and their action contexts to the
+    one-turn search's chosen actions; this pass needs it because a decision
+    whose only candidate is one purchase is eligible when the search chooses
+    something else. With *targets* (game index to 0-based decision step), each
+    game is copied at that step. Games are always played to the end, so both
+    passes evaluate identical batches.
     """
     from src.encoding.action_context import build_action_context
     from src.encoding.action_encoder import END_TURN_INDEX, get_action_space_size
     from src.encoding.state_encoder import encode_state
 
+    first_pass = targets is None
+    if first_pass and search is None:
+        raise ValueError("finding eligible decisions needs the one-turn search")
     names = registry.card_names
     card_index_map = registry.card_index_map
     action_dim = get_action_space_size(names)
@@ -235,7 +257,9 @@ def play_greedy_selfplay(evaluator, cards, registry, indices, seed: int, targets
     buy_offset = 3 + num_cards
     slots = {
         index: _Slot(index=index, game=_new_game(cards, registry, seed, index),
-                     fingerprints=[] if targets is None else None)
+                     fingerprints=[] if first_pass else None,
+                     eligible_steps=[] if first_pass else None,
+                     search_actions=[] if first_pass else None)
         for index in indices
     }
     active = list(slots.values())
@@ -258,46 +282,60 @@ def play_greedy_selfplay(evaluator, cards, registry, indices, seed: int, targets
             if context.has_meaningful:
                 masks[row, END_TURN_INDEX] = False
         logits = evaluator.logits(observations, masks)
+        actions = [int(np.argmax(logits[row])) for row in range(len(active))]
+        candidate_lists = []
+        purchase_moves = []
+        for row, slot in enumerate(active):
+            legal = np.flatnonzero(masks[row])
+            purchases = [int(a) for a in legal if buy_offset <= a < buy_offset + num_cards]
+            candidate_lists.append(purchases + ([END_TURN_INDEX] if masks[row, END_TURN_INDEX] else []))
+            action = actions[row]
+            purchase_moves.append(
+                slot.game.current_player.get_current_pending_set() is None
+                and bool(purchases)
+                and (buy_offset <= action < buy_offset + num_cards or action == END_TURN_INDEX)
+            )
+        searched = {}
+        if first_pass:
+            single = [row for row in range(len(active)) if purchase_moves[row] and len(candidate_lists[row]) == 1]
+            if single:
+                chosen = search([active[row].game for row in single], [contexts[row] for row in single])
+                searched = {row: int(action) for row, action in zip(single, chosen)}
         remaining = []
         for row, (slot, context) in enumerate(zip(active, contexts)):
             game = slot.game
             player = game.current_player
-            action = int(np.argmax(logits[row]))
-            legal = np.flatnonzero(masks[row])
-            purchases = [int(a) for a in legal if buy_offset <= a < buy_offset + num_cards]
-            candidates = purchases + ([END_TURN_INDEX] if masks[row, END_TURN_INDEX] else [])
-            if (
-                player.get_current_pending_set() is None
-                and purchases
-                and (buy_offset <= action < buy_offset + num_cards or action == END_TURN_INDEX)
-                and len(candidates) >= 2
-            ):
-                slot.count += 1
-                fingerprint = hashlib.sha1(
-                    observations[row].tobytes() + masks[row].tobytes()
-                ).hexdigest()
-                if targets is None:
-                    slot.fingerprints.append(fingerprint)
-                elif targets.get(slot.index) == slot.count:
-                    row_logits = logits[row].astype(np.float64)
-                    finite = np.isfinite(row_logits)
-                    probabilities = np.zeros_like(row_logits)
-                    probabilities[finite] = np.exp(row_logits[finite] - row_logits[finite].max())
-                    probabilities /= probabilities.sum()
-                    memo = {id(p.agent): p.agent for p in game.players}
-                    opponent = game.get_opponent(player)
-                    slot.snapshot = {
-                        "game": copy.deepcopy(game, memo),
-                        "fingerprint": fingerprint,
-                        "greedy": action,
-                        "candidates": candidates,
-                        "probabilities": probabilities,
-                        "turn": int(game.stats.total_turns),
-                        "trade": int(player.trade),
-                        "health": int(player.health),
-                        "opponent_health": int(opponent.health),
-                        "first": game.first_player_name == player.name,
-                    }
+            action = actions[row]
+            candidates = candidate_lists[row]
+            if first_pass:
+                search_action = searched.get(row)
+                if purchase_moves[row] and (
+                    len(candidates) >= 2 or (search_action is not None and search_action not in candidates)
+                ):
+                    slot.count += 1
+                    slot.fingerprints.append(_fingerprint(observations[row], masks[row]))
+                    slot.eligible_steps.append(slot.steps)
+                    slot.search_actions.append(search_action)
+            elif targets.get(slot.index) == slot.steps:
+                row_logits = logits[row].astype(np.float64)
+                finite = np.isfinite(row_logits)
+                probabilities = np.zeros_like(row_logits)
+                probabilities[finite] = np.exp(row_logits[finite] - row_logits[finite].max())
+                probabilities /= probabilities.sum()
+                memo = {id(p.agent): p.agent for p in game.players}
+                opponent = game.get_opponent(player)
+                slot.snapshot = {
+                    "game": copy.deepcopy(game, memo),
+                    "fingerprint": _fingerprint(observations[row], masks[row]),
+                    "greedy": action,
+                    "candidates": candidates,
+                    "probabilities": probabilities,
+                    "turn": int(game.stats.total_turns),
+                    "trade": int(player.trade),
+                    "health": int(player.health),
+                    "opponent_health": int(opponent.health),
+                    "first": game.first_player_name == player.name,
+                }
             game.apply_decision(context.resolvers[action])
             slot.steps += 1
             if slot.steps > GAME_STEP_LIMIT:
@@ -411,8 +449,12 @@ def _write_json(path: str, payload: dict) -> None:
     os.replace(temporary, path)
 
 
-def sample_decisions(config: AuditConfig, evaluator, cards, registry, log_fn=print) -> tuple[list[dict], dict]:
-    """The audit's decisions in game-index order, with skip counts."""
+def sample_decisions(config: AuditConfig, evaluator, cards, registry, search, log_fn=print) -> tuple[list[dict], dict]:
+    """The audit's decisions in game-index order, with skip counts.
+
+    *search* is the one-turn search's chooser that :func:`play_greedy_selfplay`
+    needs to find eligible decisions.
+    """
     counts = {"games": 0, "no_eligible_decision": 0, "diverged": 0}
     decisions: list[dict] = []
     next_index = 0
@@ -421,13 +463,14 @@ def sample_decisions(config: AuditConfig, evaluator, cards, registry, log_fn=pri
         indices = list(range(next_index, next_index + needed + max(8, needed // 50)))
         next_index = indices[-1] + 1
         log_fn(f"  pass 1: games {indices[0]}-{indices[-1]}")
-        first = play_greedy_selfplay(evaluator, cards, registry, indices, config.seed, log_fn=log_fn)
+        first = play_greedy_selfplay(evaluator, cards, registry, indices, config.seed, log_fn=log_fn, search=search)
         targets = {
             index: target_index(config.seed, index, slot.count)
             for index, slot in first.items() if slot.count > 0
         }
+        steps = {index: first[index].eligible_steps[target - 1] for index, target in targets.items()}
         log_fn(f"  pass 2: replaying {len(targets)} games to their target decisions")
-        second = play_greedy_selfplay(evaluator, cards, registry, indices, config.seed, targets, log_fn=log_fn)
+        second = play_greedy_selfplay(evaluator, cards, registry, indices, config.seed, steps, log_fn=log_fn)
         for index in indices:
             if len(decisions) == config.decisions:
                 break
@@ -443,6 +486,7 @@ def sample_decisions(config: AuditConfig, evaluator, cards, registry, log_fn=pri
             snapshot["index"] = index
             snapshot["target"] = targets[index]
             snapshot["eligible"] = first[index].count
+            snapshot["first_pass_search"] = first[index].search_actions[targets[index] - 1]
             decisions.append(snapshot)
     return decisions, counts
 
@@ -458,6 +502,7 @@ def run_audit(config: AuditConfig, output_json: str, log_fn=print) -> dict:
     from src.search.uplift import _load_model
     from src.search.vector_root import SearchRootBuilder
     from src.utils.logger import set_disabled
+    from src.utils.source_revision import source_revision
     from src.vector_engine.kernels import configure_numba_threads
     from src.vector_engine.rules import compile_rules
 
@@ -480,6 +525,8 @@ def run_audit(config: AuditConfig, output_json: str, log_fn=print) -> dict:
     }
     identity["model_sha256"] = _file_sha256(config.model_path)
     identity["implementation"] = AUDIT_IMPLEMENTATION
+    identity.update(source_revision())
+    identity["device"] = device
     journal = f"{output_json}.journal.jsonl"
     records: list[dict] = []
     if os.path.exists(journal):
@@ -498,13 +545,6 @@ def run_audit(config: AuditConfig, output_json: str, log_fn=print) -> dict:
         f"seed={config.seed} journaled={len(done)}"
     )
 
-    decisions, counts = sample_decisions(config, evaluator, cards, registry, log_fn=log_fn)
-    log_fn(
-        f"  sampled {len(decisions)} decisions from {counts['games']} games "
-        f"({counts['no_eligible_decision']} without one, {counts['diverged']} diverged) "
-        f"in {time.perf_counter() - started:.0f}s"
-    )
-
     search = TurnSearch(
         model, rules, registry.card_index_map, device=device,
         config=TurnSearchConfig(
@@ -512,7 +552,19 @@ def run_audit(config: AuditConfig, output_json: str, log_fn=print) -> dict:
             seed=config.search_seed,
         ),
     )
+
+    def search_choices(games, contexts):
+        return [int(result.action) for result in search.choose_many(games, contexts=contexts)]
+
+    decisions, counts = sample_decisions(config, evaluator, cards, registry, search_choices, log_fn=log_fn)
+    log_fn(
+        f"  sampled {len(decisions)} decisions from {counts['games']} games "
+        f"({counts['no_eligible_decision']} without one, {counts['diverged']} diverged) "
+        f"in {time.perf_counter() - started:.0f}s"
+    )
+
     counts["search_greedy_mismatch"] = 0
+    counts["search_choice_mismatch"] = 0
     pending = []
     for start in range(0, len(decisions), config.search_batch):
         batch = decisions[start:start + config.search_batch]
@@ -526,13 +578,18 @@ def run_audit(config: AuditConfig, output_json: str, log_fn=print) -> dict:
             candidates = list(decision["candidates"])
             if int(result.action) not in candidates:
                 candidates.append(int(result.action))
+            if len(candidates) < 2:
+                # Only a single-purchase decision, made eligible by the first
+                # pass's search, can end here.
+                counts["search_choice_mismatch"] += 1
+                continue
             decision["candidates"] = candidates
             decision["search"] = candidates.index(int(result.action))
             if decision["index"] not in done:
                 pending.append(decision)
     log_fn(
-        f"  search choices done ({counts['search_greedy_mismatch']} greedy mismatches); "
-        f"{len(pending)} decisions to roll out"
+        f"  search choices done ({counts['search_greedy_mismatch']} greedy mismatches, "
+        f"{counts['search_choice_mismatch']} choice mismatches); {len(pending)} decisions to roll out"
     )
 
     if pending:
