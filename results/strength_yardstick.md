@@ -247,7 +247,7 @@ mean over the three seeds of the 25 updates ending at each update shown:
 | at update 300 | 29.7% | 40.8% | 46.3% | 48.1% |
 | The champion (update 400) | 28.6% | 39.7% | 44.2% | 45.7% |
 
-At update 1 the learners won none of their roughly 333 games against the
+At update 1 the learners won none of their 306 to 342 games against the
 champion in any seed. In these means each later rung was harder than the one
 before it at every update shown, and the gains slowed over the last 100
 updates as the learning rate fell toward 1e-5. Playing greedily, the final
@@ -516,10 +516,11 @@ no override or clear-mistake call.
   checkpoints were trained again, and only the later attempts' metrics count
   (0014's amendment, `ea1a714`, committed before any fallback score existed).
   From then on the runs had no window and were restricted to the performance
-  cores, as the training chunks had always been. All three finished training
+  cores, as every training chunk after update 25 had been (the first 25
+  updates ran on all 20 logical processors). All three finished training
   by 10:12. GPU work then paused until 11:40 at the owner's request: seed 2
-  had been scored, the scoring of seeds 0 and 1 had just started and was
-  rerun from the beginning, and the league had not started.
+  had been scored, the scoring of seeds 0 and 1 was under way with no pairing
+  finished and was rerun from the beginning, and the league had not started.
 
 ## Side finding: the engine's rules differ from the rulebook
 

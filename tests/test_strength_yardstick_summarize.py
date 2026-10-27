@@ -153,6 +153,50 @@ def test_exploitable_verdict_is_narrow_only_if_no_better_all_round(tmp_path, L_e
     assert verdict["control_helps"] is True
 
 
+def test_exploiter_verdict_needs_an_interval_above_zero(tmp_path):
+    # E - C is +18, 0 and 0 points: a mean of +6 whose interval reaches below zero.
+    runs = _arm_runs(tmp_path, E=[0.73, 0.55, 0.55], C=[0.55, 0.55, 0.55])
+
+    verdict = summarize.summarize(str(runs))["verdict"]
+
+    assert verdict["E_minus_C"]["mean"] >= 0.05
+    assert verdict["E_minus_C"]["low"] < 0
+    assert verdict["exploitable"] is False
+
+
+def test_exploiter_verdict_needs_a_mean_of_five_points(tmp_path):
+    # E - C is +4, +4 and +4.5 points: an interval above zero, a mean below 5.
+    runs = _arm_runs(tmp_path, E=[0.59, 0.59, 0.595], C=[0.55, 0.55, 0.55])
+
+    verdict = summarize.summarize(str(runs))["verdict"]
+
+    assert verdict["E_minus_C"]["low"] > 0
+    assert verdict["E_minus_C"]["mean"] < 0.05
+    assert verdict["exploitable"] is False
+
+
+def test_control_helps_needs_an_interval_above_half(tmp_path):
+    runs = _arm_runs(tmp_path, E=[0.6, 0.6, 0.6], C=[0.50, 0.70, 0.50])
+
+    verdict = summarize.summarize(str(runs))["verdict"]
+
+    assert verdict["C"]["mean"] >= 0.55
+    assert verdict["C"]["low"] <= 0.50
+    assert verdict["control_helps"] is False
+
+
+def test_exploitable_verdict_is_narrow_when_all_round_scores_tie(tmp_path):
+    runs = _arm_runs(
+        tmp_path, E=[0.62, 0.62, 0.62], C=[0.55, 0.55, 0.55],
+        L_exploiter=0.82, L_control=0.82, O_exploiter=0.57, O_control=0.57,
+    )
+
+    verdict = summarize.summarize(str(runs))["verdict"]
+
+    assert verdict["exploitable"] is True
+    assert verdict["kind"] == "narrow"
+
+
 def test_exploiter_verdict_is_provisional_until_the_league_is_finished(tmp_path):
     runs = _arm_runs(tmp_path, E=[0.62, 0.62, 0.62], C=[0.55, 0.55, 0.55], league_complete=False)
 
