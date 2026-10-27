@@ -380,12 +380,16 @@ for ($attempt = 0; $attempt -lt 20; $attempt++) {
             -Raw |
             ConvertFrom-Json
     } catch {
+        # The scheduled action rewrites this manifest as it starts, so a read
+        # can meet a sharing violation or a partial write. Keep polling until
+        # the handshake times out.
         $startupFailure = (
             "Could not read the startup manifest: " +
             $_.Exception.Message
         )
-        break
+        continue
     }
+    $startupFailure = $null
     if ($launchState.state -in @("running", "complete")) {
         $started = $true
         break
