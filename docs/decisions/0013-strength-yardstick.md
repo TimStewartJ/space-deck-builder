@@ -216,3 +216,17 @@ measures are added.
   version when their results are published, as its stability clause requires.
 - The league, the audit and the frozen-opponent option are new code on this
   branch; they are reviewed before merge.
+
+## Amendments
+
+**2026-10-27, run order.** Made before any score, league or audit result
+existed. The two arms train side by side instead of one run at a time. A single
+training run left the GPU about 40% idle; with both arms training, each kept
+close to its speed alone (about 10 to 13 seconds per update, against about 10
+alone). Training does not depend on wall-clock time, so this changes only when
+results arrive. The control arm still started first, from `c2e1a89`, and the
+exploiter arm runs from `a792c96`. The league and the audit run from the
+commit that adds this amendment. Before it, the code review found that the
+audit's first implementation left out decisions with a single legal purchase
+on which the one-turn search chooses something else; the text above counts
+them as eligible and is unchanged, and the code now follows it.
