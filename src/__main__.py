@@ -485,6 +485,38 @@ def _build_league_parser(sub: argparse._SubParsersAction):
     return p
 
 
+def _build_purchase_audit_parser(sub: argparse._SubParsersAction):
+    from src.search.purchase_audit import AuditConfig
+
+    defaults = AuditConfig(model_path="")
+    p = sub.add_parser(
+        "purchase-audit",
+        help="Measure the win probability a checkpoint's purchases give away",
+        description=(
+            "Purchase audit of docs/decisions/0013-strength-yardstick.md: one "
+            "uniformly sampled purchase decision per greedy self-play game, every "
+            "candidate scored by complete greedy rollouts from the acting player's "
+            "information set. Finished decisions are journaled next to the output, "
+            "so re-running resumes."
+        ),
+    )
+    p.add_argument("--model", type=str, required=True, help="Checkpoint to audit")
+    p.add_argument("--decisions", type=int, default=defaults.decisions,
+                   help=f"Decisions to audit, one per game (default: {defaults.decisions})")
+    p.add_argument("--rollouts", type=int, default=defaults.rollouts,
+                   help=f"Complete rollouts per candidate (default: {defaults.rollouts})")
+    p.add_argument("--seed", type=int, default=defaults.seed,
+                   help=f"Master seed for deals, targets, and rollouts (default: {defaults.seed})")
+    p.add_argument("--rows-per-chunk", type=int, default=defaults.rows_per_chunk,
+                   help=f"Rollout rows per vector population (default: {defaults.rows_per_chunk})")
+    p.add_argument("--numba-threads", type=int, default=defaults.numba_threads)
+    p.add_argument("--simulation-device", type=str, default=defaults.device,
+                   help="Device for policy inference")
+    p.add_argument("--output-json", type=str, required=True,
+                   help="Audit records and summary; its .journal.jsonl records finished decisions")
+    return p
+
+
 def build_cli_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser]:
     """Build the unified CLI parser and return it with the train subparser."""
     parser = argparse.ArgumentParser(
@@ -502,6 +534,7 @@ def build_cli_parser() -> tuple[argparse.ArgumentParser, argparse.ArgumentParser
     _build_search_selfplay_parser(sub)
     _build_distill_parser(sub)
     _build_league_parser(sub)
+    _build_purchase_audit_parser(sub)
     return parser, train_parser
 
 
@@ -550,6 +583,28 @@ def main(argv=None):
         _run_distill(args)
     elif args.command == "league":
         _run_league(args)
+    elif args.command == "purchase-audit":
+        _run_purchase_audit(args)
+
+
+def _run_purchase_audit(args):
+    """Audit a checkpoint's purchase decisions with complete rollouts."""
+    from src.search.purchase_audit import AuditConfig, run_audit
+
+    try:
+        config = AuditConfig(
+            model_path=args.model,
+            decisions=args.decisions,
+            rollouts=args.rollouts,
+            seed=args.seed,
+            rows_per_chunk=args.rows_per_chunk,
+            numba_threads=args.numba_threads,
+            device=args.simulation_device,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
+    run_audit(config, args.output_json)
 
 
 def _run_league(args):
