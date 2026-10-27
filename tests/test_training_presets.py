@@ -8,6 +8,7 @@ import pytest
 from src.__main__ import _run_train, build_cli_parser, parse_cli_args
 from src.config import (
     CHAMPION_CHECKPOINT,
+    LADDER_CHECKPOINTS,
     RunConfig,
     TRAINING_PRESETS,
     get_training_preset,
@@ -121,6 +122,16 @@ def test_every_preset_points_at_an_existing_record():
 def test_champion_checkpoint_is_the_published_selfplay_seed0():
     digest = hashlib.sha256((REPO / CHAMPION_CHECKPOINT).read_bytes()).hexdigest()
     assert digest == CHAMPION_SHA256
+
+
+def test_ladder_checkpoints_match_their_recorded_provenance():
+    for path in LADDER_CHECKPOINTS:
+        checkpoint = REPO / path
+        provenance = json.loads(checkpoint.with_suffix(".json").read_text(encoding="utf-8"))
+        assert checkpoint.stem == f"selfplay_seed0_upd{provenance['update']}"
+        if not checkpoint.is_file():
+            pytest.skip("ladder checkpoints are published as release assets, not committed")
+        assert hashlib.sha256(checkpoint.read_bytes()).hexdigest() == provenance["sha256"]
 
 
 def test_control_preset_is_the_reference_recipe_from_the_champion():

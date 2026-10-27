@@ -10,6 +10,7 @@ import torch
 from src.__main__ import _run_train, parse_cli_args
 from src.config import (
     CHAMPION_CHECKPOINT,
+    LADDER_CHECKPOINTS,
     DataConfig,
     DeviceConfig,
     ModelConfig,
@@ -117,6 +118,33 @@ def test_exploiter_preset_trains_only_against_the_frozen_champion(monkeypatch):
     assert {key for key in shared if exploiter[key] != control[key]} == set()
     assert set(control) - set(exploiter) == {
         "self_play", "self_play_ratio", "self_play_schedule", "pfsp",
+    }
+
+
+def test_ladder_preset_trains_from_random_weights_against_the_whole_ladder(monkeypatch):
+    captured = {}
+
+    def fake_train(data_cfg, ppo_cfg, run_cfg, dev_cfg, **kwargs):
+        captured.update(kwargs, run_cfg=run_cfg)
+
+    monkeypatch.setattr("src.ppo.ppo_trainer.train", fake_train)
+    _run_train(parse_cli_args(["train", "--preset", "exploit-ladder-random"]))
+
+    run_cfg = captured["run_cfg"]
+    assert captured["model_path"] is None
+    assert run_cfg.frozen_opponents == [*LADDER_CHECKPOINTS, CHAMPION_CHECKPOINT]
+    assert run_cfg.frozen_opponent_ratio == 1.0
+    assert run_cfg.frozen_opponent_temperature == 0.0
+    assert run_cfg.self_play is False
+    assert run_cfg.pfsp_mode == "uniform"
+    assert run_cfg.vec_max_active_snapshots == len(run_cfg.frozen_opponents)
+    assert run_cfg.engine == "vec"
+
+    ladder = get_training_preset("exploit-ladder-random").train_defaults
+    exploiter = get_training_preset("exploit-selfplay-seed0").train_defaults
+    assert set(exploiter) - set(ladder) == {"model_path"}
+    assert {key for key in ladder if ladder[key] != exploiter.get(key)} == {
+        "vec_max_active_snapshots", "frozen_opponents",
     }
 
 

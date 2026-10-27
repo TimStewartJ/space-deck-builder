@@ -58,8 +58,8 @@ The league plays checkpoints at temperature 0 against six scripted opponents
 that no agent trains on (`src/ai/held_out_agents.py`); the audit samples one
 purchase decision per greedy self-play game and scores every alternative with
 complete rollouts. `train --frozen-opponents` trains against fixed
-checkpoints, which the `exploit-selfplay-seed0` preset uses to look for
-weaknesses in the published champion.
+checkpoints, which the `exploit-selfplay-seed0` and `exploit-ladder-random`
+presets use to look for weaknesses in the published champion.
 
 ### Reference Training Recipe
 

@@ -1,4 +1,4 @@
-"""Summarize decision 0013's measurements and apply its reading rule.
+"""Summarize decisions 0013 and 0014's measurements and apply their reading rules.
 
 Reads, under one runs directory:
 
@@ -8,11 +8,14 @@ Reads, under one runs directory:
 - ``league/league.json``: the held-out league, and ``league/port_check.json``;
 - ``audit/audit_<checkpoint>.json``: the purchase audits (the three published
   self-play seeds, and any optional ones);
-- each arm's run folder, whose logs name its per-update metrics files.
+- each arm's run folder, whose logs name its per-update metrics files;
+- for decision 0014's exploiter from random weights,
+  ``scores/ladder_score_seed<s>.json`` (the champion, selfplay_seed1,
+  selfplay_seed2 and ladder_seed<s>) and ``league/league_ladder.json``.
 
-Writes ``summary.json`` there and prints the tables the write-up uses. The
-verdict is reported only when all three training seeds are scored; with fewer
-it is marked provisional.
+Writes ``summary.json`` there and prints the tables the write-up uses. A
+verdict is reported only when all three training seeds are scored and in the
+league; with fewer it is marked provisional.
 
 Usage: python results/strength_yardstick/summarize.py [<runs dir>]
 """
@@ -29,6 +32,7 @@ import sys
 T_975 = {1: 12.706204736174698, 2: 4.302652729911275, 3: 3.182446305284263, 4: 2.776445105197799}
 SEEDS = (0, 1, 2)
 ARMS = {"exploiter": "exploit-selfplay-seed0", "control": "continue-selfplay-seed0"}
+LADDER_PRESET = "exploit-ladder-random"
 CHAMPION = "selfplay_seed0@T0"
 PEERS = ("selfplay_seed1@T0", "selfplay_seed2@T0")
 
@@ -199,6 +203,59 @@ def summarize(runs: str) -> dict:
         "calibration": (league or {}).get("calibration"),
         "port_check": port,
         "audits": audits,
+        "ladder": summarize_ladder(runs, (leagues.get("selfplay_seed0") or {}).get("win_rate")),
+    }
+
+
+def summarize_ladder(runs: str, champion_league: float | None) -> dict | None:
+    """Decision 0014: the exploiter from random weights against the champion's ladder."""
+    league = load(os.path.join(runs, "league", "league_ladder.json"))
+    leagues = league_scores(league)
+    seeds = {}
+    for seed in SEEDS:
+        score = load(os.path.join(runs, "scores", f"ladder_score_seed{seed}.json"))
+        if score is None:
+            continue
+        ladder = f"ladder_seed{seed}@T0"
+        row = {
+            "W": win_rate(score, ladder, CHAMPION),
+            "O": statistics.fmean(win_rate(score, ladder, peer) for peer in PEERS),
+            "L": (leagues.get(f"ladder_seed{seed}") or {}).get("win_rate"),
+            "ratings": {p["label"]: p["elo"] for p in score["participants"]},
+        }
+        curve = training_curve(os.path.join(runs, f"{LADDER_PRESET}_seed{seed}"))
+        if curve:
+            last = [rate for update, rate in curve.items() if update > max(curve) - 25]
+            row["training_win_rate_vs_champion"] = {
+                "update_1": curve.get(1),
+                "last_25_updates": statistics.fmean(last),
+                "by_update": {str(u): curve[u] for u in (1, 25, 50, 100, 200, 300, 400) if u in curve},
+            }
+        seeds[seed] = row
+    if not seeds:
+        return None
+
+    values = lambda key: [row[key] for row in seeds.values() if row.get(key) is not None]
+    wins = mean_interval(values("W"))
+    complete = len(seeds) == len(SEEDS) and all(row["L"] is not None for row in seeds.values())
+    exploitable = wins["low"] is not None and wins["mean"] >= 0.55 and wins["low"] > 0.50
+    kind = None
+    if exploitable and complete and champion_league is not None:
+        kind = "narrow" if statistics.fmean(values("L")) <= champion_league else "general"
+    return {
+        "protocol": "docs/decisions/0014-ladder-exploiter.md",
+        "seeds": seeds,
+        "verdict": {
+            "provisional": not complete,
+            "seeds": sorted(seeds),
+            "W": wins,
+            "O": mean_interval(values("O")),
+            "L": mean_interval(values("L")) if values("L") else None,
+            "champion_league": champion_league,
+            "exploitable": exploitable,
+            "kind": kind,
+        },
+        "league": {label: pooled for label, pooled in sorted(leagues.items())},
     }
 
 
@@ -312,6 +369,26 @@ def print_report(summary: dict) -> None:
                     for name in bins
                 ) + " |"
             )
+
+    ladder = summary.get("ladder")
+    if ladder:
+        print("\n## Exploiter from random weights (decision 0014)\n")
+        print("| Seed | W: vs champion | O: vs seeds 1, 2 | L: league | Training win rate vs champion, update 1 / last 25 |")
+        print("|---:|---:|---:|---:|---|")
+        for seed, row in sorted(ladder["seeds"].items()):
+            curve = row.get("training_win_rate_vs_champion") or {}
+            print(
+                f"| {seed} | {_pct(row['W'])} | {_pct(row['O'])} | {_pct(row['L'])} | "
+                f"{_pct(curve.get('update_1'))} / {_pct(curve.get('last_25_updates'))} |"
+            )
+        verdict = ladder["verdict"]
+        state = "provisional" if verdict["provisional"] else "final"
+        print(f"\nVerdict ({state}, seeds {verdict['seeds']}); means in points with Student-t 95% intervals:\n")
+        print(
+            f"- W: {_interval(verdict['W'])}; O: {_interval(verdict['O'])}; "
+            f"L: {_interval(verdict['L'])} (champion {_pct(verdict['champion_league'])})"
+        )
+        print(f"- exploitable: {verdict['exploitable']}; kind: {verdict['kind']}")
 
 
 def main(argv: list[str]) -> int:

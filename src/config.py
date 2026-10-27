@@ -392,6 +392,15 @@ class TrainingPreset:
 # relative to the repository root.
 CHAMPION_CHECKPOINT = "results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth"
 
+# Earlier checkpoints of the champion's own training run (updates 25, 50, 100,
+# 200 and 300), the ladder of decision 0014's exploiter from random weights.
+# Like every checkpoint a result depends on, they are published as release
+# assets; results/strength_yardstick/ladder/*.json records their hashes.
+LADDER_CHECKPOINTS = [
+    f"results/strength_yardstick/ladder/selfplay_seed0_upd{update}.pth"
+    for update in (25, 50, 100, 200, 300)
+]
+
 # Size, schedule, and evaluation settings shared by every vector-engine
 # recipe derived from the reference self-play league.
 _REFERENCE_RUN_DEFAULTS: dict[str, Any] = {
@@ -466,6 +475,28 @@ TRAINING_PRESETS: dict[str, TrainingPreset] = {
         final_eval_games=15000,
         eval_num_workers=16,
         results="docs/decisions/0013-strength-yardstick.md",
+    ),
+    "exploit-ladder-random": TrainingPreset(
+        name="exploit-ladder-random",
+        description=(
+            "Fallback exploiter of the strength yardstick: 400 updates x "
+            "2,000 episodes from random weights, every training game against "
+            "a uniformly sampled frozen opponent from the champion's own run "
+            "(updates 25, 50, 100, 200, 300 and the champion), each playing "
+            "its highest-scoring legal action"
+        ),
+        train_defaults={
+            **_REFERENCE_RUN_DEFAULTS,
+            "vec_max_active_snapshots": 6,
+            "frozen_opponents": [*LADDER_CHECKPOINTS, CHAMPION_CHECKPOINT],
+            "frozen_opponent_ratio": 1.0,
+            "frozen_opponent_temperature": 0.0,
+        },
+        chunk_size=25,
+        interim_eval_games=3200,
+        final_eval_games=15000,
+        eval_num_workers=16,
+        results="docs/decisions/0014-ladder-exploiter.md",
     ),
 }
 

@@ -128,7 +128,11 @@ games against them (the rest use `--opponents`), and
 action. It requires `--engine vec` and excludes `--self-play`. The
 `exploit-selfplay-seed0` preset trains an exploiter of the published champion
 this way, and `continue-selfplay-seed0` is its control
-(`docs/decisions/0013-strength-yardstick.md`).
+(`docs/decisions/0013-strength-yardstick.md`). `exploit-ladder-random` trains
+the fallback exploiter from random weights against the champion and five
+earlier checkpoints of its training run
+(`docs/decisions/0014-ladder-exploiter.md`); those five are published as
+release assets and go in `results/strength_yardstick/ladder/`.
 
 ### Reproducibility
 
