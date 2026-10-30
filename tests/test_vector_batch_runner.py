@@ -417,3 +417,74 @@ def test_trainer_passes_snapshot_pool_to_vector_runner(setup):
     assert [name for name, _, _ in runner.snapshot_state_dicts] == ["PPO_4"]
     assert runner.pfsp_weights == [1.0]
     assert runner.max_active_snapshots == 2
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a CUDA/HIP device")
+def test_graphed_rollouts_record_the_policy_they_sample_and_reuse_graphs(setup):
+    _, cards, registry = setup
+    device = torch.device("cuda")
+    torch.manual_seed(3)
+    model = make_model(registry).to(device)
+    snapshots = [
+        (f"snap{index}", make_model(registry).state_dict(), ModelConfig())
+        for index in range(2)
+    ]
+    runner = VectorBatchRunner(
+        model=model,
+        cards=cards,
+        registry=registry,
+        device=device,
+        ppo_config=PPOConfig(),
+        opponent_spec="random,heuristic,simple",
+        seed=5,
+        snapshot_state_dicts=snapshots,
+        self_play_ratio=0.5,
+        pfsp_weights=[1.0, 1.0],
+        max_active_snapshots=2,
+    )
+    states, actions, old_lp, returns, advs, masks = runner.run_episodes(64)
+    policy = runner._graphed_policy
+    assert policy is not None
+    assert len(states) == len(actions) == len(old_lp) == len(masks) > 0
+    assert states.device.type == masks.device.type == "cuda"
+    assert masks.gather(1, actions.unsqueeze(1)).all()
+    assert masks.any(dim=1).all()
+    with torch.no_grad():
+        logits, _ = model(states)
+        expected = torch.log_softmax(
+            logits.masked_fill(~masks, float("-inf")), dim=1
+        ).gather(1, actions.unsqueeze(1)).squeeze(1)
+    torch.testing.assert_close(old_lp, expected, rtol=1e-4, atol=1e-4)
+    assert torch.isfinite(returns).all() and torch.isfinite(advs).all()
+    assert sum(games for _, games in runner.opponent_results.values()) == 64
+    assert any(
+        name.startswith("snap") and games
+        for name, (_, games) in runner.opponent_results.items()
+    )
+    captured = set(policy.captured_graphs)
+
+    runner.reconfigure(
+        snapshot_state_dicts=snapshots,
+        self_play_ratio=0.5,
+        pfsp_weights=[1.0, 1.0],
+    )
+    runner.run_episodes(64)
+    assert runner._graphed_policy is policy
+    assert captured <= set(policy.captured_graphs)
+
+
+def test_rollouts_without_a_gpu_use_the_eager_evaluators(setup):
+    _, cards, registry = setup
+    runner = VectorBatchRunner(
+        model=make_model(registry),
+        cards=cards,
+        registry=registry,
+        device=torch.device("cpu"),
+        ppo_config=PPOConfig(),
+        opponent_spec="random",
+        graph_inference=True,
+    )
+    assert not runner.can_evaluate()
+    states, *_ = runner.run_episodes(8)
+    assert runner._graphed_policy is None
+    assert len(states) > 0
