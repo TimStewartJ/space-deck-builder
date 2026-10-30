@@ -25,9 +25,10 @@ from src.rules.ir import (
     TARGET_DISCARD,
     TARGET_HAND,
     TARGET_TRADE,
+    PlayResolution,
+    ability_play_resolution,
     compile_effect_op,
     compile_effect_trigger,
-    effect_defaults_to_auto,
 )
 
 
@@ -134,34 +135,19 @@ def _opcode(effect: Effect) -> tuple[EffectOpcode, int, int]:
     return compile_effect_op(effect)
 
 
-def _effective_gate(
-    effect: Effect,
-    *,
-    inherited_scrap: bool,
-    inherited_faction: str | None,
-    inherited_requirement: int,
-    inherited_auto: bool,
-) -> tuple[EffectTrigger, int, int]:
-    return compile_effect_trigger(
-        effect,
-        inherited_scrap=inherited_scrap,
-        inherited_faction=inherited_faction,
-        inherited_requirement=inherited_requirement,
-        inherited_auto=inherited_auto,
-    )
-
-
 def _flatten(
     effect: Effect,
     *,
+    resolution: PlayResolution = PlayResolution.NONE,
     inherited_scrap: bool = False,
     inherited_faction: str | None = None,
     inherited_requirement: int = 0,
-    inherited_auto: bool | None = None,
     option: int = 0,
+    option_trigger: EffectTrigger | None = None,
     inside_or: bool = False,
     top_level: bool = True,
 ) -> list[_Leaf]:
+    """Leaves of one top-level ability, which resolves on play by *resolution*."""
     inherited_scrap = inherited_scrap or effect.is_scrap_effect
     if effect.is_or_effect and inside_or:
         raise ValueError("nested OR effects are unsupported")
@@ -182,10 +168,6 @@ def _flatten(
     inherited_faction = effect.faction_requirement or inherited_faction
     if effect.faction_requirement:
         inherited_requirement = effect.faction_requirement_count
-    if inherited_auto is None:
-        inherited_auto = (
-            effect_defaults_to_auto(effect)
-        )
     if inherited_scrap and inherited_faction:
         raise ValueError(
             "faction-gated scrap effects require independent eligibility "
@@ -212,6 +194,13 @@ def _flatten(
                 raise ValueError(
                     "nested or scrap OR children are unsupported"
                 )
+            # The options of a ship's OR ability are chosen in a pending
+            # decision when the ship is played; a base's are activated.
+            option_trigger = (
+                EffectTrigger.ON_PLAY_OPTION
+                if resolution == PlayResolution.WHOLE
+                else EffectTrigger.ACTIVATE
+            )
         leaves: list[_Leaf] = []
         children = effect.child_effects or ()
         for child_index, child in enumerate(children):
@@ -221,11 +210,12 @@ def _flatten(
             leaves.extend(
                 _flatten(
                     child,
+                    resolution=resolution,
                     inherited_scrap=inherited_scrap,
                     inherited_faction=inherited_faction,
                     inherited_requirement=inherited_requirement,
-                    inherited_auto=inherited_auto,
                     option=child_option,
+                    option_trigger=option_trigger,
                     inside_or=inside_or or effect.is_or_effect,
                     top_level=False,
                 )
@@ -233,13 +223,16 @@ def _flatten(
         return leaves
 
     opcode, value, arg = _opcode(effect)
-    trigger, faction, requirement = _effective_gate(
-        effect,
-        inherited_scrap=inherited_scrap,
-        inherited_faction=inherited_faction,
-        inherited_requirement=inherited_requirement,
-        inherited_auto=inherited_auto,
-    )
+    if option:
+        trigger, faction, requirement = option_trigger, int(Faction.NONE), 0
+    else:
+        trigger, faction, requirement = compile_effect_trigger(
+            effect,
+            inherited_scrap=inherited_scrap,
+            inherited_faction=inherited_faction,
+            inherited_requirement=inherited_requirement,
+            resolution=resolution,
+        )
     return [
         _Leaf(
             opcode=opcode,
@@ -384,7 +377,12 @@ def compile_rules(
             bundles_with_source: list[tuple[int, list[_Leaf]]] = []
             leaf_count = 0
             for source_effect, top_level in enumerate(card.effects):
-                leaves = _flatten(top_level)
+                leaves = _flatten(
+                    top_level,
+                    resolution=ability_play_resolution(
+                        top_level, ship=card.card_type == CardType.SHIP
+                    ),
+                )
                 leaf_count += len(leaves)
                 bundles_with_source.extend(
                     (source_effect, bundle)
@@ -413,6 +411,11 @@ def compile_rules(
                 for _, bundle in bundles_with_source
                 if bundle[0].trigger == EffectTrigger.AUTO
                 for leaf in bundle
+            )
+            # Playing a ship with an OR ability also opens the option choice.
+            auto_queues += any(
+                bundle[0].trigger == EffectTrigger.ON_PLAY_OPTION
+                for _, bundle in bundles_with_source
             )
             explicit_groups: dict[tuple[int, int], list[_Leaf]] = {}
             for source_effect, bundle in bundles_with_source:

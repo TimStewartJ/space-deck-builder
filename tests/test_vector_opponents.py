@@ -165,9 +165,6 @@ def _or_game(card_name, *, row=(), combat=0, opponent_health=50, allies=()):
 @pytest.mark.parametrize(
     ("card_name", "situation", "expected_group"),
     [
-        ("Patrol Mech", dict(combat=1, opponent_health=6), "effect_alt"),
-        ("Patrol Mech", dict(row=("Blob Wheel",)), "effect_nonscrap"),
-        ("Patrol Mech", dict(row=("Battle Blob",)), "effect_alt"),
         ("Trading Post", dict(row=("Federation Shuttle",)), "effect_alt"),
         ("Trading Post", dict(row=("Cutter",)), "effect_nonscrap"),
         ("Barter World", dict(row=("Cutter",)), "effect_alt"),
@@ -190,6 +187,45 @@ def test_heuristic_or_option_rule_matches_scalar(card_name, situation, expected_
     expected = getattr(offsets, expected_group) + card.index
     assert _scalar_choice(game, HeuristicAgent()) == expected
     assert _vector_choice(game, FixedOpponent.HEURISTIC)[0] == expected
+
+
+def _patrol_mech_choice(*, hand=(), row=(), combat=0, opponent_health=50):
+    """Patrol Mech just played: its OR ability awaits a choice."""
+    game, player, opponent = _game()
+    patrol = _card("Patrol Mech")
+    scout = Game([], card_index_map=REGISTRY.card_index_map).create_starting_deck()[0]
+    player.hand = [patrol, *(scout.clone() for name in hand if name == "Scout")]
+    player.combat = combat
+    opponent.health = opponent_health
+    game.trade_row = [_card(name) for name in row]
+    game.execute_action(Action(ActionType.PLAY_CARD, card=patrol, card_id=patrol.index))
+    assert player.get_current_pending_set() is not None
+    return game, patrol
+
+
+@pytest.mark.parametrize(
+    ("situation", "expected_group"),
+    [
+        (dict(combat=1, opponent_health=6), "effect_alt"),
+        (dict(row=("Blob Wheel",)), "effect_nonscrap"),
+        (dict(row=("Battle Blob",)), "effect_alt"),
+        # Three Scouts still in hand already afford the Blob Wheel.
+        (dict(row=("Blob Wheel",), hand=("Scout",) * 3), "effect_alt"),
+    ],
+)
+def test_heuristic_chooses_patrol_mech_option_when_played(situation, expected_group):
+    game, patrol = _patrol_mech_choice(**situation)
+    offsets = get_action_offsets(REGISTRY.num_cards)
+    expected = getattr(offsets, expected_group) + patrol.index
+    assert _scalar_choice(game, HeuristicAgent()) == expected
+    assert _vector_choice(game, FixedOpponent.HEURISTIC)[0] == expected
+
+
+def test_simple_takes_patrol_mech_first_option_when_played():
+    game, patrol = _patrol_mech_choice(hand=("Scout",))
+    expected = get_action_offsets(REGISTRY.num_cards).effect_nonscrap + patrol.index
+    assert _scalar_choice(game, SimpleAgent("Simple")) == expected
+    assert _vector_choice(game, FixedOpponent.SIMPLE)[0] == expected
 
 
 def test_heuristic_counts_the_hand_it_will_play_toward_a_purchase():

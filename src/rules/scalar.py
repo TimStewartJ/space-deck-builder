@@ -3,31 +3,67 @@ from __future__ import annotations
 
 from src.cards.effects import CardEffectType, Effect
 from src.rules.ir import (
+    PASSIVE_EFFECT_TYPES,
     EffectOpcode,
     EffectTrigger,
+    PlayResolution,
     PENDING_DRAW_ON_COMPLETE,
     PENDING_MANDATORY,
     TARGET_DISCARD,
     TARGET_HAND,
     TARGET_TRADE,
+    ability_play_resolution,
     compile_effect_op,
     compile_effect_trigger,
 )
 
 
 def is_passive_effect(effect: Effect) -> bool:
-    return effect.effect_type in {
-        CardEffectType.PASSIVE_SHIP_COMBAT,
-        CardEffectType.WILDCARD_ALLY,
-    }
+    return effect.effect_type in PASSIVE_EFFECT_TYPES
 
 
-def _auto_applicable(effect: Effect) -> bool:
-    trigger, _, _ = compile_effect_trigger(
-        effect,
-        inherited_auto=True,
-    )
+def _resolves_on_play(effect: Effect, resolution: PlayResolution) -> bool:
+    trigger, _, _ = compile_effect_trigger(effect, resolution=resolution)
     return trigger in {EffectTrigger.AUTO, EffectTrigger.PASSIVE}
+
+
+def resolve_on_play(effect: Effect, game, player, card) -> None:
+    """Resolve what of *card*'s top-level ability *effect* happens on play.
+
+    A ship's primary ability resolves completely: its choices queue pending
+    decisions (none when a choice has no legal target), and an OR ability
+    opens a mandatory choice between its options. A base's primary ability
+    resolves its automatic parts. Nothing resolves twice.
+    """
+    resolution = ability_play_resolution(effect, ship=not card.is_base())
+    if resolution == PlayResolution.NONE:
+        return
+    if effect.is_or_effect:
+        # The ability's own flag records that its choice has been offered;
+        # choosing an option marks the options used.
+        if not effect.applied:
+            effect.applied = True
+            _queue_option_choice(effect, player, card)
+        return
+    apply_effect(effect, game, player, card, resolution=resolution)
+
+
+def _queue_option_choice(effect, player, card):
+    from src.engine.actions import Action, ActionType
+
+    player.add_pending_actions(
+        [
+            Action(
+                ActionType.APPLY_EFFECT,
+                card_id=card.index,
+                card=card,
+                card_effect=option,
+            )
+            for option in effect.child_effects
+        ],
+        1,
+        mandatory=True,
+    )
 
 
 def _queue_scrap(effect, game, player, sources, draw_on_complete=False):
@@ -198,9 +234,13 @@ def apply_effect(
     player,
     card=None,
     *,
-    auto_only: bool = False,
+    resolution: PlayResolution | None = None,
 ) -> None:
     """Apply one mutable Effect through the shared opcode contract.
+
+    Without *resolution* the effect is applied as a player-activated ability.
+    With one, only the parts that resolve when the card is played under that
+    :class:`PlayResolution` are applied (see :func:`resolve_on_play`).
 
     An OR ability is never applied as a whole. Applying one of its options
     uses the ability: every option is marked used for the rest of the turn.
@@ -211,14 +251,21 @@ def apply_effect(
         )
     if effect.applied:
         return
-    if not _apply(effect, game, player, card, auto_only=auto_only):
+    if not _apply(effect, game, player, card, resolution=resolution):
         return
-    if effect.or_parent is not None and not auto_only:
+    if effect.or_parent is not None and resolution is None:
         for option in effect.or_parent.child_effects:
             _mark_used(option)
 
 
-def _apply(effect: Effect, game, player, card, *, auto_only: bool) -> bool:
+def _apply(
+    effect: Effect,
+    game,
+    player,
+    card,
+    *,
+    resolution: PlayResolution | None,
+) -> bool:
     """Apply *effect*; return False when its ally requirement is unmet."""
     if effect.applied:
         return True
@@ -231,13 +278,15 @@ def _apply(effect: Effect, game, player, card, *, auto_only: bool) -> bool:
 
     if effect.effect_type == CardEffectType.PARENT:
         for child in effect.child_effects or ():
-            if auto_only and not _auto_applicable(child):
+            if resolution is not None and not _resolves_on_play(
+                child, resolution
+            ):
                 continue
-            _apply(child, game, player, card, auto_only=auto_only)
+            _apply(child, game, player, card, resolution=resolution)
         if effect.is_scrap_effect:
             _scrap_source(game, player, card)
         return True
-    if auto_only and not _auto_applicable(effect):
+    if resolution is not None and not _resolves_on_play(effect, resolution):
         return True
 
     opcode, value, arg = compile_effect_op(effect)

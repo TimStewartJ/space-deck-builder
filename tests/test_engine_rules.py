@@ -414,7 +414,7 @@ class TestB1ScrapEffectsNoAutoFire:
         assert p1.combat == 3
 
     def test_or_effect_not_auto_applied(self):
-        """OR effects must not auto-fire — both branches would resolve."""
+        """A ship's OR ability opens a mandatory choice instead of resolving."""
         game, p1, _ = _make_game_with_players()
         ship = Card("Patrol Mech", 0, 4, [
             Effect(CardEffectType.PARENT, 0, is_or_effect=True, child_effects=[
@@ -427,9 +427,22 @@ class TestB1ScrapEffectsNoAutoFire:
         play_action = Action(type=ActionType.PLAY_CARD, card=ship, card_id=ship.name)
         game.execute_action(play_action)
 
-        # Neither branch should have auto-fired
+        # Neither branch should have auto-fired: one must be chosen first
         assert p1.trade == 0
         assert p1.combat == 0
+        pending = p1.get_current_pending_set()
+        assert pending is not None and pending.mandatory
+        assert [a.card_effect for a in pending.actions] == ship.effects[0].child_effects
+        actions = get_available_actions(game, p1)
+        assert all(a.type == ActionType.APPLY_EFFECT for a in actions)
+
+        game.execute_action(pending.actions[1])
+        assert (p1.trade, p1.combat) == (0, 5)
+        assert p1.get_current_pending_set() is None
+        assert not [
+            a for a in get_available_actions(game, p1)
+            if a.type == ActionType.APPLY_EFFECT
+        ]
 
     def test_first_slot_ally_effect_not_auto_applied(self):
         """An ally effect in slot 0 should not auto-fire even when ally is present."""

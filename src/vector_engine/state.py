@@ -29,6 +29,8 @@ PENDING_DESTROY_BASE = 2
 PENDING_DISCARD = 3
 PENDING_ACQUIRE_SHIP_TOP = 4
 PENDING_COPY_SHIP = 5
+# The choice between the two options of the OR ability of a ship just played.
+PENDING_CHOOSE_OPTION = 6
 SOURCE_HAND = 1
 SOURCE_DISCARD = 2
 SOURCE_TRADE = 4
@@ -37,6 +39,10 @@ PENDING_TARGET_DISCARD = 1
 PENDING_TARGET_TRADE = 2
 PENDING_TARGET_BASE = 3
 PENDING_TARGET_GROUPS = 4
+# A PENDING_CHOOSE_OPTION set marks its card's first option in target group 0
+# (its effect_nonscrap action) and its second option in group 1 (effect_alt).
+PENDING_TARGET_FIRST_OPTION = 0
+PENDING_TARGET_SECOND_OPTION = 1
 
 NO_CARD = -1
 NO_WINNER = -1
@@ -403,6 +409,22 @@ def _pending_state(player, rules: CompiledRules):
                 targets[
                     index, PENDING_TARGET_HAND, action.card_id
                 ] += 1
+        elif (
+            action_type == ActionType.APPLY_EFFECT
+            and pending.actions[0].card_effect is not None
+            and pending.actions[0].card_effect.option_index is not None
+        ):
+            modes[index] = PENDING_CHOOSE_OPTION
+            source_card[index], source_instance[index] = locations[
+                id(pending.actions[0].card)
+            ]
+            for action in pending.actions:
+                group = (
+                    PENDING_TARGET_FIRST_OPTION
+                    if action.card_effect.option_index == 0
+                    else PENDING_TARGET_SECOND_OPTION
+                )
+                targets[index, group, action.card_id] += 1
         else:
             raise ValueError(f"unsupported pending action {action_type}")
     return (

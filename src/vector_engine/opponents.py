@@ -37,12 +37,14 @@ from src.vector_engine.rules import CompiledRules, MAX_BUNDLES, _templates_by_na
 from src.vector_engine.state import (
     INSTANCE_ACTIVE,
     PENDING_ACQUIRE_SHIP_TOP,
+    PENDING_CHOOSE_OPTION,
     PENDING_COPY_SHIP,
     PENDING_DESTROY_BASE,
     PENDING_DISCARD,
     PENDING_SCRAP,
     PENDING_TARGET_BASE,
     PENDING_TARGET_DISCARD,
+    PENDING_TARGET_FIRST_OPTION,
     PENDING_TARGET_HAND,
     PENDING_TARGET_TRADE,
     SOURCE_DISCARD,
@@ -476,6 +478,12 @@ def _first_pending_action(
         )
         if card >= 0:
             return EFFECT_NONSCRAP_OFFSET + card, 0
+    elif mode == PENDING_CHOOSE_OPTION:
+        card = _first_target(
+            pending_targets, game, player, PENDING_TARGET_FIRST_OPTION
+        )
+        if card >= 0:
+            return EFFECT_NONSCRAP_OFFSET + card, 0
     if not pending_mandatory[game, player, 0]:
         return SKIP_INDEX, 0
     return END_TURN_INDEX, 0
@@ -502,12 +510,30 @@ def _preferred_scrap_target(
 @njit(cache=True)
 def _select_heuristic_pending(
     zones,
+    trade,
+    combat,
+    health,
     trade_row,
+    explorer_count,
+    effect_state,
+    instance_rule_card,
+    instance_faction,
     pending_mode,
     pending_sources,
     pending_mandatory,
     pending_targets,
+    pending_source_card,
+    pending_source_instance,
     cost,
+    card_type,
+    card_faction,
+    bundle_count,
+    bundle_option,
+    bundle_option_kind,
+    bundle_option_value,
+    bundle_option_faction,
+    buy_score_base,
+    on_play_trade,
     discard_value,
     scout,
     viper,
@@ -516,6 +542,40 @@ def _select_heuristic_pending(
     player,
 ):
     mode = pending_mode[game, player, 0]
+    if mode == PENDING_CHOOSE_OPTION:
+        card = pending_source_card[game, player, 0]
+        rule_card = instance_rule_card[
+            game, player, card, pending_source_instance[game, player, 0]
+        ]
+        if rule_card < 0:
+            rule_card = card
+        option = _heuristic_option(
+            zones,
+            trade,
+            combat,
+            health,
+            trade_row,
+            explorer_count,
+            effect_state,
+            instance_faction,
+            card_faction,
+            card_type,
+            cost,
+            bundle_count,
+            bundle_option,
+            bundle_option_kind,
+            bundle_option_value,
+            bundle_option_faction,
+            buy_score_base,
+            on_play_trade,
+            explorer,
+            game,
+            player,
+            rule_card,
+        )
+        if option == 2:
+            return EFFECT_ALT_OFFSET + card, 0
+        return EFFECT_NONSCRAP_OFFSET + card, 0
     if mode == PENDING_SCRAP:
         deck_size = 0
         for card in range(zones.shape[3]):
@@ -1063,6 +1123,8 @@ def _select_heuristic(
     pending_sources,
     pending_mandatory,
     pending_targets,
+    pending_source_card,
+    pending_source_instance,
     pending_count,
     cost,
     defense,
@@ -1095,12 +1157,30 @@ def _select_heuristic(
     if pending_count[game, player] > 0:
         return _select_heuristic_pending(
             zones,
+            trade,
+            combat,
+            health,
             trade_row,
+            explorer_count,
+            effect_state,
+            instance_rule_card,
+            instance_faction,
             pending_mode,
             pending_sources,
             pending_mandatory,
             pending_targets,
+            pending_source_card,
+            pending_source_instance,
             cost,
+            card_type,
+            card_faction,
+            bundle_count,
+            bundle_option,
+            bundle_option_kind,
+            bundle_option_value,
+            bundle_option_faction,
+            buy_score_base,
+            on_play_trade,
             discard_value,
             scout,
             viper,
@@ -1221,6 +1301,8 @@ def select_fixed_actions_kernel(
     pending_sources,
     pending_mandatory,
     pending_targets,
+    pending_source_card,
+    pending_source_instance,
     pending_count,
     rng_state,
     cost,
@@ -1313,6 +1395,8 @@ def select_fixed_actions_kernel(
                 pending_sources,
                 pending_mandatory,
                 pending_targets,
+                pending_source_card,
+                pending_source_instance,
                 pending_count,
                 cost,
                 defense,
@@ -1374,6 +1458,8 @@ def select_fixed_actions(
         state.pending_sources,
         state.pending_mandatory,
         state.pending_targets,
+        state.pending_source_card,
+        state.pending_source_instance,
         state.pending_count,
         state.rng_state,
         rules.cost,

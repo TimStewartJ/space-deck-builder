@@ -47,6 +47,31 @@ class EffectTrigger(IntEnum):
     SCRAP = 3
     ACTIVATE = 4
     PASSIVE = 5
+    # An option of the OR ability in a ship's primary ability. The ship's
+    # player chooses one option in a pending decision as soon as it is played.
+    ON_PLAY_OPTION = 6
+
+
+class PlayResolution(IntEnum):
+    """How much of a top-level ability resolves when its card is played.
+
+    Rulebook 1.1E, pages 4 and 5: "When a ship is played, its Primary Ability
+    happens immediately"; "you may choose when during your Main Phase to use
+    your bases' Primary Abilities"; ally and scrap abilities may be used at any
+    time during the Main Phase.
+    """
+
+    # Nothing: the player uses the ability later (an activated base ability,
+    # an ally, scrap or passive ability, or a base's OR ability).
+    NONE = 0
+    # The automatic parts (resources, draws, discard debt); any choice in it
+    # stays a player-activated action. A base's primary ability on the turn
+    # the base is played.
+    AUTO_PARTS = 1
+    # All of it: a ship's primary ability. Its choices become pending
+    # decisions made before any other action, and an OR ability opens a
+    # mandatory choice between its options.
+    WHOLE = 2
 
 
 AUTO_EFFECT_TYPES = frozenset(
@@ -74,14 +99,30 @@ CHOICE_EFFECT_TYPES = frozenset(
     }
 )
 
+PASSIVE_EFFECT_TYPES = frozenset(
+    {
+        CardEffectType.PASSIVE_SHIP_COMBAT,
+        CardEffectType.WILDCARD_ALLY,
+    }
+)
 
-def effect_defaults_to_auto(effect: Effect) -> bool:
-    return (
-        effect.effect_type in AUTO_EFFECT_TYPES
-        and not effect.is_or_effect
-        and not effect.is_scrap_effect
-        and not effect.faction_requirement
-    )
+
+def ability_play_resolution(effect: Effect, *, ship: bool) -> PlayResolution:
+    """What of the top-level ability *effect* resolves when its card is played.
+
+    *ship* says whether the card is a ship rather than a base.
+    """
+    if (
+        effect.effect_type in PASSIVE_EFFECT_TYPES
+        or effect.is_scrap_effect
+        or effect.faction_requirement
+    ):
+        return PlayResolution.NONE
+    if ship:
+        return PlayResolution.WHOLE
+    if effect.is_or_effect or effect.effect_type not in AUTO_EFFECT_TYPES:
+        return PlayResolution.NONE
+    return PlayResolution.AUTO_PARTS
 
 
 def compile_effect_trigger(
@@ -90,12 +131,10 @@ def compile_effect_trigger(
     inherited_scrap: bool = False,
     inherited_faction: str | None = None,
     inherited_requirement: int = 0,
-    inherited_auto: bool = False,
+    resolution: PlayResolution = PlayResolution.NONE,
 ) -> tuple[EffectTrigger, int, int]:
-    if effect.effect_type in {
-        CardEffectType.PASSIVE_SHIP_COMBAT,
-        CardEffectType.WILDCARD_ALLY,
-    }:
+    """Trigger of a non-OR effect under its top-level ability's *resolution*."""
+    if effect.effect_type in PASSIVE_EFFECT_TYPES:
         return EffectTrigger.PASSIVE, int(Faction.NONE), 0
     faction_name = effect.faction_requirement or inherited_faction
     requirement = (
@@ -107,9 +146,11 @@ def compile_effect_trigger(
         return EffectTrigger.SCRAP, int(Faction.NONE), 0
     if faction_name:
         return EffectTrigger.ALLY, int(parse_faction(faction_name)), requirement
+    if resolution == PlayResolution.WHOLE:
+        return EffectTrigger.AUTO, int(Faction.NONE), 0
     if effect.effect_type in CHOICE_EFFECT_TYPES:
         return EffectTrigger.ACTIVATE, int(Faction.NONE), 0
-    if inherited_auto:
+    if resolution == PlayResolution.AUTO_PARTS:
         return EffectTrigger.AUTO, int(Faction.NONE), 0
     return EffectTrigger.ACTIVATE, int(Faction.NONE), 0
 

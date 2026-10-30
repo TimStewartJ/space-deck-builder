@@ -272,6 +272,12 @@ def test_blob_carrier_free_topdeck_acquisition_matches_scalar():
         REGISTRY.card_index_map,
         get_action_space_size(REGISTRY.card_names),
     )
+    # The free acquisition is a pending decision, not a purchase, so the
+    # observation's can-buy flag stays off in both engines.
+    assert context.mask[buy_index]
+    assert not context.can_buy
+    engine.build_masks()
+    assert engine.materialize_observations()[0, 2] == 0.0
     _step_pair(game, engine, buy_index, context.resolvers[buy_index])
     assert player.ordered_top == [target]
 

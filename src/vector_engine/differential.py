@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -40,6 +40,11 @@ class DifferentialResult:
     steps: int
     games_completed: int
     action_counts: dict[str, int]
+    # Ability actions by "<group>:<card>" (groups effect, effect_alt and
+    # scrap), "play_choice:<ship>" for every ship whose play opened a pending
+    # decision, and "copy_choice:<ship>" for every copy of a ship that opened
+    # one.
+    card_action_counts: dict[str, int] = field(default_factory=dict)
 
 
 def make_supported_game(
@@ -140,9 +145,25 @@ def choose_differential_action(
     context,
     step: int,
     num_cards: int,
+    *,
+    pending: bool = False,
 ) -> tuple[int, Action]:
-    """Rotate priorities so the trace covers every supported action class."""
+    """Pick a legal action by a priority order that rotates with *step*.
+
+    Outside a pending decision the class tried first rotates with *step*,
+    and the card within the class rotates too, so the trace covers every
+    supported action class and every card offering one. Ending the turn is
+    chosen only when it is the class tried first or nothing else is legal,
+    so a turn usually plays several cards and their ally abilities and
+    copies come into play. A pending decision is resolved by a legal action
+    picked by a hash of *step*, so its skip and every kind of target are
+    covered although the decision always follows the action that opened it.
+    """
     legal = np.flatnonzero(context.mask)
+    if pending:
+        mixed = (step * 2654435761) & 0xFFFFFFFF
+        index = int(legal[(mixed >> 8) % len(legal)])
+        return index, context.resolvers[index]
     groups = (
         "play",
         "effect",
@@ -159,12 +180,23 @@ def choose_differential_action(
         "skip",
         "end",
     )
+    by_group: dict[str, list[int]] = {}
+    for index in legal:
+        group = _action_group(int(index), num_cards)
+        by_group.setdefault(group, []).append(int(index))
     start = step % len(groups)
-    for offset in range(len(groups)):
-        wanted = groups[(start + offset) % len(groups)]
-        for index in legal:
-            if _action_group(int(index), num_cards) == wanted:
-                return int(index), context.resolvers[int(index)]
+    order = [
+        groups[(start + offset) % len(groups)]
+        for offset in range(len(groups))
+    ]
+    if order[0] != "end":
+        order.remove("end")
+        order.append("end")
+    for wanted in order:
+        candidates = by_group.get(wanted)
+        if candidates:
+            index = candidates[(step // len(groups)) % len(candidates)]
+            return index, context.resolvers[index]
     raise AssertionError("scalar context produced no resolvable legal action")
 
 
@@ -204,6 +236,7 @@ def run_differential_trace(
     )
     action_dim = get_action_space_size(registry.card_names)
     action_counts: dict[str, int] = {}
+    card_action_counts: dict[str, int] = {}
     completed = 0
     steps_run = 0
 
@@ -263,12 +296,35 @@ def run_differential_trace(
                     f"vector={vector_observations[game_index, column]!r}"
                 )
             action_index, action = choose_differential_action(
-                context, step + game_index, rules.num_cards
+                context,
+                step + game_index,
+                rules.num_cards,
+                pending=(
+                    game.current_player.get_current_pending_set() is not None
+                ),
             )
             actions[game_index] = action_index
             group = _action_group(action_index, rules.num_cards)
             action_counts[group] = action_counts.get(group, 0) + 1
+            if group in ("effect", "effect_alt", "scrap") and action.card:
+                key = f"{group}:{action.card.name}"
+                card_action_counts[key] = card_action_counts.get(key, 0) + 1
+            played_ship = (
+                action.type == ActionType.PLAY_CARD
+                and action.card is not None
+                and not action.card.is_base()
+            )
+            copied_ship = bool(
+                action.additional_params
+                and action.additional_params.get("copy_source") is not None
+            )
             drawn, refills = _capture_scalar_step(game, action)
+            if played_ship and game.current_player.get_current_pending_set():
+                key = f"play_choice:{action.card.name}"
+                card_action_counts[key] = card_action_counts.get(key, 0) + 1
+            if copied_ship and game.current_player.get_current_pending_set():
+                key = f"copy_choice:{action.card.name}"
+                card_action_counts[key] = card_action_counts.get(key, 0) + 1
             if len(drawn) > MAX_FORCED_DRAWS:
                 raise AssertionError(
                     f"{len(drawn)} draws exceed tape capacity"
@@ -309,4 +365,5 @@ def run_differential_trace(
         steps=steps_run,
         games_completed=completed,
         action_counts=action_counts,
+        card_action_counts=card_action_counts,
     )

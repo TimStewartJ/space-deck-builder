@@ -17,7 +17,9 @@ out of every training opponent registry, and do not change their decision
 rules: the league's port check reproduced published counts with them under
 rules version 1. Those counts belong to the old rules. Under the current rules
 (docs/decisions/0016-rulebook-ability-timing.md) an OR ability gives one
-option, which ``_choose_or`` picks.
+option, which ``_choose_or`` picks, and the choices in a ship's primary
+ability are made as soon as the ship is played, by the same pending-decision
+rules (``_pending``) as every other choice.
 """
 from __future__ import annotations
 
@@ -536,6 +538,11 @@ class HeldOutAgent(Agent):
             return max(options, key=lambda a: (a.card.cost, self._buy_score(a.card, game, player)))
         if A.APPLY_EFFECT in kinds:
             options = [a for a in actions if a.type == A.APPLY_EFFECT]
+            ability = options[0].card_effect.or_parent if options[0].card_effect else None
+            if ability is not None:
+                # The OR ability of a ship just played.
+                pick = self._choose_or(game, player, opponent, ability)
+                return next(a for a in options if a.card_effect is pick)
             return max(options, key=lambda a: a.card.cost if a.card else 0)
         return skip if skip is not None else actions[0]
 

@@ -268,9 +268,18 @@ def test_choice_effects_compile_to_current_scalar_semantics(
 def test_or_options_compile_to_one_activation_bundle_each(
     compiled, card_name, first, second
 ):
-    """Option 1 is the effect_nonscrap action and option 2 effect_alt."""
+    """Option 1 is the effect_nonscrap action and option 2 effect_alt.
+
+    A ship's options are chosen in a pending decision as it is played; a
+    base's are activated in the main phase.
+    """
     _, _, rules = compiled
     card = rules.card_names.index(card_name)
+    trigger = (
+        EffectTrigger.ON_PLAY_OPTION
+        if rules.card_type[card] == 0
+        else EffectTrigger.ACTIVATE
+    )
     options = {
         int(rules.bundle_option[card, bundle]): bundle
         for bundle in range(int(rules.bundle_count[card]))
@@ -280,7 +289,7 @@ def test_or_options_compile_to_one_activation_bundle_each(
     bundles = _bundles(rules, card_name)
     for option, expected in ((1, first), (2, second)):
         bundle = options[option]
-        assert bundles[bundle]["trigger"] == EffectTrigger.ACTIVATE
+        assert bundles[bundle]["trigger"] == trigger
         assert [op[:2] for op in bundles[bundle]["ops"]] == [expected]
     assert (
         rules.bundle_source_effect[card, options[1]]
@@ -302,6 +311,32 @@ def _or_ability():
             Effect(CardEffectType.COMBAT, 1),
             Effect(CardEffectType.TRADE, 1),
         ],
+    )
+
+
+@pytest.mark.parametrize(
+    ("card_name", "ops"),
+    [
+        ("Trade Bot", [(EffectOpcode.ADD_TRADE, 1), (EffectOpcode.QUEUE_SCRAP, 1)]),
+        ("Missile Bot", [(EffectOpcode.ADD_COMBAT, 2), (EffectOpcode.QUEUE_SCRAP, 1)]),
+        ("Supply Bot", [(EffectOpcode.ADD_TRADE, 2), (EffectOpcode.QUEUE_SCRAP, 1)]),
+        ("Battle Mech", [(EffectOpcode.ADD_COMBAT, 4), (EffectOpcode.QUEUE_SCRAP, 1)]),
+        ("Battle Pod", [(EffectOpcode.ADD_COMBAT, 4), (EffectOpcode.QUEUE_SCRAP, 1)]),
+        (
+            "Missile Mech",
+            [(EffectOpcode.ADD_COMBAT, 6), (EffectOpcode.QUEUE_DESTROY_BASE, 1)],
+        ),
+    ],
+)
+def test_ship_primary_choices_resolve_when_played(compiled, card_name, ops):
+    """A ship's whole primary ability is one bundle applied on play."""
+    _, _, rules = compiled
+    bundles = _bundles(rules, card_name)
+    assert bundles[0]["trigger"] == EffectTrigger.AUTO
+    assert [operation[:2] for operation in bundles[0]["ops"]] == ops
+    assert all(
+        bundle["trigger"] in (EffectTrigger.ALLY, EffectTrigger.SCRAP)
+        for bundle in bundles[1:]
     )
 
 

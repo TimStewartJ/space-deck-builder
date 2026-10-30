@@ -15,15 +15,23 @@ def _pending_action_matches(pending: Action, executed: Action) -> bool:
     """Check if an executed action semantically matches a pending action.
 
     Compares only the fields relevant for pending action identity
-    (type, card_id, card_source, target_id), ignoring object references
-    like card= that may differ between legacy and new-style callers.
+    (type, card_id, card_source, target_id, and which option of an OR
+    ability), ignoring object references like card= that may differ between
+    legacy and new-style callers.
     """
     return (
         pending.type == executed.type
         and pending.card_id == executed.card_id
         and pending.card_source == executed.card_source
         and pending.target_id == executed.target_id
+        and _option_index(pending) == _option_index(executed)
     )
+
+
+def _option_index(action: Action) -> int:
+    """Which option of an OR ability *action* applies; 0 for any other action."""
+    effect = action.card_effect
+    return (effect.option_index or 0) if effect is not None else 0
 
 
 class Game:
@@ -637,28 +645,19 @@ class Game:
         return False  # Turn continues
 
     def _apply_auto_effects(self, played_card):
-        """Apply simple auto-applicable effects on the played card and any
-        other cards in play with unapplied effects (e.g. bases whose effects
-        reset each turn).
+        """Resolve what happens on play for every card played this turn.
 
-        Skips scrap effects (must be explicitly chosen), OR effects
-        (require a choice), and ally-gated effects (surfaced as APPLY_EFFECT).
-        The applied guard in Effect.apply() prevents double-application.
+        A ship's primary ability resolves completely, its choices becoming
+        pending decisions; a base's primary ability resolves its automatic
+        parts. Ally and scrap abilities stay player-activated.
+        ``resolve_on_play`` never resolves anything twice, so cards played
+        earlier this turn are unaffected.
         """
-        from src.rules.ir import effect_defaults_to_auto
+        from src.rules.scalar import resolve_on_play
 
         for pc in self.current_player.played_cards:
             for effect in pc.effects:
-                if (
-                    effect_defaults_to_auto(effect)
-                    and not effect.applied
-                    and not effect.is_or_effect
-                    and not effect.is_scrap_effect
-                    and not effect.faction_requirement
-                ):
-                    effect.apply(
-                        self, self.current_player, pc, auto_only=True
-                    )
+                resolve_on_play(effect, self, self.current_player, pc)
 
     def _apply_ship_play_passives(self, played_card):
         if played_card.card_type != CardType.SHIP:

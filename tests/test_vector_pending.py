@@ -111,8 +111,8 @@ def test_trade_row_scrap_pending_refills_on_completion():
     game.trade_row.append(target)
     game.trade_deck.append(refill)
     engine = make_engine(game)
+    # Battle Pod's primary ability opens its trade-row scrap as it is played.
     step_pair(game, engine, OFFSETS["play_card"] + card.index)
-    step_pair(game, engine, EFFECT_NONSCRAP_OFFSET + card.index)
     assert game.current_player.pending_action_sets
     step_pair(game, engine, OFFSETS["scrap_trade"] + target.index)
     assert not game.current_player.pending_action_sets

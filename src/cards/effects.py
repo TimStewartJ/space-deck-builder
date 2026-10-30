@@ -115,10 +115,10 @@ class Effect:
             return True
         return self.applied
     
-    def apply(self, game: 'Game', player: 'Player', card=None, *, auto_only=False):
+    def apply(self, game: 'Game', player: 'Player', card=None, *, resolution=None):
         from src.rules.scalar import apply_effect
 
-        apply_effect(self, game, player, card, auto_only=auto_only)
+        apply_effect(self, game, player, card, resolution=resolution)
 
     def clone(self) -> 'Effect':
         """Create a lightweight copy with fresh mutable state.

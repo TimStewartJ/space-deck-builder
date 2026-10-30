@@ -245,6 +245,7 @@ class TestRoundTrip:
     def test_game_over_state(self, game_resources):
         """Round-trip a completed game."""
         cards, registry = game_resources
+        random.seed(0)
         game = _make_game(cards, registry)
         # Play to completion
         for _ in range(2000):

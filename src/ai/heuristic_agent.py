@@ -4,7 +4,7 @@ from src.cards.factions import Faction, faction_display, parse_faction
 from src.cards.card import CardType
 from src.cards.effects import CardEffectType
 from src.ai.agent import Agent
-from src.rules.ir import effect_defaults_to_auto
+from src.rules.ir import PlayResolution, ability_play_resolution
 
 
 def on_play_trade(card) -> int:
@@ -16,7 +16,8 @@ def on_play_trade(card) -> int:
     return sum(
         _resolving_trade(effect)
         for effect in card.effects
-        if effect_defaults_to_auto(effect)
+        if ability_play_resolution(effect, ship=not card.is_base())
+        != PlayResolution.NONE
     )
 
 
@@ -79,8 +80,18 @@ class HeuristicAgent(Agent):
     # ── Pending decisions ──────────────────────────────────────────────
 
     def _handle_pending(self, game_state: Game, player, actions, pending):
-        """Handle forced or optional pending decisions (scrap, discard, destroy)."""
+        """Handle forced or optional pending decisions (scrap, discard, destroy, OR options)."""
         action_types = {a.type for a in actions}
+
+        # The OR ability of a ship just played: choose one option
+        options = [
+            a for a in actions
+            if a.type == ActionType.APPLY_EFFECT
+            and a.card_effect is not None
+            and a.card_effect.or_parent is not None
+        ]
+        if options:
+            return self._choose_or_option(game_state, player, options)
 
         # Destroy base: always destroy if we can
         if ActionType.DESTROY_BASE in action_types:
