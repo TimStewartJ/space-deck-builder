@@ -10,7 +10,11 @@ import torch
 import torch.nn as nn
 from torch.func import functional_call, stack_module_state, vmap
 
-from src.encoding.action_encoder import END_TURN_INDEX
+from src.encoding.action_encoder import (
+    END_TURN_INDEX,
+    get_action_offsets,
+    num_cards_for_action_dim,
+)
 from src.ppo.action_selection import validate_temperature
 from src.ppo.mp_inference_server import _forward_and_sample
 from src.ppo.ppo_actor_critic import PPOActorCritic
@@ -67,16 +71,13 @@ def suppress_redundant_end_turn(masks: np.ndarray) -> np.ndarray:
     """
     if masks.ndim != 2:
         raise ValueError("masks must be rank-2")
-    num_cards = (masks.shape[1] - 4) // 10
-    if 4 + 10 * num_cards != masks.shape[1]:
-        raise ValueError(
-            f"action dimension {masks.shape[1]} is not canonical"
-        )
-    attack_player = 3 + 2 * num_cards
+    offsets = get_action_offsets(num_cards_for_action_dim(masks.shape[1]))
     effective = masks.copy()
     meaningful = (
-        effective[:, 3 : 3 + num_cards].any(axis=1)
-        | effective[:, attack_player]
+        effective[
+            :, offsets.play_card : offsets.play_card + offsets.num_cards
+        ].any(axis=1)
+        | effective[:, offsets.attack_player]
     )
     effective[meaningful, END_TURN_INDEX] = False
     return effective

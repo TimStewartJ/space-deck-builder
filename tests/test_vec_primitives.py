@@ -14,8 +14,10 @@ from scripts import bench_vec_primitives as bench
 
 
 def test_real_dimensions_are_locked():
+    from src.encoding.action_encoder import get_action_space_layout
+
     assert bench.NUM_CARDS == 49
-    assert bench.ACTION_DIM == 494
+    assert bench.ACTION_DIM == get_action_space_layout(49)["action_dim"]
     assert bench.NUM_PLAYERS == 2
     assert bench.NUM_ZONES == 5
 

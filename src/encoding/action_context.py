@@ -11,10 +11,14 @@ import numpy as np
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from src.engine.actions import Action, ActionType, CardSource, PendingActionSet
-from src.cards.effects import CardEffectType
+from src.engine.actions import Action, ActionType, PendingActionSet
 from src.rules.scalar import is_passive_effect
-from src.encoding.action_encoder import END_TURN_INDEX, SKIP_INDEX
+from src.encoding.action_encoder import (
+    END_TURN_INDEX,
+    SKIP_INDEX,
+    encode_action_index,
+    get_action_offsets,
+)
 
 if TYPE_CHECKING:
     from src.engine.game import Game
@@ -84,31 +88,22 @@ def build_action_context(
 
     num_cards = len(card_index_map)
 
-    # Pre-compute offset bases (must match action_encoder.py encoding scheme)
+    # Offsets come from the action layout, the single source of truth.
+    offsets = get_action_offsets(num_cards)
     IDX_END_TURN = END_TURN_INDEX
     IDX_SKIP = SKIP_INDEX
-    OFF_PLAY = 3
-    OFF_BUY = OFF_PLAY + num_cards
-    IDX_ATTACK_PLAYER = OFF_BUY + num_cards
-    OFF_ATTACK_BASE = IDX_ATTACK_PLAYER + 1
-    OFF_DESTROY_BASE = OFF_ATTACK_BASE + num_cards
-    OFF_EFFECT_NONSCRAP = OFF_DESTROY_BASE + num_cards
-    OFF_EFFECT_SCRAP = OFF_EFFECT_NONSCRAP + num_cards
-    OFF_SCRAP_HAND = OFF_EFFECT_SCRAP + num_cards
-    OFF_SCRAP_DISCARD = OFF_SCRAP_HAND + num_cards
-    OFF_SCRAP_TRADE = OFF_SCRAP_DISCARD + num_cards
-    OFF_DISCARD = OFF_SCRAP_TRADE + num_cards
+    OFF_PLAY = offsets.play_card
+    OFF_BUY = offsets.buy_card
+    IDX_ATTACK_PLAYER = offsets.attack_player
+    OFF_ATTACK_BASE = offsets.attack_base
+    OFF_EFFECT_NONSCRAP = offsets.effect_nonscrap
+    OFF_EFFECT_SCRAP = offsets.effect_scrap
 
     # Handle pending action sets — these override normal action generation
     pending_set: PendingActionSet | None = player.get_current_pending_set()
     if pending_set:
         for act in pending_set.actions:
-            idx = _encode_action_index(act, card_index_map, num_cards,
-                                       OFF_PLAY, OFF_BUY, IDX_ATTACK_PLAYER,
-                                       OFF_ATTACK_BASE, OFF_DESTROY_BASE,
-                                       OFF_EFFECT_NONSCRAP, OFF_EFFECT_SCRAP,
-                                       OFF_SCRAP_HAND, OFF_SCRAP_DISCARD,
-                                       OFF_SCRAP_TRADE, OFF_DISCARD)
+            idx = encode_action_index(act, offsets)
             if idx > 0 and not mask[idx]:
                 mask[idx] = True
                 resolvers[idx] = act
@@ -244,46 +239,3 @@ def _set_effect_mask(mask, resolvers, card_idx, card, effect,
         resolvers[idx] = Action(type=ActionType.APPLY_EFFECT,
                                 card_id=card_idx, card=card,
                                 card_effect=effect)
-
-
-def _encode_action_index(action, card_index_map, num_cards,
-                         off_play, off_buy, idx_attack_player,
-                         off_attack_base, off_destroy_base,
-                         off_effect_nonscrap, off_effect_scrap,
-                         off_scrap_hand, off_scrap_discard,
-                         off_scrap_trade, off_discard):
-    """Compute the encoded index for a pending Action directly.
-
-    Mirrors the encoding scheme in action_encoder.encode_action() but
-    avoids creating intermediate objects. card_id is already an int index.
-    """
-    ci = action.card_id
-
-    if action.type == ActionType.END_TURN:
-        return END_TURN_INDEX
-    if action.type == ActionType.SKIP_DECISION:
-        return SKIP_INDEX
-    if action.type == ActionType.PLAY_CARD and ci is not None:
-        return off_play + ci
-    if action.type == ActionType.BUY_CARD and ci is not None:
-        return off_buy + ci
-    if action.type == ActionType.ATTACK_PLAYER:
-        return idx_attack_player
-    if action.type == ActionType.ATTACK_BASE and ci is not None:
-        return off_attack_base + ci
-    if action.type == ActionType.DESTROY_BASE and ci is not None:
-        return off_destroy_base + ci
-    if action.type == ActionType.APPLY_EFFECT and ci is not None:
-        if action.card_effect and action.card_effect.is_scrap_effect:
-            return off_effect_scrap + ci
-        return off_effect_nonscrap + ci
-    if action.type == ActionType.SCRAP_CARD and ci is not None:
-        if action.card_source == CardSource.HAND:
-            return off_scrap_hand + ci
-        if action.card_source == CardSource.DISCARD:
-            return off_scrap_discard + ci
-        if action.card_source == CardSource.TRADE:
-            return off_scrap_trade + ci
-    if action.type == ActionType.DISCARD_CARDS and ci is not None:
-        return off_discard + ci
-    return 0  # invalid
