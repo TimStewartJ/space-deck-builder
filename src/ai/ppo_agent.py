@@ -342,12 +342,16 @@ class PPOAgent(Agent):
 
         Minibatches are shuffled on the training device and their metrics
         accumulate there, so the host queues work without waiting for the GPU
-        and reads every number once at the end. A minibatch whose logits, loss
-        or gradient norm is not finite ends learning for this update without
-        applying its step: the fused optimizer skips that step and every later
-        one on the device (the found-inf flag stays set), and other optimizers
-        return before stepping. Either way the weights and optimizer state are
-        those from before that minibatch, and the metrics report NaN.
+        and reads every number once at the end. On a CUDA/HIP device each
+        full masked minibatch's forward, loss, backward and gradient clipping
+        replay from a captured graph (``_MinibatchGraph``) and the fused
+        optimizer steps from its gradients; a final partial minibatch runs
+        eagerly. A minibatch whose logits, loss or gradient norm is not finite
+        ends learning for this update without applying its step: the fused
+        optimizer skips that step and every later one on the device (the
+        found-inf flag stays set), and other optimizers return before
+        stepping. Either way the weights and optimizer state are those from
+        before that minibatch, and the metrics report NaN.
         """
         # Device contract: caller (ppo_trainer) is responsible for moving
         # model and tensors to main_device before calling update().
@@ -372,9 +376,19 @@ class PPOAgent(Agent):
         def explained_variance() -> float:
             return float(explained) if float(var_returns) > 1e-8 else 0.0
 
-        totals = torch.zeros(len(self._METRIC_NAMES), device=device)
-        # 0-d like Adam's step counters, which the fused kernel adjusts by it.
-        nonfinite = torch.zeros((), device=device)
+        graph = (
+            self._minibatch_graph(states, actions, masks)
+            if fused and masks is not None and len(states) >= self.batch_size
+            else None
+        )
+        if graph is not None:
+            totals, nonfinite = graph.totals, graph.nonfinite
+            totals.zero_()
+            nonfinite.zero_()
+        else:
+            totals = torch.zeros(len(self._METRIC_NAMES), device=device)
+            # 0-d like Adam's step counters, which the fused kernel adjusts by it.
+            nonfinite = torch.zeros((), device=device)
         batch_count = 0
         if fused:
             self.optimizer.found_inf = nonfinite
@@ -383,54 +397,20 @@ class PPOAgent(Agent):
                 idxs = torch.randperm(len(states), device=device)
                 for start in range(0, len(states), self.batch_size):
                     b = idxs[start:start + self.batch_size]
-                    s = states[b]
-                    a = actions[b]
-                    olp = old_lp[b]
-                    R = returns[b]
-                    A = advs[b]
-
-                    logits, vals = self.model(s)
-                    bad = ~torch.isfinite(logits).all()
-
-                    # Apply action masks to ensure consistency with the behavior policy
-                    if masks is not None:
-                        logits = logits.masked_fill(~masks[b], float('-inf'))
-
-                    dist = torch.distributions.Categorical(
-                        logits=logits, validate_args=False
-                    )
-                    nl = dist.log_prob(a)
-                    ratio = (nl - olp).exp()
-
-                    s1 = ratio * A
-                    s2 = torch.clamp(ratio, 1-self.clip_eps, 1+self.clip_eps) * A
-                    actor_loss = -torch.min(s1, s2).mean()
-                    critic_loss = nn.functional.mse_loss(vals, R)
-                    entropy = dist.entropy().mean()
-                    loss = actor_loss + self.ppo_config.critic_loss_coef * critic_loss - self.entropy_coef * entropy
-
-                    self.optimizer.zero_grad()
-                    loss.backward()
-                    grad_norm = torch.nn.utils.clip_grad_norm_(
-                        self.model.parameters(), max_norm=self.ppo_config.grad_clip
-                    )
-                    bad = bad | ~torch.isfinite(loss) | ~torch.isfinite(grad_norm)
-                    if fused:
-                        torch.maximum(nonfinite, bad.float(), out=nonfinite)
-                    elif bad.item():
-                        return self._nan_metrics(explained_variance())
+                    if graph is not None and len(b) == self.batch_size:
+                        graph.run(b, states, actions, old_lp, returns, advs, masks)
+                    else:
+                        # Zero in place: replayed graphs write the gradients
+                        # into the tensors they captured as .grad.
+                        self.optimizer.zero_grad(set_to_none=False)
+                        bad = self._learn_minibatch(
+                            states[b], actions[b], old_lp[b], returns[b],
+                            advs[b], None if masks is None else masks[b],
+                            totals, nonfinite,
+                        )
+                        if not fused and bad.item():
+                            return self._nan_metrics(explained_variance())
                     self.optimizer.step()
-
-                    with torch.no_grad():
-                        totals += torch.stack([
-                            actor_loss.detach(),
-                            critic_loss.detach(),
-                            ratio.mean(),
-                            entropy.detach(),
-                            (olp - nl).mean(),
-                            ((ratio - 1.0).abs() > self.clip_eps).float().mean(),
-                            grad_norm.detach(),
-                        ])
                     batch_count += 1
         finally:
             if fused:
@@ -447,6 +427,61 @@ class PPOAgent(Agent):
         metrics["explained_variance"] = explained_variance()
         metrics["nan_detected"] = False
         return metrics
+
+    def _learn_minibatch(self, s, a, olp, R, A, m, totals, nonfinite):
+        """Forward, loss, backward and gradient clipping for one minibatch.
+
+        Adds the minibatch's metrics to ``totals``, raises ``nonfinite`` to 1
+        when its logits, loss or gradient norm is not finite, and leaves the
+        gradients for the optimizer. Returns the minibatch's non-finite flag.
+        """
+        logits, vals = self.model(s)
+        bad = ~torch.isfinite(logits).all()
+
+        # Apply action masks to ensure consistency with the behavior policy
+        if m is not None:
+            logits = logits.masked_fill(~m, float('-inf'))
+
+        dist = torch.distributions.Categorical(logits=logits, validate_args=False)
+        nl = dist.log_prob(a)
+        ratio = (nl - olp).exp()
+
+        s1 = ratio * A
+        s2 = torch.clamp(ratio, 1-self.clip_eps, 1+self.clip_eps) * A
+        actor_loss = -torch.min(s1, s2).mean()
+        critic_loss = nn.functional.mse_loss(vals, R)
+        entropy = dist.entropy().mean()
+        loss = actor_loss + self.ppo_config.critic_loss_coef * critic_loss - self.entropy_coef * entropy
+
+        loss.backward()
+        grad_norm = torch.nn.utils.clip_grad_norm_(
+            self.model.parameters(), max_norm=self.ppo_config.grad_clip
+        )
+        bad = bad | ~torch.isfinite(loss) | ~torch.isfinite(grad_norm)
+        with torch.no_grad():
+            torch.maximum(nonfinite, bad.float(), out=nonfinite)
+            totals += torch.stack([
+                actor_loss.detach(),
+                critic_loss.detach(),
+                ratio.mean(),
+                entropy.detach(),
+                (olp - nl).mean(),
+                ((ratio - 1.0).abs() > self.clip_eps).float().mean(),
+                grad_norm.detach(),
+            ])
+        return bad
+
+    def _minibatch_graph(self, states, actions, masks) -> "_MinibatchGraph":
+        """The captured full-minibatch step, (re)captured when its batch size,
+        input widths or the gradient tensors it writes have changed."""
+        graph = getattr(self, "_update_graph", None)
+        params = list(self.model.parameters())
+        if graph is None or not graph.matches(
+            self.batch_size, states, actions, masks, params
+        ):
+            graph = _MinibatchGraph(self, states, actions, masks)
+            self._update_graph = graph
+        return graph
 
     def clear_buffers(self):
         """Clear all rollout buffers."""
@@ -467,3 +502,79 @@ class PPOAgent(Agent):
             self.total_decision_time = 0.0
             self.num_decisions = 0
         return avg
+
+
+class _MinibatchGraph:
+    """One PPO minibatch step of a ``PPOAgent``, captured as a CUDA/HIP graph.
+
+    The graph gathers nothing: each run copies the minibatch's rows into
+    static buffers with ``index_select`` and replays forward, loss, backward,
+    gradient clipping and the device-side metric and non-finite accumulation
+    of ``PPOAgent._learn_minibatch``, which is what an eager minibatch runs.
+    The optimizer step stays outside the graph, so learning-rate schedules
+    and optimizer state need nothing special.
+
+    Gradients are captured with ``.grad`` unset, so each replay writes fresh
+    gradients into tensors the capture installed as ``.grad``; eager steps
+    must zero them in place instead of setting them to ``None``.
+    """
+
+    def __init__(self, agent, states, actions, masks):
+        device = states.device
+        batch = agent.batch_size
+        self.batch_size = batch
+        self.state_width = states.shape[1]
+        self.mask_width = masks.shape[1]
+        self.s = torch.zeros((batch, self.state_width), device=device)
+        self.a = torch.zeros(batch, dtype=actions.dtype, device=device)
+        self.olp = torch.zeros(batch, device=device)
+        self.R = torch.zeros(batch, device=device)
+        self.A = torch.zeros(batch, device=device)
+        self.m = torch.zeros(
+            (batch, self.mask_width), dtype=torch.bool, device=device
+        )
+        self.m[:, END_TURN_INDEX] = True
+        self.a.fill_(END_TURN_INDEX)
+        self.totals = torch.zeros(len(agent._METRIC_NAMES), device=device)
+        self.nonfinite = torch.zeros((), device=device)
+
+        def step():
+            agent._learn_minibatch(
+                self.s, self.a, self.olp, self.R, self.A, self.m,
+                self.totals, self.nonfinite,
+            )
+
+        # Warm-up runs (needed before capture) compute gradients but never
+        # step the optimizer, so the weights are untouched.
+        side = torch.cuda.Stream(device)
+        side.wait_stream(torch.cuda.current_stream(device))
+        with torch.cuda.stream(side):
+            for _ in range(2):
+                agent.optimizer.zero_grad(set_to_none=True)
+                step()
+        torch.cuda.current_stream(device).wait_stream(side)
+        agent.optimizer.zero_grad(set_to_none=True)
+        self.graph = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(self.graph):
+            step()
+        self.grads = [param.grad for param in agent.model.parameters()]
+
+    def matches(self, batch_size, states, actions, masks, params) -> bool:
+        return (
+            batch_size == self.batch_size
+            and states.shape[1] == self.state_width
+            and masks.shape[1] == self.mask_width
+            and actions.dtype == self.a.dtype
+            and all(
+                param.grad is grad for param, grad in zip(params, self.grads)
+            )
+        )
+
+    def run(self, rows, states, actions, old_lp, returns, advs, masks) -> None:
+        torch.index_select(states, 0, rows, out=self.s)
+        torch.index_select(actions, 0, rows, out=self.a)
+        torch.index_select(old_lp, 0, rows, out=self.olp)
+        torch.index_select(returns, 0, rows, out=self.R)
+        torch.index_select(advs, 0, rows, out=self.A)
+        torch.index_select(masks, 0, rows, out=self.m)
+        self.graph.replay()

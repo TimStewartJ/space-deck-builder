@@ -160,3 +160,30 @@ def test_unfused_optimizer_state_loads_into_the_fused_optimizer(
         assert step.device.type == "cuda"
         assert float(step) == 2.0
     assert resumed.update(*_rollout(resumed, 64, "cuda"))["nan_detected"] is False
+
+
+def test_captured_minibatches_match_eager_minibatches(card_setup, monkeypatch):
+    from src.ai.ppo_agent import PPOAgent
+
+    _in_order(monkeypatch)
+    graphed = _agent(card_setup, "cuda", epochs=2)
+    eager = copy.deepcopy(graphed)
+    monkeypatch.setattr(
+        eager, "_minibatch_graph", lambda *args, **kwargs: None
+    )
+    data = _rollout(graphed, 32 * 3 + 7, "cuda")  # three full minibatches + 7
+    for _ in range(2):
+        graphed_metrics = graphed.update(*data)
+        eager_metrics = eager.update(*data)
+    assert graphed._update_graph is not None
+    assert getattr(eager, "_update_graph", None) is None
+    for name, param in graphed.model.named_parameters():
+        expected = dict(eager.model.named_parameters())[name]
+        torch.testing.assert_close(param, expected, rtol=1e-6, atol=1e-7, msg=name)
+    for key, value in graphed_metrics.items():
+        if key == "nan_detected":
+            assert value is eager_metrics[key] is False
+        else:
+            assert value == pytest.approx(eager_metrics[key], rel=1e-5, abs=1e-7), key
+    for param in graphed.model.parameters():
+        assert float(graphed.optimizer.state[param]["step"]) == 16.0

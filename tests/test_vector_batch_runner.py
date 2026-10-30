@@ -64,6 +64,36 @@ def test_vector_initialization_preserves_physical_starter_decks(setup):
     assert state.explorer_count.tolist() == [10] * 32
 
 
+def test_vector_initialization_deals_uniform_hands_and_trade_rows(setup):
+    _, cards, registry = setup
+    games = 20000
+    state, rules = initialize_training_state(games, cards, registry, seed=11)
+    scout = registry.card_index_map["Scout"]
+    viper = registry.card_index_map["Viper"]
+    physical = np.zeros(rules.num_cards, dtype=np.int64)
+    for card in cards:
+        physical[card.index] += 1
+    market = np.zeros((games, rules.num_cards), dtype=np.int64)
+    np.add.at(market, (np.arange(games)[:, None], state.trade_row), 1)
+    assert np.array_equal(state.trade_deck + market, np.tile(physical, (games, 1)))
+    hand = state.zones[:, :, ZONE_HAND]
+    first = state.first_player.astype(np.int64)
+    sizes = hand.sum(axis=2)
+    assert (sizes[np.arange(games), first] == 3).all()
+    assert (sizes[np.arange(games), 1 - first] == 5).all()
+    assert (hand[:, :, scout] + hand[:, :, viper] == sizes).all()
+    # Vipers in hand are hypergeometric: 3/10 and 5/10 of the two Vipers.
+    assert hand[np.arange(games), first, viper].mean() == pytest.approx(0.6, abs=0.03)
+    assert hand[np.arange(games), 1 - first, viper].mean() == pytest.approx(1.0, abs=0.03)
+    # Each trade-row slot is a uniform draw from the physical trade deck.
+    expected = physical / physical.sum()
+    for slot in range(state.trade_row.shape[1]):
+        observed = np.bincount(state.trade_row[:, slot], minlength=rules.num_cards) / games
+        assert np.abs(observed - expected).max() < 0.01
+    assert 0.48 < state.first_player.mean() < 0.52
+    assert 0.48 < state.training_player.mean() < 0.52
+    assert len(np.unique(state.rng_state)) > games * 0.99
+
 def test_vector_runner_accepts_all_fixed_opponent_types(setup):
     _, cards, registry = setup
     runner = VectorBatchRunner(

@@ -48,6 +48,27 @@ def batch_buckets(capacity: int) -> list[int]:
 
 
 @njit(cache=True)
+def _suppress_redundant_end_turn(out, play_start, play_end, attack_player, end_turn):
+    actions = out.shape[1]
+    for index in range(out.shape[0]):
+        meaningful = out[index, attack_player]
+        if not meaningful:
+            for action in range(play_start, play_end):
+                if out[index, action]:
+                    meaningful = True
+                    break
+        if meaningful:
+            out[index, end_turn] = False
+        elif not out[index, end_turn]:
+            any_legal = False
+            for action in range(actions):
+                if out[index, action]:
+                    any_legal = True
+                    break
+            if not any_legal:
+                out[index, end_turn] = True
+
+
 def stage_effective_masks(
     masks, rows, out, play_start, play_end, attack_player, end_turn
 ):
@@ -57,22 +78,10 @@ def stage_effective_masks(
     directly (``suppress_redundant_end_turn``). A row with no legal action at
     all keeps END_TURN, which is what the policy plays there.
     """
-    actions = masks.shape[1]
-    for index in range(rows.shape[0]):
-        game = rows[index]
-        meaningful = masks[game, attack_player]
-        any_legal = False
-        for action in range(actions):
-            legal = masks[game, action]
-            out[index, action] = legal
-            if legal:
-                any_legal = True
-                if play_start <= action < play_end:
-                    meaningful = True
-        if meaningful:
-            out[index, end_turn] = False
-        elif not any_legal:
-            out[index, end_turn] = True
+    np.take(masks, rows, axis=0, out=out)
+    _suppress_redundant_end_turn(
+        out, play_start, play_end, attack_player, end_turn
+    )
 
 
 def _linear_layers(sequence: nn.Sequential) -> list[nn.Linear]:

@@ -88,24 +88,6 @@ def _compute_linked_gae(
             index = previous[index]
 
 
-def _sample_without_replacement(rng, counts, draws):
-    result = np.zeros_like(counts)
-    work = counts.copy()
-    for _ in range(draws):
-        total = int(work.sum())
-        if total <= 0:
-            break
-        ticket = int(rng.integers(total))
-        cumulative = 0
-        for card, count in enumerate(work):
-            cumulative += int(count)
-            if cumulative > ticket:
-                work[card] -= 1
-                result[card] += 1
-                break
-    return result
-
-
 def initialize_training_state(
     episodes: int,
     cards,
@@ -116,8 +98,12 @@ def initialize_training_state(
 ) -> tuple[VectorState, CompiledRules]:
     """Create physical-deck-faithful independent vector games.
 
-    ``rules`` reuses an earlier :func:`compile_rules` result for the same
-    cards; compiled rules are read-only.
+    Each game draws the first player and the training player uniformly. Each
+    player's ten starter cards (eight Scouts, two Vipers) are shuffled and the
+    first player holds the top three, the other player the top five; the
+    trade row is the top five cards of the shuffled trade deck. ``rules``
+    reuses an earlier :func:`compile_rules` result for the same cards;
+    compiled rules are read-only.
     """
     if rules is None:
         rules = compile_rules(cards, registry)
@@ -130,31 +116,32 @@ def initialize_training_state(
     for card in cards:
         physical_trade[card.index] += 1
 
-    for game in range(episodes):
-        first = int(rng.integers(2))
-        training = int(rng.integers(2))
-        state.first_player[game] = first
-        state.current_player[game] = first
-        state.training_player[game] = training
-        state.health[game] = 50
-        state.explorer_count[game] = 10
+    first = rng.integers(2, size=episodes)
+    state.first_player[:] = first
+    state.current_player[:] = first
+    state.training_player[:] = rng.integers(2, size=episodes)
+    state.health[:] = 50
+    state.explorer_count[:] = 10
 
-        for player in range(2):
-            starter = np.zeros(rules.num_cards, dtype=np.int16)
-            starter[scout] = 8
-            starter[viper] = 2
-            hand_size = 3 if player == first else 5
-            hand = _sample_without_replacement(rng, starter, hand_size)
-            state.zones[game, player, ZONE_HAND] = hand
-            state.zones[game, player, ZONE_DECK] = starter - hand
+    starter = np.array([scout] * 8 + [viper] * 2)
+    order = rng.permuted(np.tile(starter, (episodes, 2, 1)), axis=2)
+    hand_size = np.where(np.arange(2)[None, :] == first[:, None], 3, 5)
+    in_hand = np.arange(len(starter))[None, None, :] < hand_size[:, :, None]
+    vipers = ((order == viper) & in_hand).sum(axis=2)
+    scouts = hand_size - vipers
+    state.zones[:, :, ZONE_HAND, scout] = scouts
+    state.zones[:, :, ZONE_HAND, viper] = vipers
+    state.zones[:, :, ZONE_DECK, scout] = 8 - scouts
+    state.zones[:, :, ZONE_DECK, viper] = 2 - vipers
 
-        market = _sample_without_replacement(rng, physical_trade, 5)
-        remaining = physical_trade - market
-        state.trade_deck[game] = remaining
-        expanded = np.repeat(np.arange(rules.num_cards), market)
-        rng.shuffle(expanded)
-        state.trade_row[game, : len(expanded)] = expanded
-        state.rng_state[game] = int(rng.integers(1, 0x7FFF_FFFF))
+    deck = np.repeat(np.arange(rules.num_cards), physical_trade)
+    row_size = state.trade_row.shape[1]
+    market = rng.permuted(np.tile(deck, (episodes, 1)), axis=1)[:, :row_size]
+    state.trade_row[:] = market
+    drawn = np.zeros((episodes, rules.num_cards), dtype=np.int16)
+    np.add.at(drawn, (np.arange(episodes)[:, None], market), 1)
+    state.trade_deck[:] = physical_trade[None, :] - drawn
+    state.rng_state[:] = rng.integers(1, 0x7FFF_FFFF, size=episodes)
 
     return state, rules
 
