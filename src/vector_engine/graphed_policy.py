@@ -454,7 +454,7 @@ class GraphedRolloutPolicy:
             # Warm-up writes land past the recorded rows, which later
             # replays overwrite.
             self._offset.fill_(self.storage_rows)
-        side = torch.cuda.Stream(self.device)
+        side = _warmup_stream(self.device)
         side.wait_stream(torch.cuda.current_stream(self.device))
         with torch.cuda.stream(side), torch.no_grad():
             for _ in range(2):
@@ -518,3 +518,23 @@ def staged_rows(host: torch.Tensor, slot: int, bucket: int, count: int) -> np.nd
     """NumPy view of slot ``slot``'s first ``count`` staging rows."""
     start = slot * bucket
     return host[start : start + count].numpy()
+
+
+_WARMUP_STREAMS: dict[int, torch.cuda.Stream] = {}
+
+
+def _warmup_stream(device: torch.device) -> torch.cuda.Stream:
+    """One side stream per device for pre-capture warm-up runs.
+
+    BLAS libraries keep a workspace for every stream they run on and never
+    free it (about 75 MB per stream on ROCm), so a fresh stream per capture
+    would leak a workspace per graph.
+    """
+    index = torch.device(device).index
+    if index is None:
+        index = torch.cuda.current_device()
+    stream = _WARMUP_STREAMS.get(index)
+    if stream is None:
+        stream = torch.cuda.Stream(torch.device("cuda", index))
+        _WARMUP_STREAMS[index] = stream
+    return stream
