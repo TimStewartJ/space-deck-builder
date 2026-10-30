@@ -64,6 +64,8 @@ def test_existing_groups_keep_their_indices(names):
     assert offsets.scrap_discard == 347
     assert offsets.scrap_trade == 396
     assert offsets.discard == 445
+    assert offsets.effect_alt == 494
+    assert get_action_space_layout(len(names))["action_dim"] == 543
 
 
 def test_action_dimension_inverts_to_card_count(names):

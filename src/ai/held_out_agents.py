@@ -13,8 +13,11 @@ card's own effect tree with phase-dependent weights:
 
 They are held out: no agent trains against them and they are not tuned
 against any checkpoint (docs/decisions/0013-strength-yardstick.md). Keep them
-out of every training opponent registry. Their behaviour must not change;
-the league's port check reproduces published counts with them.
+out of every training opponent registry, and do not change their decision
+rules: the league's port check reproduced published counts with them under
+rules version 1. Those counts belong to the old rules. Under the current rules
+(docs/decisions/0016-rulebook-ability-timing.md) an OR ability gives one
+option, which ``_choose_or`` picks.
 """
 from __future__ import annotations
 
@@ -422,6 +425,18 @@ class HeldOutAgent(Agent):
         return None
 
     def _choose_or(self, game, player, opponent, parent):
+        """The one option of an OR ability this player takes.
+
+        Recycling Station: discard and draw while the hand holds junk, else
+        trade. Blob World: draw when at least two Blob cards were played this
+        turn, else combat. Trade or combat (Patrol Mech): combat when it
+        reaches the opponent's authority plus outpost defense; otherwise trade
+        in the early phase (also the middle phase except for aggro), combat
+        later. Authority or trade (Trading Post, Barter World): trade in the
+        early and middle phases, then authority. Authority or combat (Defense
+        Center): with no outpost in the way or when it is lethal, combat
+        (fortress: authority); otherwise authority.
+        """
         phase = self._phase(game)
         style = self.style
         children = parent.child_effects

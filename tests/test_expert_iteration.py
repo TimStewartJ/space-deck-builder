@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import random
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -28,19 +27,16 @@ from src.search.turn_search import TurnSearch, TurnSearchConfig
 from src.utils.logger import set_disabled
 from src.vector_engine.rules import compile_rules
 
-REPO = Path(__file__).resolve().parents[1]
-CHECKPOINT = REPO / "results" / "optimized_selfplay_baseline" / "checkpoints" / "selfplay_seed0.pth"
-
 
 @pytest.fixture(scope="module")
-def setup():
+def setup(policy_checkpoint):
     set_disabled(True)
     data = DataConfig()
     cards = data.load_cards()
     registry = data.build_registry(cards)
     rules = compile_rules(cards, registry)
     names = registry.card_names
-    checkpoint = load_checkpoint(str(CHECKPOINT), map_location="cpu")
+    checkpoint = load_checkpoint(policy_checkpoint, map_location="cpu")
     model = PPOActorCritic(
         get_state_size(names), get_action_space_size(names), len(names),
         model_config=ModelConfig.from_dict(checkpoint["config"]["model"]),
@@ -156,10 +152,10 @@ def test_policy_value_losses_mask_illegal_actions():
 
 
 @pytest.fixture(scope="module")
-def selfplay_dir(tmp_path_factory, setup):
+def selfplay_dir(tmp_path_factory, setup, policy_checkpoint):
     directory = tmp_path_factory.mktemp("selfplay")
     config = SelfPlayConfig(
-        model_path=str(CHECKPOINT), games=4, budget=2, max_candidates=2, seed=5,
+        model_path=policy_checkpoint, games=4, budget=2, max_candidates=2, seed=5,
         device="cpu", workers=1, numba_threads=2, batch_size=4, shard_positions=200,
     )
     summary = generate_selfplay(config, directory, log_fn=lambda *_: None, model=setup[3])
@@ -230,11 +226,11 @@ def test_selfplay_generation_resumes_and_reproduces_games(selfplay_dir, setup):
     assert summary["positions"] == load_selfplay_data(directory).positions
 
 
-def test_distill_writes_loadable_checkpoint_and_history(selfplay_dir, tmp_path):
+def test_distill_writes_loadable_checkpoint_and_history(selfplay_dir, tmp_path, policy_checkpoint):
     directory, config, _ = selfplay_dir
     output = tmp_path / "student.pth"
     config = DistillConfig(
-        model_path=str(CHECKPOINT), data_dir=str(directory), output_path=str(output),
+        model_path=policy_checkpoint, data_dir=str(directory), output_path=str(output),
         lr=1e-3, batch_size=64, max_epochs=2, patience=2, validation_modulus=2, device="cpu",
     )
     summary = distill(config, log_fn=lambda *_: None)

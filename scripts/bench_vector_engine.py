@@ -28,6 +28,7 @@ from src.vector_engine.kernels import (
     BUY_OFFSET,
     DESTROY_BASE_OFFSET,
     DISCARD_OFFSET,
+    EFFECT_ALT_OFFSET,
     EFFECT_NONSCRAP_OFFSET,
     EFFECT_SCRAP_OFFSET,
     END_TURN_INDEX,
@@ -245,7 +246,6 @@ def state_digest(engine):
 def choose_actions(mask, step, num_cards):
     actions = np.full(mask.shape[0], END_TURN_INDEX, dtype=np.int32)
     game = np.arange(mask.shape[0])
-    phase = (game + step) % 13
     ranges = (
         (PLAY_OFFSET, PLAY_OFFSET + num_cards),
         (EFFECT_NONSCRAP_OFFSET, EFFECT_NONSCRAP_OFFSET + num_cards),
@@ -253,6 +253,7 @@ def choose_actions(mask, step, num_cards):
         (ATTACK_BASE_OFFSET, ATTACK_BASE_OFFSET + num_cards),
         (ATTACK_PLAYER_INDEX, ATTACK_PLAYER_INDEX + 1),
         (EFFECT_SCRAP_OFFSET, EFFECT_SCRAP_OFFSET + num_cards),
+        (EFFECT_ALT_OFFSET, EFFECT_ALT_OFFSET + num_cards),
         (SCRAP_HAND_OFFSET, SCRAP_HAND_OFFSET + num_cards),
         (SCRAP_DISCARD_OFFSET, SCRAP_DISCARD_OFFSET + num_cards),
         (SCRAP_TRADE_OFFSET, SCRAP_TRADE_OFFSET + num_cards),
@@ -260,7 +261,9 @@ def choose_actions(mask, step, num_cards):
         (DISCARD_OFFSET, DISCARD_OFFSET + num_cards),
         (SKIP_INDEX, SKIP_INDEX + 1),
     )
-    chosen = phase == 12
+    # The last phase ends the turn.
+    phase = (game + step) % (len(ranges) + 1)
+    chosen = phase == len(ranges)
     for target_phase, (start, end) in enumerate(ranges):
         candidates = mask[:, start:end]
         selected = (phase == target_phase) & candidates.any(axis=1)
@@ -294,6 +297,7 @@ def build_schedule(initial, rules, steps):
             ("attack_base", ATTACK_BASE_OFFSET, ATTACK_BASE_OFFSET + rules.num_cards),
             ("attack_player", ATTACK_PLAYER_INDEX, ATTACK_PLAYER_INDEX + 1),
             ("scrap", EFFECT_SCRAP_OFFSET, EFFECT_SCRAP_OFFSET + rules.num_cards),
+            ("effect_alt", EFFECT_ALT_OFFSET, EFFECT_ALT_OFFSET + rules.num_cards),
             ("scrap_hand", SCRAP_HAND_OFFSET, SCRAP_HAND_OFFSET + rules.num_cards),
             ("scrap_discard", SCRAP_DISCARD_OFFSET, SCRAP_DISCARD_OFFSET + rules.num_cards),
             ("scrap_trade", SCRAP_TRADE_OFFSET, SCRAP_TRADE_OFFSET + rules.num_cards),
@@ -406,8 +410,14 @@ def benchmark_integrated(initial, rules, registry, steps, repetitions):
             )
             action_profile["effect"] += int(
                 (
-                    (action >= EFFECT_NONSCRAP_OFFSET)
-                    & (action < EFFECT_NONSCRAP_OFFSET + rules.num_cards)
+                    (
+                        (action >= EFFECT_NONSCRAP_OFFSET)
+                        & (action < EFFECT_NONSCRAP_OFFSET + rules.num_cards)
+                    )
+                    | (
+                        (action >= EFFECT_ALT_OFFSET)
+                        & (action < EFFECT_ALT_OFFSET + rules.num_cards)
+                    )
                 ).sum()
             )
             action_profile["buy"] += int(

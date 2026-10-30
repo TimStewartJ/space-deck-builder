@@ -56,8 +56,9 @@ class CompiledRules:
     bundle_faction: np.ndarray
     bundle_requirement: np.ndarray
     bundle_source_effect: np.ndarray
-    bundle_stage: np.ndarray
-    bundle_next: np.ndarray
+    # 0 for an ordinary bundle; 1 or 2 for the first or second option of the
+    # card's OR ability, applied by its effect_nonscrap or effect_alt action.
+    bundle_option: np.ndarray
     bundle_op_start: np.ndarray
     bundle_op_count: np.ndarray
 
@@ -87,7 +88,7 @@ class _Leaf:
     trigger: EffectTrigger
     faction: int
     requirement: int
-    stage: int
+    option: int
 
 
 def _starter_templates(registry: CardRegistry) -> dict[str, Card]:
@@ -157,12 +158,20 @@ def _flatten(
     inherited_faction: str | None = None,
     inherited_requirement: int = 0,
     inherited_auto: bool | None = None,
-    stage: int = 0,
+    option: int = 0,
     inside_or: bool = False,
+    top_level: bool = True,
 ) -> list[_Leaf]:
     inherited_scrap = inherited_scrap or effect.is_scrap_effect
     if effect.is_or_effect and inside_or:
         raise ValueError("nested OR effects are unsupported")
+    if effect.is_or_effect and not top_level:
+        raise ValueError(
+            "an OR ability must be a card's top-level ability: an action "
+            "identifies only the card and the option"
+        )
+    if inside_or and effect.faction_requirement:
+        raise ValueError("faction-gated OR options are unsupported")
     if effect.faction_requirement and inherited_faction:
         if parse_faction(effect.faction_requirement) != parse_faction(
             inherited_faction
@@ -206,12 +215,9 @@ def _flatten(
         leaves: list[_Leaf] = []
         children = effect.child_effects or ()
         for child_index, child in enumerate(children):
-            child_stage = stage
-            if effect.is_or_effect:
-                # ActionContext resolves the first child directly. On the
-                # next action it resolves the parent, which applies every
-                # remaining child. Thus OR is two activation stages.
-                child_stage = 0 if child_index == 0 else 1
+            # Option 1 of an OR ability is the card's effect_nonscrap action
+            # and option 2 its effect_alt action; either uses the ability.
+            child_option = child_index + 1 if effect.is_or_effect else option
             leaves.extend(
                 _flatten(
                     child,
@@ -219,8 +225,9 @@ def _flatten(
                     inherited_faction=inherited_faction,
                     inherited_requirement=inherited_requirement,
                     inherited_auto=inherited_auto,
-                    stage=child_stage,
+                    option=child_option,
                     inside_or=inside_or or effect.is_or_effect,
+                    top_level=False,
                 )
             )
         return leaves
@@ -241,7 +248,7 @@ def _flatten(
             trigger=trigger,
             faction=faction,
             requirement=requirement,
-            stage=stage,
+            option=option,
         )
     ]
 
@@ -250,14 +257,14 @@ def _bundle_leaves(leaves: list[_Leaf]) -> list[list[_Leaf]]:
     """Group leaves applied by one encoded APPLY_EFFECT action."""
     bundles: list[list[_Leaf]] = []
     for leaf in leaves:
-        key = (leaf.trigger, leaf.faction, leaf.requirement, leaf.stage)
+        key = (leaf.trigger, leaf.faction, leaf.requirement, leaf.option)
         if bundles:
             previous = bundles[-1][0]
             if key == (
                 previous.trigger,
                 previous.faction,
                 previous.requirement,
-                previous.stage,
+                previous.option,
             ):
                 bundles[-1].append(leaf)
                 continue
@@ -292,12 +299,39 @@ def _validate_disjoint_pending_domains(leaves: list[_Leaf]) -> None:
         seen |= domain
 
 
+def _validate_or_options(
+    card: Card, bundles_with_source: list[tuple[int, list[_Leaf]]]
+) -> None:
+    """A card has at most one OR ability, and each option is one bundle.
+
+    An option action identifies only the card and the option, so a second
+    OR ability would be ambiguous, and applying an option applies exactly
+    one bundle.
+    """
+    or_sources = {
+        source for source, effect in enumerate(card.effects)
+        if effect.is_or_effect
+    }
+    if len(or_sources) > 1:
+        raise ValueError("a card may have at most one OR ability")
+    for source in or_sources:
+        options = [
+            bundle[0].option
+            for bundle_source, bundle in bundles_with_source
+            if bundle_source == source
+        ]
+        if sorted(options) != [1, 2]:
+            raise ValueError(
+                "each OR option must compile to exactly one activation bundle"
+            )
+
+
 def compile_rules(
     cards: list[Card], registry: CardRegistry
 ) -> CompiledRules:
     """Compile all canonical card definitions.
 
-    Cards containing target-selection or OR effects remain in the metadata
+    Cards whose effects cannot be represented exactly remain in the metadata
     tables but are marked unsupported with an explicit reason.
     """
     count = registry.num_cards
@@ -319,8 +353,7 @@ def compile_rules(
     bundle_source_effect = np.full(
         (count, MAX_BUNDLES), -1, dtype=np.int8
     )
-    bundle_stage = np.zeros((count, MAX_BUNDLES), dtype=np.int8)
-    bundle_next = np.full((count, MAX_BUNDLES), -1, dtype=np.int8)
+    bundle_option = np.zeros((count, MAX_BUNDLES), dtype=np.int8)
     bundle_op_start = np.zeros((count, MAX_BUNDLES), dtype=np.int8)
     bundle_op_count = np.zeros((count, MAX_BUNDLES), dtype=np.int8)
 
@@ -366,6 +399,7 @@ def compile_rules(
                     f"{len(bundles_with_source)} bundles exceed "
                     f"MAX_BUNDLES={MAX_BUNDLES}"
                 )
+            _validate_or_options(card, bundles_with_source)
             queue_opcodes = {
                 EffectOpcode.QUEUE_SCRAP,
                 EffectOpcode.QUEUE_DESTROY_BASE,
@@ -384,7 +418,7 @@ def compile_rules(
             for source_effect, bundle in bundles_with_source:
                 if bundle[0].trigger != EffectTrigger.AUTO:
                     explicit_groups.setdefault(
-                        (source_effect, bundle[0].stage), []
+                        (source_effect, bundle[0].option), []
                     ).extend(bundle)
             max_explicit_queues = max(
                 (
@@ -421,7 +455,7 @@ def compile_rules(
             bundle_faction[index, bundle_index] = first.faction
             bundle_requirement[index, bundle_index] = first.requirement
             bundle_source_effect[index, bundle_index] = source_effect
-            bundle_stage[index, bundle_index] = first.stage
+            bundle_option[index, bundle_index] = first.option
             bundle_op_start[index, bundle_index] = operation
             bundle_op_count[index, bundle_index] = len(bundle)
             for leaf in bundle:
@@ -429,23 +463,6 @@ def compile_rules(
                 op_value[index, operation] = leaf.value
                 op_arg[index, operation] = leaf.arg
                 operation += 1
-
-        # OR stage 0 transitions to the remaining-child stage 1 for the same
-        # source effect. Non-OR bundles have no continuation.
-        for bundle_index in range(len(bundles_with_source)):
-            source_effect, bundle = bundles_with_source[bundle_index]
-            if bundle[0].stage != 0:
-                continue
-            for candidate in range(bundle_index + 1, len(bundles_with_source)):
-                candidate_source, candidate_bundle = bundles_with_source[
-                    candidate
-                ]
-                if (
-                    candidate_source == source_effect
-                    and candidate_bundle[0].stage == 1
-                ):
-                    bundle_next[index, bundle_index] = candidate
-                    break
 
         bundle_count[index] = len(bundles_with_source)
         op_count[index] = operation
@@ -465,8 +482,7 @@ def compile_rules(
         bundle_faction=bundle_faction,
         bundle_requirement=bundle_requirement,
         bundle_source_effect=bundle_source_effect,
-        bundle_stage=bundle_stage,
-        bundle_next=bundle_next,
+        bundle_option=bundle_option,
         bundle_op_start=bundle_op_start,
         bundle_op_count=bundle_op_count,
         op_count=op_count,

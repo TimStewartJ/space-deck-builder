@@ -1,7 +1,6 @@
 """Tests for the search uplift match harness."""
 import json
 import math
-from pathlib import Path
 
 import pytest
 
@@ -15,9 +14,6 @@ from src.search.uplift import (
     summarize,
     wilson_interval,
 )
-
-REPO = Path(__file__).resolve().parents[1]
-CHECKPOINT = REPO / "results" / "optimized_selfplay_baseline" / "checkpoints" / "selfplay_seed0.pth"
 
 
 def test_config_rejects_invalid_ladders():
@@ -67,9 +63,9 @@ def test_search_eval_cli_defaults():
     assert args.games % 2 == 0
 
 
-def test_run_uplift_plays_paired_exact_seat_games_and_resumes(tmp_path):
+def test_run_uplift_plays_paired_exact_seat_games_and_resumes(tmp_path, policy_checkpoint):
     config = UpliftConfig(
-        model_path=str(CHECKPOINT), budgets=(0, 2), games=2,
+        model_path=policy_checkpoint, budgets=(0, 2), games=2,
         baseline="greedy", max_candidates=2, seed=3, device="cpu", workers=1,
     )
     output = tmp_path / "uplift.json"
@@ -99,9 +95,9 @@ def test_run_uplift_plays_paired_exact_seat_games_and_resumes(tmp_path):
         run_uplift(UpliftConfig(**{**config.__dict__, "seed": 4}), output_json=str(output), log_fn=logs.append)
 
 
-def test_run_uplift_rejects_journals_from_another_search_implementation(tmp_path):
+def test_run_uplift_rejects_journals_from_another_search_implementation(tmp_path, policy_checkpoint):
     config = UpliftConfig(
-        model_path=str(CHECKPOINT), budgets=(0,), games=2, device="cpu", workers=1,
+        model_path=policy_checkpoint, budgets=(0,), games=2, device="cpu", workers=1,
     )
     output = tmp_path / "uplift.json"
     identity = {

@@ -1,9 +1,31 @@
 from src.engine.game import Game
 from src.engine.actions import ActionType, Action, CardSource, get_available_actions
-from src.cards.factions import Faction, faction_display
+from src.cards.factions import Faction, faction_display, parse_faction
 from src.cards.card import CardType
 from src.cards.effects import CardEffectType
 from src.ai.agent import Agent
+from src.rules.ir import effect_defaults_to_auto
+
+
+def on_play_trade(card) -> int:
+    """Trade *card* adds as soon as it is played.
+
+    Counts the trade in the abilities that resolve when the card is played;
+    OR options, ally abilities and scrap abilities are not counted.
+    """
+    return sum(
+        _resolving_trade(effect)
+        for effect in card.effects
+        if effect_defaults_to_auto(effect)
+    )
+
+
+def _resolving_trade(effect) -> int:
+    if effect.faction_requirement or effect.is_scrap_effect or effect.is_or_effect:
+        return 0
+    if effect.child_effects:
+        return sum(_resolving_trade(child) for child in effect.child_effects)
+    return effect.value if effect.effect_type == CardEffectType.TRADE else 0
 
 
 class HeuristicAgent(Agent):
@@ -11,6 +33,7 @@ class HeuristicAgent(Agent):
 
     Decision priority: play all cards → apply effects (draw first) →
     attack (lethal check, outposts, bases, player) → buy (scored) → end turn.
+    One option of every OR ability is chosen by :meth:`_choose_or_option`.
     """
 
     def __init__(self, name: str = "Heuristic", cli_interface=None):
@@ -33,9 +56,11 @@ class HeuristicAgent(Agent):
         if play_actions:
             return self._pick_best_play(play_actions, player)
 
-        # Priority 2: apply available effects (draw effects first)
+        # Priority 2: apply available effects (draw effects first), taking
+        # one option of each OR ability
         effect_actions = [a for a in actions if a.type == ActionType.APPLY_EFFECT]
         if effect_actions:
+            effect_actions = self._keep_chosen_options(game_state, player, effect_actions)
             return self._pick_best_effect(effect_actions)
 
         # Priority 3: attack (with lethal detection)
@@ -180,6 +205,89 @@ class HeuristicAgent(Agent):
         effect_actions.sort(key=effect_priority, reverse=True)
         return effect_actions[0]
 
+    # ── OR abilities ───────────────────────────────────────────────────
+
+    def _keep_chosen_options(self, game_state, player, effect_actions):
+        """Drop every OR option except the one :meth:`_choose_or_option` picks."""
+        options_by_ability: dict[int, list[Action]] = {}
+        for action in effect_actions:
+            ability = action.card_effect.or_parent if action.card_effect else None
+            if ability is not None:
+                options_by_ability.setdefault(id(ability), []).append(action)
+        chosen = {
+            id(self._choose_or_option(game_state, player, options))
+            for options in options_by_ability.values()
+        }
+        return [
+            action for action in effect_actions
+            if action.card_effect is None
+            or action.card_effect.or_parent is None
+            or id(action) in chosen
+        ]
+
+    def _choose_or_option(self, game_state, player, options):
+        """Pick one option of an OR ability (decision 0016).
+
+        In order: combat that brings the combat total to the opponent's
+        authority while no outpost blocks a direct attack; trade that lets
+        the agent afford a card it would buy this turn
+        (:meth:`_trade_enables_purchase`); a draw-per-faction option that
+        draws at least two cards. Otherwise combat, then authority, then
+        trade, then the first option. The agent plays its whole hand before
+        it uses a base, so Recycling Station's discard option would discard
+        nothing and is never preferred.
+        """
+        by_kind: dict[CardEffectType, Action] = {}
+        for action in options:
+            by_kind.setdefault(action.card_effect.effect_type, action)
+        opponent = game_state.get_opponent(player)
+
+        combat = by_kind.get(CardEffectType.COMBAT)
+        if (
+            combat is not None
+            and opponent is not None
+            and not any(base.is_outpost() for base in opponent.bases)
+            and player.combat + combat.card_effect.value >= opponent.health
+        ):
+            return combat
+        trade = by_kind.get(CardEffectType.TRADE)
+        if trade is not None and self._trade_enables_purchase(
+            game_state, player, trade.card_effect.value
+        ):
+            return trade
+        draw = by_kind.get(CardEffectType.DRAW_PER_FACTION)
+        if draw is not None:
+            target = int(parse_faction(draw.card_effect.faction_target))
+            draws = sum(
+                1 for card in player.played_cards
+                if int(card.effective_faction) & target
+            )
+            if draws >= 2:
+                return draw
+        for kind in (CardEffectType.COMBAT, CardEffectType.HEAL, CardEffectType.TRADE):
+            if kind in by_kind:
+                return by_kind[kind]
+        return options[0]
+
+    def _trade_enables_purchase(self, game_state, player, extra: int) -> bool:
+        """Whether *extra* trade lets the agent afford a card it would buy.
+
+        The agent plays every card before it buys, so the trade it will have
+        is its current trade plus the trade its hand adds when played
+        (:func:`on_play_trade`). A card it would buy scores above the buy
+        threshold of :meth:`_pick_buy`.
+        """
+        expected = player.trade + sum(on_play_trade(card) for card in player.hand)
+        faction_counts = self._count_factions(player)
+        candidates = list(game_state.trade_row)
+        if game_state.explorer_pile:
+            candidates.append(game_state.explorer_pile[-1])
+        return any(
+            expected < card.cost <= expected + extra
+            and self._score_card(card, player, faction_counts) > 1
+            for card in candidates
+        )
+
     # ── Attack ─────────────────────────────────────────────────────────
 
     def _pick_attack(self, actions, game_state, player):
@@ -252,7 +360,10 @@ class HeuristicAgent(Agent):
         card = action.card
         if not card:
             return 0
+        return self._score_card(card, player, faction_counts)
 
+    def _score_card(self, card, player, faction_counts):
+        """Purchase score of *card*; the agent buys only above 1."""
         score = 0.0
 
         # Base score: cost is a rough proxy for power (higher cost = better card)

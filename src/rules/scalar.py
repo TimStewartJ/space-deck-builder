@@ -186,6 +186,12 @@ def _scrap_source(game, player, card):
         game._return_explorer_to_pile(card)
 
 
+def _mark_used(effect: Effect) -> None:
+    effect.applied = True
+    for child in effect.child_effects or ():
+        _mark_used(child)
+
+
 def apply_effect(
     effect: Effect,
     game,
@@ -194,26 +200,45 @@ def apply_effect(
     *,
     auto_only: bool = False,
 ) -> None:
-    """Apply one mutable Effect through the shared opcode contract."""
+    """Apply one mutable Effect through the shared opcode contract.
+
+    An OR ability is never applied as a whole. Applying one of its options
+    uses the ability: every option is marked used for the rest of the turn.
+    """
+    if effect.is_or_effect:
+        raise ValueError(
+            "an OR ability gives exactly one option; apply the chosen option"
+        )
     if effect.applied:
         return
+    if not _apply(effect, game, player, card, auto_only=auto_only):
+        return
+    if effect.or_parent is not None and not auto_only:
+        for option in effect.or_parent.child_effects:
+            _mark_used(option)
+
+
+def _apply(effect: Effect, game, player, card, *, auto_only: bool) -> bool:
+    """Apply *effect*; return False when its ally requirement is unmet."""
+    if effect.applied:
+        return True
     if (
         effect.faction_requirement
         and player.get_faction_ally_count(effect.faction_requirement)
         <= effect.faction_requirement_count
     ):
-        return
+        return False
 
     if effect.effect_type == CardEffectType.PARENT:
         for child in effect.child_effects or ():
             if auto_only and not _auto_applicable(child):
                 continue
-            apply_effect(child, game, player, card, auto_only=auto_only)
+            _apply(child, game, player, card, auto_only=auto_only)
         if effect.is_scrap_effect:
             _scrap_source(game, player, card)
-        return
+        return True
     if auto_only and not _auto_applicable(effect):
-        return
+        return True
 
     opcode, value, arg = compile_effect_op(effect)
     if opcode == EffectOpcode.ADD_COMBAT:
@@ -278,3 +303,4 @@ def apply_effect(
 
     if effect.is_scrap_effect and card:
         _scrap_source(game, player, card)
+    return True

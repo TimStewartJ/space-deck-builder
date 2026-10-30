@@ -62,6 +62,7 @@ ATTACK_BASE_OFFSET = _GROUPS["attack_base"]
 DESTROY_BASE_OFFSET = _GROUPS["destroy_base"]
 EFFECT_NONSCRAP_OFFSET = _GROUPS["effect_nonscrap"]
 EFFECT_SCRAP_OFFSET = _GROUPS["effect_scrap"]
+EFFECT_ALT_OFFSET = _GROUPS["effect_alt"]
 SCRAP_HAND_OFFSET = _GROUPS["scrap_hand"]
 SCRAP_DISCARD_OFFSET = _GROUPS["scrap_discard"]
 SCRAP_TRADE_OFFSET = _GROUPS["scrap_trade"]
@@ -120,13 +121,34 @@ def _bundle_bit(bundle):
 
 
 @njit(inline="always")
+def _use_or_ability(
+    instance_state,
+    bundle_count,
+    bundle_source_effect,
+    bundle_option,
+    rule_card,
+    chosen,
+):
+    """Clear every option of the OR ability whose option *chosen* was used."""
+    if bundle_option[rule_card, chosen] == 0:
+        return instance_state
+    source = bundle_source_effect[rule_card, chosen]
+    for bundle in range(bundle_count[rule_card]):
+        if (
+            bundle_option[rule_card, bundle] != 0
+            and bundle_source_effect[rule_card, bundle] == source
+        ):
+            instance_state &= 0xFFFF ^ _bundle_bit(bundle)
+    return instance_state
+
+
+@njit(inline="always")
 def _add_effect_instance(
     effect_state,
     instance_rule_card,
     instance_faction,
     bundle_count,
     bundle_trigger,
-    bundle_stage,
     card_faction,
     game,
     player,
@@ -466,6 +488,42 @@ def _draw_one(
     return draw_position
 
 
+@njit(inline="always")
+def _played_faction_count(
+    zones,
+    effect_state,
+    instance_faction,
+    card_faction,
+    game,
+    player,
+    target,
+):
+    """Cards played this turn whose effective faction includes *target*.
+
+    Matches the scalar count over ``player.played_cards`` by effective
+    faction, which Blob World's draw-per-faction option uses.
+    """
+    count = 0
+    for active_card in range(zones.shape[3]):
+        active_instances = 0
+        for active_instance in range(effect_state.shape[3]):
+            state = effect_state[game, player, active_card, active_instance]
+            if (state & ACTIVE_BIT) == 0:
+                break
+            active_instances += 1
+            if (
+                state & CURRENT_TURN_BIT
+                and instance_faction[
+                    game, player, active_card, active_instance
+                ]
+                & target
+            ):
+                count += 1
+        if active_instances == 0 and card_faction[active_card] & target:
+            count += zones[game, player, ZONE_PLAYED, active_card]
+    return count
+
+
 @njit(cache=True)
 def _apply_bundle(
     zones,
@@ -535,32 +593,15 @@ def _apply_bundle(
                     draw_position,
                 )
         elif opcode == OP_DRAW_PER_FACTION:
-            target = op_arg[rule_card, operation]
-            draws = 0
-            for active_card in range(zones.shape[3]):
-                active_instances = 0
-                for active_instance in range(effect_state.shape[3]):
-                    state = effect_state[
-                        game, player, active_card, active_instance
-                    ]
-                    if (state & ACTIVE_BIT) == 0:
-                        break
-                    active_instances += 1
-                    if (
-                        state & CURRENT_TURN_BIT
-                        and instance_faction[
-                            game, player, active_card, active_instance
-                        ]
-                        & target
-                    ):
-                        draws += 1
-                if (
-                    active_instances == 0
-                    and card_faction[active_card] & target
-                ):
-                    draws += zones[
-                        game, player, ZONE_PLAYED, active_card
-                    ]
+            draws = _played_faction_count(
+                zones,
+                effect_state,
+                instance_faction,
+                card_faction,
+                game,
+                player,
+                op_arg[rule_card, operation],
+            )
             for _ in range(draws):
                 draw_position = _draw_one(
                     zones,
@@ -908,6 +949,7 @@ def build_action_masks_kernel(
     bundle_trigger,
     bundle_faction,
     bundle_requirement,
+    bundle_option,
     masks,
 ):
     for game in prange(zones.shape[0]):
@@ -1049,6 +1091,8 @@ def build_action_masks_kernel(
                         == TRIGGER_SCRAP
                     ):
                         masks[game, EFFECT_SCRAP_OFFSET + card] = True
+                    elif bundle_option[rule_card, bundle] == 2:
+                        masks[game, EFFECT_ALT_OFFSET + card] = True
                     else:
                         masks[game, EFFECT_NONSCRAP_OFFSET + card] = True
 
@@ -1077,7 +1121,7 @@ def build_action_weights_kernel(
     bundle_faction,
     bundle_requirement,
     bundle_source_effect,
-    bundle_stage,
+    bundle_option,
     masks,
     weights,
 ):
@@ -1196,8 +1240,8 @@ def build_action_weights_kernel(
                             )
                             and bundle_source_effect[rule_card, previous]
                             == bundle_source_effect[rule_card, bundle]
-                            and bundle_stage[rule_card, previous]
-                            == bundle_stage[rule_card, bundle]
+                            and bundle_option[rule_card, previous]
+                            == bundle_option[rule_card, bundle]
                             and _bundle_eligible(
                                 zones,
                                 card_faction,
@@ -1222,6 +1266,8 @@ def build_action_weights_kernel(
                         == TRIGGER_SCRAP
                     ):
                         weights[game, EFFECT_SCRAP_OFFSET + card] += 1
+                    elif bundle_option[rule_card, bundle] == 2:
+                        weights[game, EFFECT_ALT_OFFSET + card] += 1
                     else:
                         weights[game, EFFECT_NONSCRAP_OFFSET + card] += 1
         weights[game, END_TURN_INDEX] = 1
@@ -1273,8 +1319,7 @@ def step_kernel(
     bundle_faction,
     bundle_requirement,
     bundle_source_effect,
-    bundle_stage,
-    bundle_next,
+    bundle_option,
     bundle_op_start,
     bundle_op_count,
     op_code,
@@ -1661,6 +1706,18 @@ def step_kernel(
             completed = skipped or (
                 matched and pending_remaining[game, player, 0] <= 0
             )
+            if matched and not completed:
+                # An optional set whose targets ran out offers only SKIP. It
+                # is kept as an empty scrap set, as the scalar conversion
+                # stores a pending set without actions.
+                exhausted = True
+                for group in range(pending_targets.shape[3]):
+                    if pending_targets[game, player, 0, group].sum() > 0:
+                        exhausted = False
+                        break
+                if exhausted:
+                    pending_mode[game, player, 0] = PENDING_SCRAP
+                    pending_sources[game, player, 0] = 0
             if completed:
                 if scrapped_trade:
                     for slot in range(trade_row.shape[1]):
@@ -1767,7 +1824,6 @@ def step_kernel(
                     instance_faction,
                     bundle_count,
                     bundle_trigger,
-                    bundle_stage,
                     card_faction,
                     game,
                     player,
@@ -1934,8 +1990,17 @@ def step_kernel(
             EFFECT_NONSCRAP_OFFSET
             <= action
             < EFFECT_NONSCRAP_OFFSET + zones.shape[3]
+        ) or (
+            EFFECT_ALT_OFFSET <= action < EFFECT_ALT_OFFSET + zones.shape[3]
         ):
-            card = action - EFFECT_NONSCRAP_OFFSET
+            # effect_alt applies the second option of the card's OR ability;
+            # effect_nonscrap applies any other non-scrap ability, including
+            # the first option.
+            alternative = action >= EFFECT_ALT_OFFSET
+            if alternative:
+                card = action - EFFECT_ALT_OFFSET
+            else:
+                card = action - EFFECT_NONSCRAP_OFFSET
             applied = False
             candidate_variant = 0
             for instance in range(effect_state.shape[3]):
@@ -1954,6 +2019,8 @@ def step_kernel(
                         (instance_state & _bundle_bit(bundle)) != 0
                         and bundle_trigger[rule_card, bundle]
                         != TRIGGER_SCRAP
+                        and (bundle_option[rule_card, bundle] == 2)
+                        == alternative
                         and _bundle_eligible(
                             zones,
                             card_faction,
@@ -1980,8 +2047,8 @@ def step_kernel(
                                     rule_card, previous
                                 ]
                                 == bundle_source_effect[rule_card, bundle]
-                                and bundle_stage[rule_card, previous]
-                                == bundle_stage[rule_card, bundle]
+                                and bundle_option[rule_card, previous]
+                                == bundle_option[rule_card, bundle]
                                 and _bundle_eligible(
                                     zones,
                                     card_faction,
@@ -2015,8 +2082,8 @@ def step_kernel(
                                     rule_card, grouped
                                 ]
                                 != bundle_source_effect[rule_card, bundle]
-                                or bundle_stage[rule_card, grouped]
-                                != bundle_stage[rule_card, bundle]
+                                or bundle_option[rule_card, grouped]
+                                != bundle_option[rule_card, bundle]
                                 or not _bundle_eligible(
                                     zones,
                                     card_faction,
@@ -2079,6 +2146,14 @@ def step_kernel(
                             next_state &= (
                                 0xFFFF ^ _bundle_bit(grouped)
                             )
+                        next_state = _use_or_ability(
+                            next_state,
+                            bundle_count,
+                            bundle_source_effect,
+                            bundle_option,
+                            rule_card,
+                            bundle,
+                        )
                         effect_state[
                             game, player, card, instance
                         ] = next_state
@@ -2537,6 +2612,7 @@ class VectorEngine:
             r.bundle_trigger,
             r.bundle_faction,
             r.bundle_requirement,
+            r.bundle_option,
             self.masks,
         )
         return self.masks
@@ -2639,7 +2715,7 @@ class VectorEngine:
             r.bundle_faction,
             r.bundle_requirement,
             r.bundle_source_effect,
-            r.bundle_stage,
+            r.bundle_option,
             self.masks,
             self.action_weights,
         )
@@ -2736,8 +2812,7 @@ class VectorEngine:
             r.bundle_faction,
             r.bundle_requirement,
             r.bundle_source_effect,
-            r.bundle_stage,
-            r.bundle_next,
+            r.bundle_option,
             r.bundle_op_start,
             r.bundle_op_count,
             r.op_code,

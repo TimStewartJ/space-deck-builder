@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import copy
 import random
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -39,9 +38,6 @@ from src.utils.logger import set_disabled
 from src.vector_engine.rules import compile_rules
 from src.vector_engine.state import ZONE_DECK, ZONE_HAND, from_games
 
-REPO = Path(__file__).resolve().parents[1]
-CHECKPOINT = REPO / "results" / "optimized_selfplay_baseline" / "checkpoints" / "selfplay_seed0.pth"
-
 
 @pytest.fixture(scope="module")
 def card_data():
@@ -54,10 +50,10 @@ def card_data():
 
 
 @pytest.fixture(scope="module")
-def policy(card_data):
+def policy(card_data, policy_checkpoint):
     _, registry, _ = card_data
     names = registry.card_names
-    checkpoint = load_checkpoint(str(CHECKPOINT), map_location="cpu")
+    checkpoint = load_checkpoint(policy_checkpoint, map_location="cpu")
     model = PPOActorCritic(
         get_state_size(names), get_action_space_size(names), len(names),
         model_config=ModelConfig.from_dict(checkpoint["config"]["model"]),

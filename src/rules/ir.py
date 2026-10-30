@@ -6,7 +6,19 @@ from enum import IntEnum
 from src.cards.effects import CardEffectType, Effect
 from src.cards.factions import Faction, parse_faction
 
-RULE_IR_VERSION = 1
+RULE_IR_VERSION = 2
+
+# Version of the game rules both engines implement. Checkpoints record it and
+# a checkpoint trained under another version does not load, because the action
+# layout and the meaning of actions differ between versions.
+#   1: every result before decision 0016. An OR ability gave both options,
+#      choices in a ship's primary ability could be used at any time, and
+#      Machine Base drew at once when played (494 actions for the Core Set).
+#   2: docs/decisions/0016-rulebook-ability-timing.md. An OR ability gives one
+#      option (543 actions for the Core Set: options have their own action
+#      group), and a ship's primary ability resolves completely when the ship
+#      is played.
+RULES_VERSION = 2
 
 
 class EffectOpcode(IntEnum):

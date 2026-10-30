@@ -16,6 +16,7 @@ from src.rules.scalar import is_passive_effect
 from src.encoding.action_encoder import (
     END_TURN_INDEX,
     SKIP_INDEX,
+    effect_action_group,
     encode_action_index,
     get_action_offsets,
 )
@@ -96,8 +97,6 @@ def build_action_context(
     OFF_BUY = offsets.buy_card
     IDX_ATTACK_PLAYER = offsets.attack_player
     OFF_ATTACK_BASE = offsets.attack_base
-    OFF_EFFECT_NONSCRAP = offsets.effect_nonscrap
-    OFF_EFFECT_SCRAP = offsets.effect_scrap
 
     # Handle pending action sets — these override normal action generation
     pending_set: PendingActionSet | None = player.get_current_pending_set()
@@ -209,15 +208,14 @@ def build_action_context(
             if effect.faction_requirement:
                 faction_count = player.get_faction_ally_count(effect.faction_requirement)
                 if faction_count > effect.faction_requirement_count:
-                    _set_effect_mask(mask, resolvers, ci, card, effect,
-                                    OFF_EFFECT_NONSCRAP, OFF_EFFECT_SCRAP)
-            elif effect.is_or_effect and effect.child_effects and not effect.any_child_effects_used():
-                for child_effect in effect.child_effects:
-                    _set_effect_mask(mask, resolvers, ci, card, child_effect,
-                                    OFF_EFFECT_NONSCRAP, OFF_EFFECT_SCRAP)
+                    _set_effect_mask(mask, resolvers, ci, card, effect, offsets)
+            elif effect.is_or_effect and effect.child_effects:
+                # Each option is its own action until one of them is used.
+                if not effect.any_child_effects_used():
+                    for option in effect.child_effects:
+                        _set_effect_mask(mask, resolvers, ci, card, option, offsets)
             else:
-                _set_effect_mask(mask, resolvers, ci, card, effect,
-                                OFF_EFFECT_NONSCRAP, OFF_EFFECT_SCRAP)
+                _set_effect_mask(mask, resolvers, ci, card, effect, offsets)
 
     # END_TURN — always legal
     mask[IDX_END_TURN] = True
@@ -227,13 +225,9 @@ def build_action_context(
                         can_buy=can_buy, resolvers=resolvers)
 
 
-def _set_effect_mask(mask, resolvers, card_idx, card, effect,
-                     off_nonscrap, off_scrap):
+def _set_effect_mask(mask, resolvers, card_idx, card, effect, offsets):
     """Set the mask bit and resolver for an APPLY_EFFECT action."""
-    if effect.is_scrap_effect:
-        idx = off_scrap + card_idx
-    else:
-        idx = off_nonscrap + card_idx
+    idx = getattr(offsets, effect_action_group(effect)) + card_idx
     if not mask[idx]:
         mask[idx] = True
         resolvers[idx] = Action(type=ActionType.APPLY_EFFECT,

@@ -70,8 +70,7 @@ def _rule_ir_digest(rules):
                     "source": int(
                         rules.bundle_source_effect[card, bundle]
                     ),
-                    "stage": int(rules.bundle_stage[card, bundle]),
-                    "next": int(rules.bundle_next[card, bundle]),
+                    "option": int(rules.bundle_option[card, bundle]),
                     "ops": [
                         [
                             int(rules.op_code[card, operation]),
@@ -107,7 +106,7 @@ def test_core_set_rule_ir_matches_versioned_golden_snapshot(compiled):
         (
             Path(__file__).parent
             / "fixtures"
-            / "core_set_rule_ir_v1.json"
+            / f"core_set_rule_ir_v{RULE_IR_VERSION}.json"
         ).read_text()
     )
     assert fixture["version"] == RULE_IR_VERSION
@@ -251,21 +250,121 @@ def test_choice_effects_compile_to_current_scalar_semantics(
     )
 
 
-def test_or_effect_compiles_current_two_stage_resolver_semantics(compiled):
+@pytest.mark.parametrize(
+    ("card_name", "first", "second"),
+    [
+        ("Patrol Mech", (EffectOpcode.ADD_TRADE, 3), (EffectOpcode.ADD_COMBAT, 5)),
+        ("Trading Post", (EffectOpcode.ADD_HEALTH, 1), (EffectOpcode.ADD_TRADE, 1)),
+        ("Barter World", (EffectOpcode.ADD_HEALTH, 2), (EffectOpcode.ADD_TRADE, 2)),
+        ("Defense Center", (EffectOpcode.ADD_HEALTH, 3), (EffectOpcode.ADD_COMBAT, 2)),
+        ("Blob World", (EffectOpcode.ADD_COMBAT, 5), (EffectOpcode.DRAW_PER_FACTION, 0)),
+        (
+            "Recycling Station",
+            (EffectOpcode.ADD_TRADE, 1),
+            (EffectOpcode.QUEUE_DISCARD_DRAW, 2),
+        ),
+    ],
+)
+def test_or_options_compile_to_one_activation_bundle_each(
+    compiled, card_name, first, second
+):
+    """Option 1 is the effect_nonscrap action and option 2 effect_alt."""
     _, _, rules = compiled
-    bundles = _bundles(rules, "Blob World")
-    operations = [
-        operation[0] for bundle in bundles for operation in bundle["ops"]
+    card = rules.card_names.index(card_name)
+    options = {
+        int(rules.bundle_option[card, bundle]): bundle
+        for bundle in range(int(rules.bundle_count[card]))
+        if rules.bundle_option[card, bundle]
+    }
+    assert sorted(options) == [1, 2]
+    bundles = _bundles(rules, card_name)
+    for option, expected in ((1, first), (2, second)):
+        bundle = options[option]
+        assert bundles[bundle]["trigger"] == EffectTrigger.ACTIVATE
+        assert [op[:2] for op in bundles[bundle]["ops"]] == [expected]
+    assert (
+        rules.bundle_source_effect[card, options[1]]
+        == rules.bundle_source_effect[card, options[2]]
+    )
+    other = [
+        bundle
+        for bundle in range(int(rules.bundle_count[card]))
+        if bundle not in options.values()
     ]
-    assert operations == [
-        EffectOpcode.ADD_COMBAT,
-        EffectOpcode.DRAW_PER_FACTION,
-    ]
-    assert bundles[0]["trigger"] == EffectTrigger.ACTIVATE
-    card = rules.card_names.index("Blob World")
-    assert rules.bundle_stage[card, 0] == 0
-    assert rules.bundle_stage[card, 1] == 1
-    assert rules.bundle_next[card, 0] == 1
+    assert all(rules.bundle_option[card, bundle] == 0 for bundle in other)
+
+
+def _or_ability():
+    return Effect(
+        CardEffectType.PARENT,
+        is_or_effect=True,
+        child_effects=[
+            Effect(CardEffectType.COMBAT, 1),
+            Effect(CardEffectType.TRADE, 1),
+        ],
+    )
+
+
+def test_compiler_rejects_an_or_ability_below_the_top_level(compiled):
+    cards, registry, _ = compiled
+    original = cards[0]
+    synthetic = Card(
+        original.name,
+        original.index,
+        original.cost,
+        [
+            Effect(
+                CardEffectType.PARENT,
+                child_effects=[Effect(CardEffectType.HEAL, 1), _or_ability()],
+            )
+        ],
+        CardType.SHIP,
+    )
+    rules = compile_rules([synthetic, *cards], registry)
+    assert not rules.supported[original.index]
+    assert "top-level" in rules.unsupported_reason[original.index]
+
+
+def test_compiler_rejects_two_or_abilities_on_one_card(compiled):
+    cards, registry, _ = compiled
+    original = cards[0]
+    synthetic = Card(
+        original.name,
+        original.index,
+        original.cost,
+        [_or_ability(), _or_ability()],
+        CardType.BASE,
+        defense=3,
+    )
+    rules = compile_rules([synthetic, *cards], registry)
+    assert not rules.supported[original.index]
+    assert "at most one OR" in rules.unsupported_reason[original.index]
+
+
+def test_compiler_rejects_a_faction_gated_or_option(compiled):
+    cards, registry, _ = compiled
+    original = cards[0]
+    synthetic = Card(
+        original.name,
+        original.index,
+        original.cost,
+        [
+            Effect(
+                CardEffectType.PARENT,
+                is_or_effect=True,
+                child_effects=[
+                    Effect(CardEffectType.COMBAT, 1),
+                    Effect(CardEffectType.TRADE, 1, faction_requirement="Blob"),
+                ],
+            )
+        ],
+        CardType.BASE,
+        defense=3,
+        faction="Blob",
+    )
+    rules = compile_rules([synthetic, *cards], registry)
+    assert not rules.supported[original.index]
+    assert "faction-gated OR options" in rules.unsupported_reason[original.index]
 
 
 def test_compiler_rejects_unrepresentable_or_shapes(compiled):

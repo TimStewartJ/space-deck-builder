@@ -286,6 +286,12 @@ def _effect_instance_state(
                 not leaf.all_child_effects_used() for leaf in relevant
             )
             if (
+                rules.bundle_option[rule_card, bundle]
+                and effect.any_child_effects_used()
+            ):
+                # Using either option of an OR ability uses the ability.
+                available = False
+            if (
                 available
                 and rules.bundle_trigger[rule_card, bundle]
                 != int(EffectTrigger.PASSIVE)

@@ -128,6 +128,18 @@ def test_every_preset_points_at_an_existing_record():
         assert (REPO / preset.results).is_file(), preset.name
 
 
+@pytest.mark.parametrize(
+    "name",
+    ["continue-selfplay-seed0", "exploit-selfplay-seed0", "exploit-ladder-random"],
+)
+def test_presets_built_on_published_checkpoints_say_they_belong_to_the_old_rules(name):
+    preset = get_training_preset(name)
+    published = {preset.train_defaults.get("model_path"), *preset.train_defaults.get("frozen_opponents", [])}
+    assert CHAMPION_CHECKPOINT in published
+    assert "Rules version 1" in preset.description
+    assert "0016" in preset.description
+
+
 def test_champion_checkpoint_is_the_published_selfplay_seed0():
     digest = hashlib.sha256((REPO / CHAMPION_CHECKPOINT).read_bytes()).hexdigest()
     assert digest == CHAMPION_SHA256

@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import copy
 import random
-from pathlib import Path
 
 import pytest
 import torch
@@ -28,19 +27,16 @@ from src.search.uplift import BASELINE_NAME, SEARCH_NAME, UpliftConfig, _Arena, 
 from src.utils.logger import set_disabled
 from src.vector_engine.rules import compile_rules
 
-REPO = Path(__file__).resolve().parents[1]
-CHECKPOINT = REPO / "results" / "optimized_selfplay_baseline" / "checkpoints" / "selfplay_seed0.pth"
-
 
 @pytest.fixture(scope="module")
-def setup():
+def setup(policy_checkpoint):
     set_disabled(True)
     data = DataConfig()
     cards = data.load_cards()
     registry = data.build_registry(cards)
     rules = compile_rules(cards, registry)
     names = registry.card_names
-    checkpoint = load_checkpoint(str(CHECKPOINT), map_location="cpu")
+    checkpoint = load_checkpoint(policy_checkpoint, map_location="cpu")
     model = PPOActorCritic(
         get_state_size(names), get_action_space_size(names), len(names),
         model_config=ModelConfig.from_dict(checkpoint["config"]["model"]),
@@ -108,17 +104,17 @@ def _assert_rows_match(setup, config: UpliftConfig, tasks) -> None:
             assert row["search"]["decisions"] == 0
 
 
-def test_batched_arena_reproduces_sequential_games_against_greedy(setup):
+def test_batched_arena_reproduces_sequential_games_against_greedy(setup, policy_checkpoint):
     config = UpliftConfig(
-        model_path=str(CHECKPOINT), budgets=(0, 2), games=4, baseline="greedy",
+        model_path=policy_checkpoint, budgets=(0, 2), games=4, baseline="greedy",
         max_candidates=3, seed=11, device="cpu", batch_size=3,
     )
     _assert_rows_match(setup, config, [(budget, index) for index in range(4) for budget in (0, 2)])
 
 
-def test_batched_arena_reproduces_sequential_games_against_heuristic(setup):
+def test_batched_arena_reproduces_sequential_games_against_heuristic(setup, policy_checkpoint):
     config = UpliftConfig(
-        model_path=str(CHECKPOINT), budgets=(3,), games=2, baseline="heuristic",
+        model_path=policy_checkpoint, budgets=(3,), games=2, baseline="heuristic",
         max_candidates=3, seed=12, device="cpu", batch_size=2,
     )
     _assert_rows_match(setup, config, [(3, 0), (3, 1)])

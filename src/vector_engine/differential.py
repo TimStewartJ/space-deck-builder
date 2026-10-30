@@ -10,26 +10,19 @@ from src.ai.random_agent import RandomAgent
 from src.cards.card import Card
 from src.config import DataConfig
 from src.encoding.action_context import build_action_context
-from src.encoding.action_encoder import get_action_space_size
+from src.encoding.action_encoder import (
+    SKIP_INDEX,
+    card_group_of_index,
+    get_action_offsets,
+    get_action_space_size,
+)
 from src.encoding.state_encoder import encode_state
 from src.engine.actions import Action, ActionType
 from src.engine.game import Game
 from src.engine.player import Player
 from src.utils.logger import set_disabled
 from src.vector_engine.kernels import (
-    ATTACK_BASE_OFFSET,
-    ATTACK_PLAYER_INDEX,
-    BUY_OFFSET,
-    DESTROY_BASE_OFFSET,
-    DISCARD_OFFSET,
-    EFFECT_NONSCRAP_OFFSET,
-    EFFECT_SCRAP_OFFSET,
     MAX_FORCED_DRAWS,
-    PLAY_OFFSET,
-    SCRAP_DISCARD_OFFSET,
-    SCRAP_HAND_OFFSET,
-    SCRAP_TRADE_OFFSET,
-    SKIP_INDEX,
     VectorEngine,
 )
 from src.vector_engine.rules import CompiledRules
@@ -116,32 +109,31 @@ def _capture_scalar_step(
     return drawn, refills
 
 
+# Trace labels of the action layout's card-indexed groups.
+_GROUP_LABELS = {
+    "play_card": "play",
+    "buy_card": "buy",
+    "attack_base": "attack_base",
+    "destroy_base": "destroy_base",
+    "effect_nonscrap": "effect",
+    "effect_scrap": "scrap",
+    "scrap_hand": "scrap_hand",
+    "scrap_discard": "scrap_discard",
+    "scrap_trade": "scrap_trade",
+    "discard": "discard",
+    "effect_alt": "effect_alt",
+}
+
+
 def _action_group(index: int, num_cards: int) -> str:
-    if PLAY_OFFSET <= index < PLAY_OFFSET + num_cards:
-        return "play"
-    if BUY_OFFSET <= index < BUY_OFFSET + num_cards:
-        return "buy"
-    if index == ATTACK_PLAYER_INDEX:
+    if index == get_action_offsets(num_cards).attack_player:
         return "attack_player"
-    if ATTACK_BASE_OFFSET <= index < ATTACK_BASE_OFFSET + num_cards:
-        return "attack_base"
-    if EFFECT_NONSCRAP_OFFSET <= index < EFFECT_NONSCRAP_OFFSET + num_cards:
-        return "effect"
-    if EFFECT_SCRAP_OFFSET <= index < EFFECT_SCRAP_OFFSET + num_cards:
-        return "scrap"
-    if SCRAP_HAND_OFFSET <= index < SCRAP_HAND_OFFSET + num_cards:
-        return "scrap_hand"
-    if SCRAP_DISCARD_OFFSET <= index < SCRAP_DISCARD_OFFSET + num_cards:
-        return "scrap_discard"
-    if SCRAP_TRADE_OFFSET <= index < SCRAP_TRADE_OFFSET + num_cards:
-        return "scrap_trade"
-    if DESTROY_BASE_OFFSET <= index < DESTROY_BASE_OFFSET + num_cards:
-        return "destroy_base"
-    if DISCARD_OFFSET <= index < DISCARD_OFFSET + num_cards:
-        return "discard"
     if index == SKIP_INDEX:
         return "skip"
-    return "end"
+    slot = card_group_of_index(index, num_cards)
+    if slot is None:
+        return "end"
+    return _GROUP_LABELS[slot[0]]
 
 
 def choose_differential_action(
@@ -158,6 +150,7 @@ def choose_differential_action(
         "attack_base",
         "attack_player",
         "scrap",
+        "effect_alt",
         "scrap_hand",
         "scrap_discard",
         "scrap_trade",

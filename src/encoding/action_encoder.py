@@ -29,6 +29,9 @@ CARD_ACTION_TYPE_NAMES = (
     'effect_nonscrap', 'effect_scrap',
     'scrap_hand', 'scrap_discard', 'scrap_trade',
     'discard',
+    # The second option of a card's OR ability (decision 0016); its first
+    # option is the card's ``effect_nonscrap`` action.
+    'effect_alt',
 )
 CARD_GROUPS_BEFORE_ATTACK_PLAYER = 2
 
@@ -121,6 +124,7 @@ class ActionOffsets(NamedTuple):
     scrap_discard: int
     scrap_trade: int
     discard: int
+    effect_alt: int
     num_cards: int
 
 
@@ -142,6 +146,25 @@ def card_group_of_index(action_idx: int, num_cards: int) -> tuple[str, int] | No
         if offset <= action_idx < offset + count:
             return name, action_idx - offset
     return None
+
+
+def effect_action_group(effect: Effect) -> str:
+    """Layout group of the APPLY_EFFECT action that applies *effect*.
+
+    Scrap abilities use ``effect_scrap``. The second option of an OR ability
+    uses ``effect_alt``; every other ability, including the first option of
+    an OR ability, uses ``effect_nonscrap``.
+    """
+    if effect.is_scrap_effect:
+        return 'effect_scrap'
+    option = effect.option_index
+    if option is None or option == 0:
+        return 'effect_nonscrap'
+    if option == 1:
+        return 'effect_alt'
+    raise ValueError(
+        "the action layout encodes at most two options of an OR ability"
+    )
 
 
 def action_slot(action: Action) -> tuple[str, int | None] | None:
@@ -170,9 +193,9 @@ def action_slot(action: Action) -> tuple[str, int | None] | None:
     if kind == ActionType.DESTROY_BASE:
         return 'destroy_base', card_index
     if kind == ActionType.APPLY_EFFECT:
-        if action.card_effect and action.card_effect.is_scrap_effect:
-            return 'effect_scrap', card_index
-        return 'effect_nonscrap', card_index
+        if action.card_effect is None:
+            return 'effect_nonscrap', card_index
+        return effect_action_group(action.card_effect), card_index
     if kind == ActionType.SCRAP_CARD:
         if action.card_source == CardSource.HAND:
             return 'scrap_hand', card_index
@@ -259,4 +282,16 @@ def decode_action(action_idx: int, card_names: list[str]) -> Action:
         return Action(type=ActionType.SCRAP_CARD, card_id=card_idx, card_source=CardSource.TRADE)
     if name == 'discard':
         return Action(type=ActionType.DISCARD_CARDS, card_id=card_idx, card_source=CardSource.OPPONENT)
+    if name == 'effect_alt':
+        return Action(type=ActionType.APPLY_EFFECT, card_id=card_idx, card_effect=_second_option())
     raise AssertionError(f"undecodable action group {name!r}")
+
+
+def _second_option() -> Effect:
+    """A placeholder second option of an OR ability, for decoded actions."""
+    ability = Effect(
+        CardEffectType.PARENT,
+        is_or_effect=True,
+        child_effects=[Effect(CardEffectType.DRAW), Effect(CardEffectType.DRAW)],
+    )
+    return ability.child_effects[1]

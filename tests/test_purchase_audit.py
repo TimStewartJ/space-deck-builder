@@ -5,7 +5,6 @@ import copy
 import json
 import math
 import random
-from pathlib import Path
 
 import numpy as np
 import pytest
@@ -29,18 +28,15 @@ from src.search.vector_root import SearchRootBuilder
 from src.utils.logger import set_disabled
 from src.vector_engine.rules import compile_rules
 
-REPO = Path(__file__).resolve().parents[1]
-CHECKPOINT = str(REPO / "results" / "optimized_selfplay_baseline" / "checkpoints" / "selfplay_seed0.pth")
-
 
 @pytest.fixture(scope="module")
-def setup():
+def setup(policy_checkpoint):
     set_disabled(True)
     data = DataConfig()
     cards = data.load_cards()
     registry = data.build_registry(cards)
     rules = compile_rules(cards, registry)
-    model = _load_model(CHECKPOINT, registry, "cpu")
+    model = _load_model(policy_checkpoint, registry, "cpu")
     return cards, registry, rules, model, PolicyValueEvaluator(model, "cpu")
 
 
@@ -55,9 +51,9 @@ def search(setup):
 
 
 @pytest.fixture(scope="module")
-def sampled(setup, search):
+def sampled(setup, search, policy_checkpoint):
     cards, registry, _, _, evaluator = setup
-    config = AuditConfig(model_path=CHECKPOINT, decisions=3, rollouts=8, device="cpu")
+    config = AuditConfig(model_path=policy_checkpoint, decisions=3, rollouts=8, device="cpu")
     decisions, counts = sample_decisions(config, evaluator, cards, registry, search, log_fn=lambda message: None)
     return decisions, counts
 
@@ -250,9 +246,9 @@ def test_rollouts_ignore_the_true_hidden_arrangement(setup, sampled):
         assert np.array_equal(left, right)
 
 
-def test_run_audit_writes_records_and_resumes(tmp_path, monkeypatch):
+def test_run_audit_writes_records_and_resumes(tmp_path, monkeypatch, policy_checkpoint):
     config = AuditConfig(
-        model_path=CHECKPOINT, decisions=2, rollouts=4, device="cpu",
+        model_path=policy_checkpoint, decisions=2, rollouts=4, device="cpu",
         numba_threads=2, rows_per_chunk=12,
     )
     output = tmp_path / "audit.json"
@@ -279,7 +275,7 @@ def test_run_audit_writes_records_and_resumes(tmp_path, monkeypatch):
     assert resumed["records"] == payload["records"]
 
     changed = AuditConfig(
-        model_path=CHECKPOINT, decisions=2, rollouts=6, device="cpu",
+        model_path=policy_checkpoint, decisions=2, rollouts=6, device="cpu",
         numba_threads=2, rows_per_chunk=12,
     )
     with pytest.raises(ValueError, match="different configuration"):

@@ -7,7 +7,9 @@ from enum import IntEnum
 import numpy as np
 from numba import njit, prange
 
+from src.ai.heuristic_agent import on_play_trade as heuristic_on_play_trade
 from src.cards.effects import CardEffectType
+from src.cards.factions import parse_faction
 from src.rules.ir import EffectOpcode
 from src.vector_engine.kernels import (
     ATTACK_BASE_OFFSET,
@@ -15,6 +17,7 @@ from src.vector_engine.kernels import (
     BUY_OFFSET,
     DESTROY_BASE_OFFSET,
     DISCARD_OFFSET,
+    EFFECT_ALT_OFFSET,
     EFFECT_NONSCRAP_OFFSET,
     EFFECT_SCRAP_OFFSET,
     END_TURN_INDEX,
@@ -28,8 +31,9 @@ from src.vector_engine.kernels import (
     _advance_rng,
     _bundle_bit,
     _bundle_eligible,
+    _played_faction_count,
 )
-from src.vector_engine.rules import CompiledRules, MAX_BUNDLES
+from src.vector_engine.rules import CompiledRules, MAX_BUNDLES, _templates_by_name
 from src.vector_engine.state import (
     INSTANCE_ACTIVE,
     PENDING_ACQUIRE_SHIP_TOP,
@@ -74,12 +78,36 @@ OPPONENT_SIMPLE = int(FixedOpponent.SIMPLE)
 SNAPSHOT_OFFSET = len(FixedOpponent)
 
 
+# Kinds of an OR option for the Heuristic's option rule
+# (HeuristicAgent._choose_or_option).
+OPTION_OTHER = 0
+OPTION_COMBAT = 1
+OPTION_TRADE = 2
+OPTION_HEAL = 3
+OPTION_DRAW_PER_FACTION = 4
+OPTION_DISCARD_DRAW = 5
+
+_OPTION_KIND = {
+    CardEffectType.COMBAT: OPTION_COMBAT,
+    CardEffectType.TRADE: OPTION_TRADE,
+    CardEffectType.HEAL: OPTION_HEAL,
+    CardEffectType.DRAW_PER_FACTION: OPTION_DRAW_PER_FACTION,
+    CardEffectType.DISCARD_DRAW: OPTION_DISCARD_DRAW,
+}
+
+
 @dataclass(frozen=True)
 class OpponentPolicyData:
     play_priority: np.ndarray
     buy_score_base: np.ndarray
     bundle_priority: np.ndarray
-    bundle_is_or: np.ndarray
+    # Per OR option bundle: its kind (OPTION_*), value, and for a
+    # draw-per-faction option the faction bits it counts.
+    bundle_option_kind: np.ndarray
+    bundle_option_value: np.ndarray
+    bundle_option_faction: np.ndarray
+    # Trade each card adds as soon as it is played (heuristic_agent.on_play_trade).
+    on_play_trade: np.ndarray
     discard_value: np.ndarray
     scout: int
     viper: int
@@ -137,15 +165,23 @@ def compile_opponent_policy_data(
     templates = {}
     for card in cards:
         templates.setdefault(card.name, card)
+    all_templates = _templates_by_name(cards, registry)
 
     play_priority = rules.cost.astype(np.int16, copy=True)
     buy_score_base = (rules.cost.astype(np.int16) * 4).astype(np.int16)
     bundle_priority = np.full(
         (rules.num_cards, MAX_BUNDLES), 10, dtype=np.int16
     )
-    bundle_is_or = np.zeros(
-        (rules.num_cards, MAX_BUNDLES), dtype=np.bool_
+    bundle_option_kind = np.zeros(
+        (rules.num_cards, MAX_BUNDLES), dtype=np.int8
     )
+    bundle_option_value = np.zeros(
+        (rules.num_cards, MAX_BUNDLES), dtype=np.int16
+    )
+    bundle_option_faction = np.zeros(
+        (rules.num_cards, MAX_BUNDLES), dtype=np.int8
+    )
+    on_play_trade = np.zeros(rules.num_cards, dtype=np.int16)
     discard_value = np.full(rules.num_cards, 10, dtype=np.int8)
 
     scout = registry.card_index_map["Scout"]
@@ -195,20 +231,33 @@ def compile_opponent_policy_data(
                     rules.bundle_source_effect[card_index, bundle]
                 )
                 source = card.effects[source_index]
-                if source.is_or_effect and source.child_effects:
-                    bundle_is_or[card_index, bundle] = True
-                    stage = int(rules.bundle_stage[card_index, bundle])
-                    source = source.child_effects[
-                        min(stage, len(source.child_effects) - 1)
-                    ]
+                option = int(rules.bundle_option[card_index, bundle])
+                if option:
+                    source = source.child_effects[option - 1]
+                    bundle_option_kind[card_index, bundle] = _OPTION_KIND.get(
+                        source.effect_type, OPTION_OTHER
+                    )
+                    bundle_option_value[card_index, bundle] = source.value or 0
+                    if source.effect_type == CardEffectType.DRAW_PER_FACTION:
+                        bundle_option_faction[card_index, bundle] = int(
+                            parse_faction(source.faction_target)
+                        )
                 priority = _effect_priority(source)
             bundle_priority[card_index, bundle] = priority
+
+    for card_index, name in enumerate(rules.card_names):
+        card = all_templates.get(name)
+        if card is not None:
+            on_play_trade[card_index] = heuristic_on_play_trade(card)
 
     return OpponentPolicyData(
         play_priority=play_priority,
         buy_score_base=buy_score_base,
         bundle_priority=bundle_priority,
-        bundle_is_or=bundle_is_or,
+        bundle_option_kind=bundle_option_kind,
+        bundle_option_value=bundle_option_value,
+        bundle_option_faction=bundle_option_faction,
+        on_play_trade=on_play_trade,
         discard_value=discard_value,
         scout=scout,
         viper=viper,
@@ -542,32 +591,251 @@ def _select_heuristic_pending(
     )
 
 
+@njit(inline="always")
+def _option_of_kind(kind_first, kind_second, kind):
+    if kind_first == kind:
+        return 1
+    if kind_second == kind:
+        return 2
+    return 0
+
+
+@njit(cache=True)
+def _heuristic_faction_counts(zones, card_faction, game, player):
+    """Faction counts of every owned card and the deck size, as HeuristicAgent counts them."""
+    faction_counts = np.zeros(16, dtype=np.int16)
+    deck_size = 0
+    for card in range(zones.shape[3]):
+        count = 0
+        for zone in (
+            ZONE_HAND,
+            ZONE_DECK,
+            ZONE_DISCARD,
+            ZONE_PLAYED,
+            ZONE_BASES,
+        ):
+            count += zones[game, player, zone, card]
+        deck_size += (
+            zones[game, player, ZONE_HAND, card]
+            + zones[game, player, ZONE_DECK, card]
+            + zones[game, player, ZONE_DISCARD, card]
+            + zones[game, player, ZONE_PLAYED, card]
+        )
+        faction = card_faction[card]
+        if faction > 0:
+            faction_counts[faction] += count
+    return faction_counts, deck_size
+
+
+@njit(inline="always")
+def _heuristic_buy_score(
+    card,
+    explorer,
+    deck_size,
+    faction_counts,
+    card_faction,
+    buy_score_base,
+):
+    """Twice HeuristicAgent._score_card, so that it stays an integer."""
+    if card == explorer:
+        return 4 if deck_size <= 14 else 0
+    score = buy_score_base[card]
+    faction = card_faction[card]
+    if faction > 0:
+        score += faction_counts[faction] * 3
+    return score
+
+
+@njit(cache=True)
+def _heuristic_trade_enables_purchase(
+    zones,
+    trade,
+    trade_row,
+    explorer_count,
+    card_faction,
+    cost,
+    buy_score_base,
+    on_play_trade,
+    explorer,
+    game,
+    player,
+    extra,
+):
+    """HeuristicAgent._trade_enables_purchase."""
+    expected = 0
+    expected += trade[game, player]
+    for card in range(zones.shape[3]):
+        expected += zones[game, player, ZONE_HAND, card] * on_play_trade[card]
+    faction_counts, deck_size = _heuristic_faction_counts(
+        zones, card_faction, game, player
+    )
+    for slot in range(trade_row.shape[1] + 1):
+        if slot < trade_row.shape[1]:
+            card = trade_row[game, slot]
+            if card < 0:
+                continue
+        else:
+            if explorer_count[game] <= 0:
+                continue
+            card = explorer
+        if (
+            expected < cost[card] <= expected + extra
+            and _heuristic_buy_score(
+                card,
+                explorer,
+                deck_size,
+                faction_counts,
+                card_faction,
+                buy_score_base,
+            )
+            > 2
+        ):
+            return True
+    return False
+
+
+@njit(cache=True)
+def _heuristic_option(
+    zones,
+    trade,
+    combat,
+    health,
+    trade_row,
+    explorer_count,
+    effect_state,
+    instance_faction,
+    card_faction,
+    card_type,
+    cost,
+    bundle_count,
+    bundle_option,
+    bundle_option_kind,
+    bundle_option_value,
+    bundle_option_faction,
+    buy_score_base,
+    on_play_trade,
+    explorer,
+    game,
+    player,
+    rule_card,
+):
+    """Option (1 or 2) of *rule_card*'s OR ability that HeuristicAgent picks.
+
+    Mirrors HeuristicAgent._choose_or_option.
+    """
+    first = -1
+    second = -1
+    for bundle in range(bundle_count[rule_card]):
+        if bundle_option[rule_card, bundle] == 1:
+            first = bundle
+        elif bundle_option[rule_card, bundle] == 2:
+            second = bundle
+    kind_first = bundle_option_kind[rule_card, first]
+    kind_second = bundle_option_kind[rule_card, second]
+    opponent = 1 - player
+
+    option = _option_of_kind(kind_first, kind_second, OPTION_COMBAT)
+    if option:
+        bundle = first if option == 1 else second
+        has_outpost = False
+        for card in range(zones.shape[3]):
+            if (
+                zones[game, opponent, ZONE_BASES, card] > 0
+                and card_type[card] == 2
+            ):
+                has_outpost = True
+                break
+        if (
+            not has_outpost
+            and combat[game, player] + bundle_option_value[rule_card, bundle]
+            >= health[game, opponent]
+        ):
+            return option
+    option = _option_of_kind(kind_first, kind_second, OPTION_TRADE)
+    if option:
+        bundle = first if option == 1 else second
+        if _heuristic_trade_enables_purchase(
+            zones,
+            trade,
+            trade_row,
+            explorer_count,
+            card_faction,
+            cost,
+            buy_score_base,
+            on_play_trade,
+            explorer,
+            game,
+            player,
+            bundle_option_value[rule_card, bundle],
+        ):
+            return option
+    option = _option_of_kind(kind_first, kind_second, OPTION_DRAW_PER_FACTION)
+    if option:
+        bundle = first if option == 1 else second
+        if (
+            _played_faction_count(
+                zones,
+                effect_state,
+                instance_faction,
+                card_faction,
+                game,
+                player,
+                bundle_option_faction[rule_card, bundle],
+            )
+            >= 2
+        ):
+            return option
+    for kind in (OPTION_COMBAT, OPTION_HEAL, OPTION_TRADE):
+        option = _option_of_kind(kind_first, kind_second, kind)
+        if option:
+            return option
+    return 1
+
+
 @njit(cache=True)
 def _select_effect(
     zones,
+    trade,
+    combat,
+    health,
+    trade_row,
+    explorer_count,
     effect_state,
     instance_rule_card,
     instance_faction,
     card_faction,
     card_ally_factions,
+    card_type,
+    cost,
     bundle_count,
     bundle_trigger,
     bundle_faction,
     bundle_requirement,
     bundle_source_effect,
-    bundle_stage,
+    bundle_option,
     bundle_priority,
-    bundle_is_or,
+    bundle_option_kind,
+    bundle_option_value,
+    bundle_option_faction,
+    buy_score_base,
+    on_play_trade,
+    explorer,
     game,
     player,
     prefer_highest,
 ):
+    """First available ability (Simple) or the highest-priority one (Heuristic).
+
+    The Heuristic considers only the OR option HeuristicAgent picks; Simple
+    reaches an OR ability's first option before its second.
+    """
     best_action = -1
     best_variant = 0
     best_priority = -1
     for card in range(zones.shape[3]):
         nonscrap_variant = 0
         scrap_variant = 0
+        alt_variant = 0
         for instance in range(effect_state.shape[3]):
             instance_value = effect_state[game, player, card, instance]
             if (instance_value & int(INSTANCE_ACTIVE)) == 0:
@@ -575,6 +843,7 @@ def _select_effect(
             rule_card = instance_rule_card[game, player, card, instance]
             if rule_card < 0:
                 rule_card = card
+            chosen_option = 0
             for bundle in range(bundle_count[rule_card]):
                 if (
                     instance_value & _bundle_bit(bundle)
@@ -594,6 +863,7 @@ def _select_effect(
                 ):
                     continue
                 scrap = bundle_trigger[rule_card, bundle] == TRIGGER_SCRAP
+                option = bundle_option[rule_card, bundle]
                 group_first = True
                 for previous in range(bundle):
                     if (
@@ -605,8 +875,7 @@ def _select_effect(
                         == scrap
                         and bundle_source_effect[rule_card, previous]
                         == bundle_source_effect[rule_card, bundle]
-                        and bundle_stage[rule_card, previous]
-                        == bundle_stage[rule_card, bundle]
+                        and bundle_option[rule_card, previous] == option
                         and _bundle_eligible(
                             zones,
                             card_faction,
@@ -630,25 +899,43 @@ def _select_effect(
                     action = EFFECT_SCRAP_OFFSET + card
                     variant = scrap_variant
                     scrap_variant += 1
+                elif option == 2:
+                    action = EFFECT_ALT_OFFSET + card
+                    variant = alt_variant
+                    alt_variant += 1
                 else:
                     action = EFFECT_NONSCRAP_OFFSET + card
                     variant = nonscrap_variant
                     nonscrap_variant += 1
+                if option != 0 and prefer_highest:
+                    if chosen_option == 0:
+                        chosen_option = _heuristic_option(
+                            zones,
+                            trade,
+                            combat,
+                            health,
+                            trade_row,
+                            explorer_count,
+                            effect_state,
+                            instance_faction,
+                            card_faction,
+                            card_type,
+                            cost,
+                            bundle_count,
+                            bundle_option,
+                            bundle_option_kind,
+                            bundle_option_value,
+                            bundle_option_faction,
+                            buy_score_base,
+                            on_play_trade,
+                            explorer,
+                            game,
+                            player,
+                            rule_card,
+                        )
+                    if option != chosen_option:
+                        continue
                 priority = bundle_priority[rule_card, bundle]
-                if bundle_is_or[rule_card, bundle]:
-                    source = bundle_source_effect[rule_card, bundle]
-                    for sibling in range(bundle_count[rule_card]):
-                        if (
-                            sibling != bundle
-                            and bundle_source_effect[rule_card, sibling]
-                            == source
-                            and (
-                                instance_value & _bundle_bit(sibling)
-                            )
-                            == 0
-                        ):
-                            priority = 10
-                            break
                 if best_action < 0 or (
                     prefer_highest and priority > best_priority
                 ):
@@ -663,7 +950,11 @@ def _select_effect(
 @njit(cache=True)
 def _select_simple(
     zones,
+    trade,
+    combat,
+    health,
     trade_row,
+    explorer_count,
     current_player,
     effect_state,
     instance_rule_card,
@@ -673,6 +964,8 @@ def _select_simple(
     pending_mandatory,
     pending_targets,
     pending_count,
+    cost,
+    card_type,
     card_faction,
     card_ally_factions,
     bundle_count,
@@ -680,9 +973,13 @@ def _select_simple(
     bundle_faction,
     bundle_requirement,
     bundle_source_effect,
-    bundle_stage,
+    bundle_option,
     bundle_priority,
-    bundle_is_or,
+    bundle_option_kind,
+    bundle_option_value,
+    bundle_option_faction,
+    buy_score_base,
+    on_play_trade,
     masks,
     weights,
     explorer,
@@ -716,19 +1013,31 @@ def _select_simple(
         return ATTACK_PLAYER_INDEX, 0
     action, variant = _select_effect(
         zones,
+        trade,
+        combat,
+        health,
+        trade_row,
+        explorer_count,
         effect_state,
         instance_rule_card,
         instance_faction,
         card_faction,
         card_ally_factions,
+        card_type,
+        cost,
         bundle_count,
         bundle_trigger,
         bundle_faction,
         bundle_requirement,
         bundle_source_effect,
-        bundle_stage,
+        bundle_option,
         bundle_priority,
-        bundle_is_or,
+        bundle_option_kind,
+        bundle_option_value,
+        bundle_option_faction,
+        buy_score_base,
+        on_play_trade,
+        explorer,
         game,
         player,
         False,
@@ -741,9 +1050,11 @@ def _select_simple(
 @njit(cache=True)
 def _select_heuristic(
     zones,
+    trade,
     combat,
     health,
     trade_row,
+    explorer_count,
     current_player,
     effect_state,
     instance_rule_card,
@@ -755,6 +1066,7 @@ def _select_heuristic(
     pending_count,
     cost,
     defense,
+    card_type,
     card_faction,
     card_ally_factions,
     bundle_count,
@@ -762,13 +1074,16 @@ def _select_heuristic(
     bundle_faction,
     bundle_requirement,
     bundle_source_effect,
-    bundle_stage,
+    bundle_option,
     masks,
     weights,
     play_priority,
     buy_score_base,
     bundle_priority,
-    bundle_is_or,
+    bundle_option_kind,
+    bundle_option_value,
+    bundle_option_faction,
+    on_play_trade,
     discard_value,
     scout,
     viper,
@@ -808,19 +1123,31 @@ def _select_heuristic(
 
     action, variant = _select_effect(
         zones,
+        trade,
+        combat,
+        health,
+        trade_row,
+        explorer_count,
         effect_state,
         instance_rule_card,
         instance_faction,
         card_faction,
         card_ally_factions,
+        card_type,
+        cost,
         bundle_count,
         bundle_trigger,
         bundle_faction,
         bundle_requirement,
         bundle_source_effect,
-        bundle_stage,
+        bundle_option,
         bundle_priority,
-        bundle_is_or,
+        bundle_option_kind,
+        bundle_option_value,
+        bundle_option_faction,
+        buy_score_base,
+        on_play_trade,
+        explorer,
         game,
         player,
         True,
@@ -847,28 +1174,9 @@ def _select_heuristic(
     if masks[game, ATTACK_PLAYER_INDEX]:
         return ATTACK_PLAYER_INDEX, 0
 
-    faction_counts = np.zeros(16, dtype=np.int16)
-    deck_size = 0
-    for card in range(zones.shape[3]):
-        count = 0
-        for zone in (
-            ZONE_HAND,
-            ZONE_DECK,
-            ZONE_DISCARD,
-            ZONE_PLAYED,
-            ZONE_BASES,
-        ):
-            count += zones[game, player, zone, card]
-        deck_size += (
-            zones[game, player, ZONE_HAND, card]
-            + zones[game, player, ZONE_DECK, card]
-            + zones[game, player, ZONE_DISCARD, card]
-            + zones[game, player, ZONE_PLAYED, card]
-        )
-        faction = card_faction[card]
-        if faction > 0:
-            faction_counts[faction] += count
-
+    faction_counts, deck_size = _heuristic_faction_counts(
+        zones, card_faction, game, player
+    )
     best_action = -1
     best_score = -32768
     for slot in range(trade_row.shape[1] + 1):
@@ -880,13 +1188,14 @@ def _select_heuristic(
             card = explorer
             if not masks[game, BUY_OFFSET + card]:
                 continue
-        if card == explorer:
-            score = 4 if deck_size <= 14 else 0
-        else:
-            score = buy_score_base[card]
-            faction = card_faction[card]
-            if faction > 0:
-                score += faction_counts[faction] * 3
+        score = _heuristic_buy_score(
+            card,
+            explorer,
+            deck_size,
+            faction_counts,
+            card_faction,
+            buy_score_base,
+        )
         if score > best_score:
             best_score = score
             best_action = BUY_OFFSET + card
@@ -898,9 +1207,11 @@ def _select_heuristic(
 @njit(parallel=True, cache=True)
 def select_fixed_actions_kernel(
     zones,
+    trade,
     combat,
     health,
     trade_row,
+    explorer_count,
     current_player,
     done,
     effect_state,
@@ -914,6 +1225,7 @@ def select_fixed_actions_kernel(
     rng_state,
     cost,
     defense,
+    card_type,
     card_faction,
     card_ally_factions,
     bundle_count,
@@ -921,7 +1233,7 @@ def select_fixed_actions_kernel(
     bundle_faction,
     bundle_requirement,
     bundle_source_effect,
-    bundle_stage,
+    bundle_option,
     masks,
     weights,
     opponent_kind,
@@ -929,7 +1241,10 @@ def select_fixed_actions_kernel(
     play_priority,
     buy_score_base,
     bundle_priority,
-    bundle_is_or,
+    bundle_option_kind,
+    bundle_option_value,
+    bundle_option_faction,
+    on_play_trade,
     discard_value,
     scout,
     viper,
@@ -947,7 +1262,11 @@ def select_fixed_actions_kernel(
         elif kind == OPPONENT_SIMPLE:
             action, variant = _select_simple(
                 zones,
+                trade,
+                combat,
+                health,
                 trade_row,
+                explorer_count,
                 current_player,
                 effect_state,
                 instance_rule_card,
@@ -957,6 +1276,8 @@ def select_fixed_actions_kernel(
                 pending_mandatory,
                 pending_targets,
                 pending_count,
+                cost,
+                card_type,
                 card_faction,
                 card_ally_factions,
                 bundle_count,
@@ -964,9 +1285,13 @@ def select_fixed_actions_kernel(
                 bundle_faction,
                 bundle_requirement,
                 bundle_source_effect,
-                bundle_stage,
+                bundle_option,
                 bundle_priority,
-                bundle_is_or,
+                bundle_option_kind,
+                bundle_option_value,
+                bundle_option_faction,
+                buy_score_base,
+                on_play_trade,
                 masks,
                 weights,
                 explorer,
@@ -975,9 +1300,11 @@ def select_fixed_actions_kernel(
         elif kind == OPPONENT_HEURISTIC:
             action, variant = _select_heuristic(
                 zones,
+                trade,
                 combat,
                 health,
                 trade_row,
+                explorer_count,
                 current_player,
                 effect_state,
                 instance_rule_card,
@@ -989,6 +1316,7 @@ def select_fixed_actions_kernel(
                 pending_count,
                 cost,
                 defense,
+                card_type,
                 card_faction,
                 card_ally_factions,
                 bundle_count,
@@ -996,13 +1324,16 @@ def select_fixed_actions_kernel(
                 bundle_faction,
                 bundle_requirement,
                 bundle_source_effect,
-                bundle_stage,
+                bundle_option,
                 masks,
                 weights,
                 play_priority,
                 buy_score_base,
                 bundle_priority,
-                bundle_is_or,
+                bundle_option_kind,
+                bundle_option_value,
+                bundle_option_faction,
+                on_play_trade,
                 discard_value,
                 scout,
                 viper,
@@ -1029,9 +1360,11 @@ def select_fixed_actions(
     weights = engine.build_action_weights()
     select_fixed_actions_kernel(
         state.zones,
+        state.trade,
         state.combat,
         state.health,
         state.trade_row,
+        state.explorer_count,
         state.current_player,
         state.done,
         state.effect_state,
@@ -1045,6 +1378,7 @@ def select_fixed_actions(
         state.rng_state,
         rules.cost,
         rules.defense,
+        rules.card_type,
         rules.faction,
         rules.ally_factions,
         rules.bundle_count,
@@ -1052,7 +1386,7 @@ def select_fixed_actions(
         rules.bundle_faction,
         rules.bundle_requirement,
         rules.bundle_source_effect,
-        rules.bundle_stage,
+        rules.bundle_option,
         engine.masks,
         weights,
         opponent_kind,
@@ -1060,7 +1394,10 @@ def select_fixed_actions(
         policy_data.play_priority,
         policy_data.buy_score_base,
         policy_data.bundle_priority,
-        policy_data.bundle_is_or,
+        policy_data.bundle_option_kind,
+        policy_data.bundle_option_value,
+        policy_data.bundle_option_faction,
+        policy_data.on_play_trade,
         policy_data.discard_value,
         policy_data.scout,
         policy_data.viper,
