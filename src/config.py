@@ -195,6 +195,11 @@ class RunConfig:
     # per resident population to avoid fragmenting inference into tiny batches.
     # Zero disables the limit.
     vec_max_active_snapshots: int = 3
+    # Evaluate rollout policies with CUDA/HIP graphs captured per batch-size
+    # bucket (src/vector_engine/graphed_policy.py). Applies to --engine vec on
+    # a CUDA device when every model is the sum-pooled MLP architecture;
+    # anything else uses eager inference.
+    vec_graph_inference: bool = True
     episodes: int = 16000
     updates: int = 200
     num_workers: int = 20

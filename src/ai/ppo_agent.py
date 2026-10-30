@@ -132,12 +132,24 @@ class PPOAgent(Agent):
         ).to(self.device)
         if model_path:
             self.model.load_state_dict(ckpt["model_state_dict"])
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.ppo_config.lr)
+        # The fused Adam kernel updates every parameter in one launch and
+        # can skip a step on the device (see ``update``), so it is used
+        # whenever the parameters live on a CUDA/HIP device.
+        self._fused_optimizer = all(
+            param.is_cuda for param in self.model.parameters()
+        )
+        self.optimizer = optim.Adam(
+            self.model.parameters(),
+            lr=self.ppo_config.lr,
+            fused=True if self._fused_optimizer else None,
+        )
         if model_path and load_optimizer_state:
             opt_state = ckpt.get("optimizer_state_dict")
             if opt_state is not None:
                 requested_lr = self.ppo_config.lr
-                self.optimizer.load_state_dict(opt_state)
+                self.optimizer.load_state_dict(
+                    self._with_current_implementation(opt_state)
+                )
                 # optimizer.load_state_dict overwrites every param_group field,
                 # including lr. Surface the mismatch so a user passing --lr
                 # alongside --resume isn't silently ignored.
@@ -276,20 +288,76 @@ class PPOAgent(Agent):
 
         return states, actions, old_lp, returnsTensor, advsTensor, masksTensor
 
+    def _with_current_implementation(self, optimizer_state: dict) -> dict:
+        """Optimizer state with this optimizer's implementation flags.
+
+        ``Optimizer.load_state_dict`` restores every saved hyperparameter,
+        including whether Adam runs fused, so a checkpoint written by another
+        implementation would silently switch this one. Rewriting the flags
+        first also makes the load place Adam's step counters where the fused
+        kernel expects them (on the parameters' device).
+        """
+        groups = []
+        for group in optimizer_state["param_groups"]:
+            group = dict(group)
+            group["fused"] = True if self._fused_optimizer else None
+            if self._fused_optimizer:
+                group["foreach"] = None
+            groups.append(group)
+        return {**optimizer_state, "param_groups": groups}
+
+    # Rows per forward pass when measuring the critic's explained variance.
+    _EXPLAINED_VARIANCE_CHUNK = 16384
+
+    _METRIC_NAMES = (
+        "actor_loss",
+        "critic_loss",
+        "mean_ratio",
+        "entropy",
+        "approx_kl",
+        "clip_fraction",
+        "total_grad_norm",
+    )
+
+    @staticmethod
+    def _nan_metrics(explained_variance: float) -> dict:
+        return {
+            "actor_loss": float("nan"),
+            "critic_loss": float("nan"),
+            "mean_ratio": float("nan"),
+            "entropy": float("nan"),
+            "approx_kl": float("nan"),
+            "clip_fraction": float("nan"),
+            "total_grad_norm": float("nan"),
+            "explained_variance": explained_variance,
+            "nan_detected": True,
+        }
+
     def update(self, states, actions, old_lp, returns, advs, masks=None) -> dict:
         """Run PPO gradient updates and return training metrics.
 
         Returns a dict with keys: actor_loss, critic_loss, mean_ratio,
         entropy, approx_kl, clip_fraction, total_grad_norm,
         explained_variance, nan_detected.
+
+        Minibatches are shuffled on the training device and their metrics
+        accumulate there, so the host queues work without waiting for the GPU
+        and reads every number once at the end. A minibatch whose logits, loss
+        or gradient norm is not finite ends learning for this update without
+        applying its step: the fused optimizer skips that step and every later
+        one on the device (the found-inf flag stays set), and other optimizers
+        return before stepping. Either way the weights and optimizer state are
+        those from before that minibatch, and the metrics report NaN.
         """
         # Device contract: caller (ppo_trainer) is responsible for moving
         # model and tensors to main_device before calling update().
+        device = states.device
+        fused = self._fused_optimizer
 
-        # Compute explained variance from pre-update critic predictions.
-        # Process in chunks to avoid OOM on large rollouts.
+        # Explained variance of the pre-update critic, in chunks so large
+        # rollouts fit in memory.
         with torch.no_grad():
-            chunk_size = 4096
+            chunk_size = self._EXPLAINED_VARIANCE_CHUNK
             all_vals = []
             for i in range(0, len(states), chunk_size):
                 _, v = self.model(states[i:i + chunk_size])
@@ -299,121 +367,86 @@ class PPOAgent(Agent):
                 all_vals.append(v.reshape(-1))
             pred_values = torch.cat(all_vals)
             var_returns = returns.var()
-            explained_var = (
-                1.0 - (returns - pred_values).var() / (var_returns + 1e-8)
-            ).item() if var_returns.item() > 1e-8 else 0.0
+            explained = 1.0 - (returns - pred_values).var() / (var_returns + 1e-8)
 
-        actor_loss_sum  = 0.0
-        critic_loss_sum = 0.0
-        ratio_sum       = 0.0
-        entropy_sum     = 0.0
-        kl_sum          = 0.0
-        clip_frac_sum   = 0.0
-        grad_norm_sum   = 0.0
-        batch_count     = 0
+        def explained_variance() -> float:
+            return float(explained) if float(var_returns) > 1e-8 else 0.0
 
-        for _ in range(self.epochs):
-            idxs = torch.randperm(len(states))  # Shuffle indices for mini-batch SGD
-            for start in range(0, len(states), self.batch_size):
-                b = idxs[start:start+self.batch_size]  # Indices for current batch
-                s = states[b]        # Batch of states
-                a = actions[b]       # Batch of actions
-                olp = old_lp[b]      # Batch of old log probabilities
-                R = returns[b]       # Batch of returns (discounted rewards)
-                A = advs[b]          # Batch of advantages
+        totals = torch.zeros(len(self._METRIC_NAMES), device=device)
+        # 0-d like Adam's step counters, which the fused kernel adjusts by it.
+        nonfinite = torch.zeros((), device=device)
+        batch_count = 0
+        if fused:
+            self.optimizer.found_inf = nonfinite
+        try:
+            for _ in range(self.epochs):
+                idxs = torch.randperm(len(states), device=device)
+                for start in range(0, len(states), self.batch_size):
+                    b = idxs[start:start + self.batch_size]
+                    s = states[b]
+                    a = actions[b]
+                    olp = old_lp[b]
+                    R = returns[b]
+                    A = advs[b]
 
-                logits, vals = self.model(s)  # Forward pass: get action logits and value estimates
+                    logits, vals = self.model(s)
+                    bad = ~torch.isfinite(logits).all()
 
-                # Early NaN guard: catch numerical instability before distribution creation
-                if torch.isnan(logits).any() or torch.isinf(logits).any():
-                    return {
-                        "actor_loss": float("nan"),
-                        "critic_loss": float("nan"),
-                        "mean_ratio": float("nan"),
-                        "entropy": float("nan"),
-                        "approx_kl": float("nan"),
-                        "clip_fraction": float("nan"),
-                        "total_grad_norm": float("nan"),
-                        "explained_variance": explained_var,
-                        "nan_detected": True,
-                    }
+                    # Apply action masks to ensure consistency with the behavior policy
+                    if masks is not None:
+                        logits = logits.masked_fill(~masks[b], float('-inf'))
 
-                # Apply action masks to ensure consistency with the behavior policy
-                if masks is not None:
-                    m = masks[b]
-                    logits = logits.masked_fill(~m, float('-inf'))
+                    dist = torch.distributions.Categorical(
+                        logits=logits, validate_args=False
+                    )
+                    nl = dist.log_prob(a)
+                    ratio = (nl - olp).exp()
 
-                dist = torch.distributions.Categorical(logits=logits)  # Action distribution from masked logits
-                nl = dist.log_prob(a)  # New log probabilities for taken actions
-                ratio = (nl - olp).exp()  # Probability ratio for PPO objective
+                    s1 = ratio * A
+                    s2 = torch.clamp(ratio, 1-self.clip_eps, 1+self.clip_eps) * A
+                    actor_loss = -torch.min(s1, s2).mean()
+                    critic_loss = nn.functional.mse_loss(vals, R)
+                    entropy = dist.entropy().mean()
+                    loss = actor_loss + self.ppo_config.critic_loss_coef * critic_loss - self.entropy_coef * entropy
 
-                s1 = ratio * A  # Unclipped surrogate objective
-                s2 = torch.clamp(ratio, 1-self.clip_eps, 1+self.clip_eps) * A  # Clipped surrogate objective
-                actor_loss = -torch.min(s1, s2).mean()  # PPO actor loss (policy update)
-                critic_loss = nn.MSELoss()(vals, R)     # Critic loss (value function update)
-                entropy = dist.entropy().mean()         # entropy bonus term
-                loss = actor_loss + self.ppo_config.critic_loss_coef * critic_loss - self.entropy_coef * entropy
+                    self.optimizer.zero_grad()
+                    loss.backward()
+                    grad_norm = torch.nn.utils.clip_grad_norm_(
+                        self.model.parameters(), max_norm=self.ppo_config.grad_clip
+                    )
+                    bad = bad | ~torch.isfinite(loss) | ~torch.isfinite(grad_norm)
+                    if fused:
+                        torch.maximum(nonfinite, bad.float(), out=nonfinite)
+                    elif bad.item():
+                        return self._nan_metrics(explained_variance())
+                    self.optimizer.step()
 
-                # Abort on numerical instability
-                if torch.isnan(loss) or torch.isinf(loss):
-                    return {
-                        "actor_loss": float("nan"),
-                        "critic_loss": float("nan"),
-                        "mean_ratio": float("nan"),
-                        "entropy": float("nan"),
-                        "approx_kl": float("nan"),
-                        "clip_fraction": float("nan"),
-                        "total_grad_norm": float("nan"),
-                        "explained_variance": explained_var,
-                        "nan_detected": True,
-                    }
+                    with torch.no_grad():
+                        totals += torch.stack([
+                            actor_loss.detach(),
+                            critic_loss.detach(),
+                            ratio.mean(),
+                            entropy.detach(),
+                            (olp - nl).mean(),
+                            ((ratio - 1.0).abs() > self.clip_eps).float().mean(),
+                            grad_norm.detach(),
+                        ])
+                    batch_count += 1
+        finally:
+            if fused:
+                del self.optimizer.found_inf
 
-                self.optimizer.zero_grad()
-                loss.backward()
-                grad_norm = torch.nn.utils.clip_grad_norm_(
-                    self.model.parameters(), max_norm=self.ppo_config.grad_clip
-                )
-                self.optimizer.step()
-
-                # PPO diagnostics
-                with torch.no_grad():
-                    approx_kl = (olp - nl).mean().item()
-                    clip_frac = ((ratio - 1.0).abs() > self.clip_eps).float().mean().item()
-
-                # Accumulate for averages
-                actor_loss_sum  += actor_loss.item()
-                critic_loss_sum += critic_loss.item()
-                ratio_sum       += ratio.mean().item()
-                entropy_sum     += entropy.item()
-                kl_sum          += approx_kl
-                clip_frac_sum   += clip_frac
-                grad_norm_sum   += grad_norm.item()
-                batch_count     += 1
-
-        # Compute true averages
-        if batch_count > 0:
-            avg_actor     = actor_loss_sum  / batch_count
-            avg_critic    = critic_loss_sum / batch_count
-            avg_ratio     = ratio_sum       / batch_count
-            avg_entropy   = entropy_sum     / batch_count
-            avg_kl        = kl_sum          / batch_count
-            avg_clip_frac = clip_frac_sum   / batch_count
-            avg_grad_norm = grad_norm_sum   / batch_count
-        else:
-            avg_actor = avg_critic = avg_ratio = avg_entropy = 0.0
-            avg_kl = avg_clip_frac = avg_grad_norm = 0.0
-
-        return {
-            "actor_loss": avg_actor,
-            "critic_loss": avg_critic,
-            "mean_ratio": avg_ratio,
-            "entropy": avg_entropy,
-            "approx_kl": avg_kl,
-            "clip_fraction": avg_clip_frac,
-            "total_grad_norm": avg_grad_norm,
-            "explained_variance": explained_var,
-            "nan_detected": False,
-        }
+        if float(nonfinite) > 0:
+            return self._nan_metrics(explained_variance())
+        averages = (
+            (totals / batch_count).tolist()
+            if batch_count > 0
+            else [0.0] * len(self._METRIC_NAMES)
+        )
+        metrics = dict(zip(self._METRIC_NAMES, averages))
+        metrics["explained_variance"] = explained_variance()
+        metrics["nan_detected"] = False
+        return metrics
 
     def clear_buffers(self):
         """Clear all rollout buffers."""

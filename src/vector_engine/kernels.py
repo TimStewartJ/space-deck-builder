@@ -2557,10 +2557,19 @@ class VectorEngine:
         return self.observations
 
     def materialize_current_player_observations(
-        self, rows: np.ndarray | None = None
+        self,
+        rows: np.ndarray | None = None,
+        out: np.ndarray | None = None,
     ) -> np.ndarray:
-        """Encode selected games from each acting player's perspective."""
+        """Encode selected games from each acting player's perspective.
+
+        With ``out``, the observations of ``rows`` are written into its first
+        ``len(rows)`` rows (for example pinned staging memory) and that slice
+        is returned.
+        """
         if rows is None:
+            if out is not None:
+                raise ValueError("out requires explicit rows")
             materialize_observations_kernel(
                 self.state.zones,
                 self.state.trade,
@@ -2577,8 +2586,19 @@ class VectorEngine:
         rows = np.asarray(rows, dtype=np.int64)
         if rows.ndim != 1:
             raise ValueError("rows must be rank-1")
+        target = self.perspective_observations if out is None else out
+        if out is not None and (
+            out.dtype != np.float32
+            or out.ndim != 2
+            or out.shape[0] < len(rows)
+            or out.shape[1] != self.observations.shape[1]
+            or not out.flags.c_contiguous
+        ):
+            raise ValueError(
+                "out must be C-contiguous float32 with room for every row"
+            )
         if len(rows) == 0:
-            return self.perspective_observations[:0]
+            return target[:0]
         if rows.min() < 0 or rows.max() >= self.state.games:
             raise IndexError("observation row is outside the vector population")
         materialize_selected_observations_kernel(
@@ -2591,9 +2611,9 @@ class VectorEngine:
             self.state.first_player,
             rows,
             self.masks,
-            self.perspective_observations,
+            target,
         )
-        return self.perspective_observations[: len(rows)]
+        return target[: len(rows)]
 
     def build_action_weights(self) -> np.ndarray:
         """Physical scalar-Action multiplicities for fixed opponents."""

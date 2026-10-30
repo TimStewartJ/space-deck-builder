@@ -134,6 +134,15 @@ def _build_train_parser(sub: argparse._SubParsersAction):
             f"(default: {_run.vec_max_active_snapshots}; 0=unlimited)"
         ),
     )
+    p.add_argument(
+        "--vec-graph-inference",
+        action=argparse.BooleanOptionalAction,
+        default=_run.vec_graph_inference,
+        help=(
+            "Evaluate vector-rollout policies by CUDA/HIP graph replay "
+            f"(default: {_run.vec_graph_inference})"
+        ),
+    )
     p.add_argument("--num-concurrent", type=int, default=None,
                    help="Concurrent games per worker (default: episodes/workers)")
     p.add_argument("--pfsp", type=str, default=_run.pfsp_mode,
@@ -733,6 +742,7 @@ def _run_train(args):
         engine=args.engine,
         vec_threads=args.vec_threads,
         vec_max_active_snapshots=args.vec_max_active_snapshots,
+        vec_graph_inference=args.vec_graph_inference,
         episodes=args.episodes, updates=args.updates,
         eval_every=args.eval_every, eval_games=args.eval_games,
         eval_num_workers=args.eval_num_workers,

@@ -208,21 +208,23 @@ class TestPpoAgentUpdateMetrics:
         }
         assert set(result.keys()) == expected_keys
 
-    def test_singleton_tail_chunk_does_not_crash(self, agent_and_data):
-        """Regression for ppo_agent.py:284 zero-dim concat crash.
+    def test_singleton_tail_chunk_does_not_crash(self, agent_and_data, monkeypatch):
+        """Regression for a zero-dim concat crash in explained variance.
 
-        Explained-variance is computed by chunking the rollout in 4096-step
-        slices and concatenating per-chunk value predictions. When the rollout
-        length leaves a 1-step tail (``len(states) % 4096 == 1``) the model's
-        critic returns a tensor that, after an over-eager ``squeeze(-1)``,
-        collapses to a 0-d scalar — which ``torch.cat`` rejects with
-        "zero-dimensional tensor (at position N) cannot be concatenated".
+        Explained-variance is computed by chunking the rollout into
+        ``_EXPLAINED_VARIANCE_CHUNK``-step slices and concatenating per-chunk
+        value predictions. When the rollout length leaves a 1-step tail the
+        model's critic returns a tensor that, after an over-eager
+        ``squeeze(-1)``, collapses to a 0-d scalar — which ``torch.cat``
+        rejects with "zero-dimensional tensor (at position N) cannot be
+        concatenated".
 
         Use ``reshape(-1)`` instead so a singleton tail stays 1-d.
         """
         agent, _, _, _, _, _, _ = agent_and_data
+        monkeypatch.setattr(agent, "_EXPLAINED_VARIANCE_CHUNK", 64)
 
-        n = 4097  # one full chunk + a 1-step tail
+        n = 65  # one full chunk + a 1-step tail
         state_dim = agent.state_dim
         action_dim = agent.action_dim
 

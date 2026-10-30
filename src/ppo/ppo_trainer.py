@@ -59,8 +59,14 @@ def _compute_self_play_progress(
 
 
 def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cfg,
-                 make_opponent, registry, pool=None, *, current_self_play_ratio=None):
-    """Create the appropriate batch runner based on num_workers config."""
+                 make_opponent, registry, pool=None, *, current_self_play_ratio=None,
+                 previous=None):
+    """Create the appropriate batch runner based on num_workers config.
+
+    For the vector engine, ``previous`` (the runner of the last update) is
+    reconfigured with this update's opponents and returned, keeping its
+    compiled rules and captured inference graphs.
+    """
     sim_device = agent.simulation_device
     num_concurrent = run_cfg.num_concurrent or run_cfg.episodes // max(1, run_cfg.num_workers)
     num_concurrent = min(run_cfg.episodes, num_concurrent)
@@ -76,7 +82,19 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
             pfsp_weights = pool._pfsp_weights(
                 [name for name, _, _ in snapshot_state_dicts]
             )
+        self_play_ratio = (
+            current_self_play_ratio
+            if current_self_play_ratio is not None
+            else run_cfg.self_play_ratio
+        )
         from src.ppo.vector_batch_runner import VectorBatchRunner
+        if isinstance(previous, VectorBatchRunner) and previous.model is agent.model:
+            previous.reconfigure(
+                snapshot_state_dicts=snapshot_state_dicts,
+                self_play_ratio=self_play_ratio,
+                pfsp_weights=pfsp_weights,
+            )
+            return previous
         return VectorBatchRunner(
             model=agent.model,
             cards=cards,
@@ -87,14 +105,11 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
             num_threads=run_cfg.vec_threads,
             num_concurrent=run_cfg.num_concurrent,
             snapshot_state_dicts=snapshot_state_dicts,
-            self_play_ratio=(
-                current_self_play_ratio
-                if current_self_play_ratio is not None
-                else run_cfg.self_play_ratio
-            ),
+            self_play_ratio=self_play_ratio,
             pfsp_weights=pfsp_weights,
             max_active_snapshots=run_cfg.vec_max_active_snapshots,
             snapshot_temperature=run_cfg.frozen_opponent_temperature,
+            graph_inference=run_cfg.vec_graph_inference,
         )
 
     if run_cfg.num_workers > 1:
@@ -377,6 +392,7 @@ def train(
             "Self-play schedule horizon pinned to update "
             f"{self_play_horizon}."
         )
+    runner = None
     for upd in range(start_update, end_update + 1):
         # Compute the self-play ratio for this update based on the schedule.
         # Progress is measured against the full horizon (including resumed
@@ -415,6 +431,7 @@ def train(
             agent, cards, card_names, action_dim,
             ppo_cfg, run_cfg, data_cfg, make_opponent, registry, pool=pool,
             current_self_play_ratio=current_sp_ratio,
+            previous=runner,
         )
         states, actions, old_lp, returns, advs, masks = runner.run_episodes(run_cfg.episodes)
         duration_episodes = time.time() - start_time
@@ -595,7 +612,10 @@ def train(
         # emptying the CUDA caching allocator between updates reclaims
         # references to the just-torn-down server/workers and reduces the
         # chance of allocator fragmentation accumulating across updates.
-        del runner
+        # The vector runner is kept: it is reconfigured for the next update
+        # so its compiled rules and captured graphs are reused.
+        if run_cfg.engine != "vec":
+            runner = None
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
