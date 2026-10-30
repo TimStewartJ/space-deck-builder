@@ -1,6 +1,6 @@
 # 0004 - Complete vector rules and expose a guarded training path
 
-**Status:** Accepted on `feat/vector-engine-gate2` (2026-08-14), superseded in part by ADRs 0005 and 0006
+**Status:** Accepted on `feat/vector-engine-gate2` (2026-08-14), superseded in part by ADRs 0005, 0006 and 0016
 
 ## Context
 

@@ -4,7 +4,10 @@ Every experiment writeup, newest first. All are measured against
 [`docs/eval_protocol.md`](../docs/eval_protocol.md) — read that first if you
 are comparing numbers across files. Writeups dated before 2026-10-27 were
 produced under protocol `v0.1.x`; `v0.2` added the held-out league and the
-purchase audit without changing any earlier measure.
+purchase audit without changing any earlier measure. Every writeup listed here
+was measured under game rules version 1; protocol `v0.3` changes the rules
+([decision 0016](../docs/decisions/0016-rulebook-ability-timing.md)), and
+results under it are not comparable with these.
 
 Each writeup keeps its own eval/Elo logs beside it. Training logs and
 checkpoints are gitignored. Logs a writeup depends on are force-added; from

@@ -80,7 +80,15 @@ class HeuristicAgent(Agent):
     # ── Pending decisions ──────────────────────────────────────────────
 
     def _handle_pending(self, game_state: Game, player, actions, pending):
-        """Handle forced or optional pending decisions (scrap, discard, destroy, OR options)."""
+        """Handle pending decisions: OR options, destroy base, scrap, discard.
+
+        The choices in a ship's primary ability are pending decisions as soon
+        as the ship is played (decision 0016) and follow the same rules as
+        every other pending decision: an OR option by
+        :meth:`_choose_or_option`, the first base offered for destruction,
+        a scrap target by :meth:`_handle_scrap_decision`, the lowest-value
+        card to discard, otherwise SKIP.
+        """
         action_types = {a.type for a in actions}
 
         # The OR ability of a ship just played: choose one option
@@ -115,7 +123,15 @@ class HeuristicAgent(Agent):
         return actions[0]
 
     def _handle_scrap_decision(self, game_state, player, actions, pending):
-        """Choose what to scrap. Phase-aware: Vipers first early, Scouts later."""
+        """Choose what to scrap.
+
+        Vipers first in the early game (at most 14 cards in hand, deck and
+        discard pile or played this turn), Scouts first later, then
+        Explorers; a copy in the discard pile comes before one in the hand,
+        as the pending choices list the discard pile first.
+        Otherwise the most expensive trade-row card costing at least 5,
+        otherwise SKIP, or the first target when the scrap is mandatory.
+        """
         scrap_actions = [a for a in actions if a.type == ActionType.SCRAP_CARD]
         skip_actions = [a for a in actions if a.type == ActionType.SKIP_DECISION]
 

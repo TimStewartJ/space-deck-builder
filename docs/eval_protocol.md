@@ -248,3 +248,18 @@ a version bump.
     evaluated this way agreed with the published self-play run's win rates
     against Heuristic within 1.5 points in every window of updates 26-400
     ([`results/training_throughput.md`](../results/training_throughput.md)).
+- `v0.3` — changes the game: game rules version 2, defined by decision record
+  [0016](decisions/0016-rulebook-ability-timing.md). An OR ability gives one
+  of its options, the choices in a ship's primary ability are made as the
+  ship is played, and Machine Base draws and then scraps in one activation,
+  as the rulebook says. The action space grows from 494 to 543 actions.
+  - Opponents, sample sizes, seat protocol, seed count and metrics are
+    unchanged, but every measure is taken on the game the engines implement.
+    **Results under `v0.3` are not comparable with any earlier result**:
+    every result before `v0.3`, including all of `results/`, was measured
+    under rules version 1.
+  - Checkpoints record the rules version they were trained under
+    (`rules_version`), and a checkpoint trained under other rules does not
+    load, so earlier results cannot be re-run under `v0.3`. They stay valid as
+    rules-version-1 measurements; a report states which rules version it
+    measures.
