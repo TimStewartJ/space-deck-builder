@@ -428,6 +428,14 @@ _REFERENCE_SELFPLAY_DEFAULTS: dict[str, Any] = {
     "pfsp": "variance",
 }
 
+# Updates per fresh Python process when train_reference.ps1 runs a preset.
+# Processes hand over optimizer, scheduler, pool and every RNG stream, so the
+# length changes no training result. With graph-replayed inference a process
+# keeps its speed for at least 400 updates, while each restart costs about
+# 10 s (decision 0017); the eager evaluators still need 25-update processes
+# (decision 0009).
+_REFERENCE_CHUNK_SIZE = 100
+
 TRAINING_PRESETS: dict[str, TrainingPreset] = {
     "reference-selfplay": TrainingPreset(
         name="reference-selfplay",
@@ -437,7 +445,7 @@ TRAINING_PRESETS: dict[str, TrainingPreset] = {
             "variance-PFSP self-play with three active snapshots"
         ),
         train_defaults=dict(_REFERENCE_SELFPLAY_DEFAULTS),
-        chunk_size=25,
+        chunk_size=_REFERENCE_CHUNK_SIZE,
         interim_eval_games=3200,
         final_eval_games=15000,
         eval_num_workers=16,
@@ -454,7 +462,7 @@ TRAINING_PRESETS: dict[str, TrainingPreset] = {
             **_REFERENCE_SELFPLAY_DEFAULTS,
             "model_path": CHAMPION_CHECKPOINT,
         },
-        chunk_size=25,
+        chunk_size=_REFERENCE_CHUNK_SIZE,
         interim_eval_games=3200,
         final_eval_games=15000,
         eval_num_workers=16,
@@ -475,7 +483,7 @@ TRAINING_PRESETS: dict[str, TrainingPreset] = {
             "frozen_opponent_ratio": 1.0,
             "frozen_opponent_temperature": 0.0,
         },
-        chunk_size=25,
+        chunk_size=_REFERENCE_CHUNK_SIZE,
         interim_eval_games=3200,
         final_eval_games=15000,
         eval_num_workers=16,
@@ -497,7 +505,7 @@ TRAINING_PRESETS: dict[str, TrainingPreset] = {
             "frozen_opponent_ratio": 1.0,
             "frozen_opponent_temperature": 0.0,
         },
-        chunk_size=25,
+        chunk_size=_REFERENCE_CHUNK_SIZE,
         interim_eval_games=3200,
         final_eval_games=15000,
         eval_num_workers=16,
