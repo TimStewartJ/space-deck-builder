@@ -649,7 +649,8 @@ class Game:
 
         A ship's primary ability resolves completely, its choices becoming
         pending decisions; a base's primary ability resolves its automatic
-        parts. Ally and scrap abilities stay player-activated.
+        parts unless a mandatory choice must follow them. Ally and scrap
+        abilities stay player-activated.
         ``resolve_on_play`` never resolves anything twice, so cards played
         earlier this turn are unaffected.
         """

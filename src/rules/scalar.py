@@ -33,7 +33,9 @@ def resolve_on_play(effect: Effect, game, player, card) -> None:
     A ship's primary ability resolves completely: its choices queue pending
     decisions (none when a choice has no legal target), and an OR ability
     opens a mandatory choice between its options. A base's primary ability
-    resolves its automatic parts. Nothing resolves twice.
+    resolves its automatic parts, unless a mandatory choice must follow them
+    (Machine Base): then the whole ability is one later activation. Nothing
+    resolves twice.
     """
     resolution = ability_play_resolution(effect, ship=not card.is_base())
     if resolution == PlayResolution.NONE:

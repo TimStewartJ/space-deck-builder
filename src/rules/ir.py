@@ -16,8 +16,9 @@ RULE_IR_VERSION = 2
 #      Machine Base drew at once when played (494 actions for the Core Set).
 #   2: docs/decisions/0016-rulebook-ability-timing.md. An OR ability gives one
 #      option (543 actions for the Core Set: options have their own action
-#      group), and a ship's primary ability resolves completely when the ship
-#      is played.
+#      group), a ship's primary ability resolves completely when the ship is
+#      played, and Machine Base draws and then must scrap in one activation,
+#      also on the turn it is played.
 RULES_VERSION = 2
 
 
@@ -62,11 +63,13 @@ class PlayResolution(IntEnum):
     """
 
     # Nothing: the player uses the ability later (an activated base ability,
-    # an ally, scrap or passive ability, or a base's OR ability).
+    # an ally, scrap or passive ability, a base's OR ability, or a base
+    # ability holding a mandatory choice, whose automatic parts and the
+    # choice that must follow them are one activation).
     NONE = 0
-    # The automatic parts (resources, draws, discard debt); any choice in it
-    # stays a player-activated action. A base's primary ability on the turn
-    # the base is played.
+    # The automatic parts (resources, draws, discard debt); any optional
+    # choice in it stays a player-activated action. A base's primary ability
+    # on the turn the base is played.
     AUTO_PARTS = 1
     # All of it: a ship's primary ability. Its choices become pending
     # decisions made before any other action, and an OR ability opens a
@@ -107,6 +110,14 @@ PASSIVE_EFFECT_TYPES = frozenset(
 )
 
 
+def _holds_mandatory_choice(effect: Effect) -> bool:
+    if effect.effect_type in CHOICE_EFFECT_TYPES and effect.is_mandatory:
+        return True
+    return any(
+        _holds_mandatory_choice(child) for child in effect.child_effects or ()
+    )
+
+
 def ability_play_resolution(effect: Effect, *, ship: bool) -> PlayResolution:
     """What of the top-level ability *effect* resolves when its card is played.
 
@@ -120,7 +131,11 @@ def ability_play_resolution(effect: Effect, *, ship: bool) -> PlayResolution:
         return PlayResolution.NONE
     if ship:
         return PlayResolution.WHOLE
-    if effect.is_or_effect or effect.effect_type not in AUTO_EFFECT_TYPES:
+    if (
+        effect.is_or_effect
+        or effect.effect_type not in AUTO_EFFECT_TYPES
+        or _holds_mandatory_choice(effect)
+    ):
         return PlayResolution.NONE
     return PlayResolution.AUTO_PARTS
 

@@ -7,7 +7,9 @@ Star Realms Box Set rulebook 1.1E, pages 4 and 5, and decision 0016
   ability for the turn;
 - a ship's primary ability happens immediately as the ship is played, so its
   choices are pending decisions made before anything else; ally and scrap
-  abilities may be used at any time during the main phase.
+  abilities may be used at any time during the main phase;
+- Machine Base ("Draw a card, then scrap a card from your hand") is one
+  activation that draws and then must scrap, also on the turn it is played.
 
 Every step is applied to the scalar engine and to the vector engine; the
 helper checks that both offer the same legal actions before the step and
@@ -389,3 +391,51 @@ def test_discard_option_whose_targets_run_out_offers_only_skip():
     assert pair.legal() == {SKIP_INDEX}
     pair.step(SKIP_INDEX)
     assert len(pair.player.hand) == 1
+
+
+def _machine_base_activation(pair, base):
+    """Activate Machine Base: it draws a Viper, then a card must be scrapped."""
+    hand = len(pair.player.hand)
+    pair.step(_first(base))
+    assert len(pair.player.hand) == hand + 1
+    viper, scout = _index("Viper"), _index("Scout")
+    # Mandatory: no SKIP, nothing else until a card from the hand is scrapped.
+    assert pair.legal() == {OFFSETS.scrap_hand + viper, OFFSETS.scrap_hand + scout}
+    pair.step(OFFSETS.scrap_hand + viper)
+    assert pair.player.get_current_pending_set() is None
+    assert [card.name for card in pair.player.hand] == ["Scout"]
+    assert all(card.name != "Viper" for card in pair.player.discard_pile)
+    legal = pair.legal()
+    assert _first(base) not in legal
+    assert END_TURN_INDEX in legal
+
+
+def test_machine_base_draws_nothing_when_played():
+    """Its text, "Draw a card, then scrap a card from your hand", is one activation."""
+    pair = Pair(hand=("Machine Base", "Scout"))
+    base = pair.play("Machine Base")
+    assert pair.player.get_current_pending_set() is None
+    assert [card.name for card in pair.player.hand] == ["Scout"]
+    legal = pair.legal()
+    assert _first(base) in legal
+    assert OFFSETS.play_card + _index("Scout") in legal
+    assert END_TURN_INDEX in legal
+    _machine_base_activation(pair, base)
+
+
+def test_machine_base_is_the_same_activation_on_later_turns():
+    pair = Pair(hand=("Scout",), bases=("Machine Base",))
+    base = _index("Machine Base")
+    _machine_base_activation(pair, base)
+    pair.step(END_TURN_INDEX)
+    pair.step(END_TURN_INDEX)
+    assert _first(base) in pair.legal()
+
+
+def test_machine_base_with_nothing_to_draw_or_scrap_opens_no_decision():
+    pair = Pair(hand=("Machine Base",), deck=0)
+    base = pair.play("Machine Base")
+    pair.step(_first(base))
+    assert pair.player.get_current_pending_set() is None
+    assert pair.player.hand == []
+    assert _first(base) not in pair.legal()

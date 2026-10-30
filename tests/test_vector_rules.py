@@ -18,7 +18,11 @@ from src.vector_engine.rules import (
     apply_bundle_to_totals,
     compile_rules,
 )
-from src.rules.ir import RULE_IR_VERSION
+from src.rules.ir import (
+    PENDING_MANDATORY,
+    RULE_IR_VERSION,
+    TARGET_HAND,
+)
 
 
 @pytest.fixture(scope="module")
@@ -338,6 +342,22 @@ def test_ship_primary_choices_resolve_when_played(compiled, card_name, ops):
         bundle["trigger"] in (EffectTrigger.ALLY, EffectTrigger.SCRAP)
         for bundle in bundles[1:]
     )
+
+
+def test_machine_base_draws_and_scraps_in_one_activation(compiled):
+    """Its draw and the scrap that must follow are one activated bundle."""
+    _, _, rules = compiled
+    assert _bundles(rules, "Machine Base") == [
+        {
+            "trigger": EffectTrigger.ACTIVATE,
+            "faction": 0,
+            "requirement": 0,
+            "ops": [
+                (EffectOpcode.DRAW, 1, 0),
+                (EffectOpcode.QUEUE_SCRAP, 1, TARGET_HAND | PENDING_MANDATORY),
+            ],
+        }
+    ]
 
 
 def test_compiler_rejects_an_or_ability_below_the_top_level(compiled):
