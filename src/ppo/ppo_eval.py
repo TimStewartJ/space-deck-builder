@@ -217,6 +217,89 @@ def evaluate(
     )
 
 
+def evaluate_with_vector_runner(
+    runner,
+    *,
+    opponents: str = "random,heuristic,simple",
+    eval_games: int = 3200,
+    seed: int,
+    label: str | None = None,
+    min_games_per_opponent: int = 0,
+    log_fn=None,
+    temperature: float = 1.0,
+) -> EvalResult:
+    """:func:`evaluate` played on a training ``VectorBatchRunner``.
+
+    The same games per opponent type and the same seat alternation, played
+    in one vector population with graph-replayed inference
+    (:meth:`VectorBatchRunner.evaluate_fixed_opponents`). The vector engine
+    and its fixed opponents reproduce the scalar rules and scalar opponent
+    policies, so the results estimate the same win rates. Reports
+    ``avg_steps`` as the evaluated model's decisions per game, as
+    :func:`evaluate` does.
+    """
+    from src.ppo.action_selection import validate_temperature
+
+    temperature = validate_temperature(temperature)
+    emit = log_fn or print
+    opp_types = [entry.split(":")[0].strip().lower() for entry in opponents.split(",")]
+    games_schedule = _distribute_games(
+        eval_games, len(opp_types), min_per_bucket=min_games_per_opponent,
+    )
+    header = "Evaluating"
+    if label:
+        header += f" ({label})"
+    header += f" — {eval_games} games × {len(opp_types)} opponent types"
+    if temperature != 1.0:
+        header += f" at temperature {temperature:g}"
+    emit(header + " on the vector engine")
+
+    start = time.perf_counter()
+    rows = runner.evaluate_fixed_opponents(
+        opp_types, games_schedule, seed=seed, temperature=temperature
+    )
+    per_opponent: list[OpponentResult] = []
+    total_wins = 0
+    total_games = 0
+    for opp_type, wins, num_games, steps, first, second in rows:
+        if num_games == 0:
+            continue
+        if first + second != num_games:
+            raise RuntimeError(
+                f"Evaluation seat accounting mismatch for {opp_type}: "
+                f"first={first}, second={second}"
+            )
+        win_rate = wins / num_games
+        avg_steps = steps / num_games
+        emit(f"  vs {opp_type}: {wins}/{num_games} wins "
+             f"({win_rate:.0%}), avg {avg_steps:.0f} steps/game "
+             f"(first={first}, second={second})")
+        per_opponent.append(OpponentResult(
+            opponent=opp_type,
+            wins=wins,
+            games=num_games,
+            win_rate=win_rate,
+            avg_steps=avg_steps,
+            first_player_games=first,
+            second_player_games=second,
+        ))
+        total_wins += wins
+        total_games += num_games
+
+    elapsed = time.perf_counter() - start
+    overall_rate = total_wins / total_games if total_games > 0 else 0
+    emit(f"  Overall: {total_wins}/{total_games} wins ({overall_rate:.0%}) "
+         f"in {elapsed:.1f}s")
+    return EvalResult(
+        per_opponent=per_opponent,
+        total_wins=total_wins,
+        total_games=total_games,
+        overall_win_rate=overall_rate,
+        elapsed_seconds=elapsed,
+        temperature=temperature,
+    )
+
+
 def load_and_evaluate(
     *,
     model_path: str | None = None,

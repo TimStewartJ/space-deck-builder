@@ -6,6 +6,7 @@ import torch.optim.lr_scheduler as lr_sched
 import time
 import copy
 import gc
+import random
 
 from src.config import (
     DataConfig, PPOConfig, RunConfig, DeviceConfig, ModelConfig,
@@ -532,6 +533,7 @@ def train(
                     agent, pool, card_names, cards, run_cfg, ppo_cfg, upd,
                     registry=registry, data_cfg=data_cfg,
                     log_fn=logger.info,
+                    runner=runner,
                 )
             agent.clear_buffers()
             duration_eval = time.time() - start_time
@@ -657,16 +659,34 @@ def _run_per_opponent_eval(
     registry=None,
     data_cfg: DataConfig | None = None,
     log_fn=None,
+    runner=None,
 ) -> tuple[int, 'EvalResult']:
     """Run evaluation against each opponent type separately, log per-type results.
 
-    Delegates to :func:`src.ppo.ppo_eval.evaluate` for the actual game execution.
+    With a vector ``runner`` that can replay its policy from graphs, the
+    games are played on the vector engine
+    (:func:`src.ppo.ppo_eval.evaluate_with_vector_runner`); otherwise
+    :func:`src.ppo.ppo_eval.evaluate` plays them on the object engine. The
+    vector population's seed comes from Python's ``random``, which the
+    caller restores afterwards.
 
     Returns a tuple of (total_wins, EvalResult).
     """
-    from src.ppo.ppo_eval import evaluate
+    from src.ppo.ppo_eval import evaluate, evaluate_with_vector_runner
 
     opponents_spec = ",".join(pool.opponent_types)
+    can_evaluate = getattr(runner, "can_evaluate", None)
+    if can_evaluate is not None and can_evaluate():
+        result = evaluate_with_vector_runner(
+            runner,
+            opponents=opponents_spec,
+            eval_games=run_cfg.eval_games,
+            seed=random.randint(0, 2**31 - 1),
+            label=f"update {upd}",
+            min_games_per_opponent=1,
+            log_fn=log_fn,
+        )
+        return result.total_wins, result
     eval_workers = (
         run_cfg.eval_num_workers
         if run_cfg.eval_num_workers is not None

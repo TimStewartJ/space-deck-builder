@@ -6,9 +6,10 @@ import torch
 from src.encoding.action_encoder import END_TURN_INDEX
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.vector_engine.graphed_policy import (
-    GraphedPolicyBank,
+    GraphedRolloutPolicy,
     batch_buckets,
     graphable,
+    stage_effective_masks,
     staged_rows,
 )
 from src.vector_engine.policy import suppress_redundant_end_turn
@@ -16,6 +17,8 @@ from src.vector_engine.policy import suppress_redundant_end_turn
 NUM_CARDS = 49
 STATE_DIM = 4 + 5 + 6 + 10 * NUM_CARDS
 ACTION_DIM = 4 + 10 * NUM_CARDS
+PLAY = (3, 3 + NUM_CARDS)
+ATTACK_PLAYER = 3 + 2 * NUM_CARDS
 
 cuda = pytest.mark.skipif(
     not torch.cuda.is_available(), reason="needs a CUDA/HIP device"
@@ -41,18 +44,28 @@ def _inputs(rows: int, seed: int):
     )
     masks = rng.random((rows, ACTION_DIM)) < 0.05
     masks[:, END_TURN_INDEX] = True
-    masks[rows // 2 :, 3 : 3 + NUM_CARDS] = False  # no PLAY: END_TURN stays legal
-    masks[-1] = False  # a row with no legal action at all
+    masks[rows // 2 :, PLAY[0] : PLAY[1]] = False
+    masks[rows // 2 :, ATTACK_PLAYER] = False  # END_TURN stays legal here
     return observations, masks
 
 
-def _eager(model, observations, masks):
+def _expected_masks(masks: np.ndarray) -> np.ndarray:
     effective = suppress_redundant_end_turn(masks)
+    effective[~effective.any(axis=1), END_TURN_INDEX] = True
+    return effective
+
+
+def _stage(policy, observations, masks, slot, bucket):
+    count = len(observations)
+    staged_rows(policy.host_observations, slot, bucket, count)[:] = observations
+    policy.stage_masks(masks, np.arange(count, dtype=np.int64), slot, bucket)
+
+
+def _eager(model, observations, masks):
+    effective = _expected_masks(masks)
     with torch.no_grad():
         logits, values = model(torch.from_numpy(observations))
     logits = logits.masked_fill(~torch.from_numpy(effective), float("-inf"))
-    no_valid = ~torch.from_numpy(effective).any(dim=1)
-    logits[no_valid, END_TURN_INDEX] = 0.0
     return logits, values, effective
 
 
@@ -66,100 +79,132 @@ def test_batch_buckets_cover_every_size():
     assert batch_buckets(10) == [10]
 
 
+def test_staged_masks_match_suppress_redundant_end_turn():
+    rng = np.random.default_rng(3)
+    masks = rng.random((300, ACTION_DIM)) < 0.02
+    masks[:, END_TURN_INDEX] = rng.random(300) < 0.8
+    masks[:40] = False
+    masks[:20, END_TURN_INDEX] = True
+    rows = rng.permutation(300)[:250].astype(np.int64)
+    out = np.zeros((250, ACTION_DIM), dtype=np.bool_)
+    stage_effective_masks(
+        masks, rows, out, PLAY[0], PLAY[1], ATTACK_PLAYER, END_TURN_INDEX
+    )
+    expected = suppress_redundant_end_turn(masks[rows])
+    empty = ~expected.any(axis=1)
+    assert empty.any()
+    expected[empty, END_TURN_INDEX] = True
+    assert np.array_equal(out, expected)
+
+
 def test_default_architecture_is_graphable():
     assert graphable(_model(0))
 
 
 @cuda
-def test_learner_bank_records_eager_values_log_probs_and_masks():
+def test_learner_records_eager_values_log_probs_and_masks():
     device = torch.device("cuda")
     model = _model(1)
-    bank = GraphedPolicyBank(
-        model.to(device), 1, 256, device,
-        temperature=1.0, with_values=True, storage_rows=1024,
+    policy = GraphedRolloutPolicy(
+        model.to(device), 0, 256, device, storage_rows=1024
     )
-    bank.weights.load(0, model)
+    policy.load_learner(model)
     eager_model = model.cpu()
     offset = 0
     for seed, rows in ((2, 200), (3, 37), (4, 256)):
         observations, masks = _inputs(rows, seed)
-        staged_rows(bank.host_observations, 0, bank.bucket(rows), rows)[:] = observations
-        staged_rows(bank.host_masks, 0, bank.bucket(rows), rows)[:] = masks
-        bank.submit(bank.bucket(rows), offset)
+        bucket = policy.bucket(rows)
+        _stage(policy, observations, masks, 0, bucket)
+        policy.submit(bucket, [rows], offset=offset)
         torch.cuda.synchronize()
         logits, values, effective = _eager(eager_model, observations, masks)
         recorded = slice(offset, offset + rows)
-        actions = bank.actions[recorded].cpu()
-        assert torch.equal(actions, bank.host_actions[:rows])
-        assert torch.equal(bank.masks[recorded].cpu(), torch.from_numpy(effective))
-        assert torch.equal(bank.states[recorded].cpu(), torch.from_numpy(observations))
-        legal = torch.from_numpy(effective)
-        legal[~legal.any(dim=1), END_TURN_INDEX] = True
-        assert legal.gather(1, actions.unsqueeze(1)).all()
+        actions = policy.actions[recorded].cpu()
+        assert torch.equal(actions, policy.host_actions[:rows])
+        assert torch.equal(policy.masks[recorded].cpu(), torch.from_numpy(effective))
+        assert torch.equal(
+            policy.states[recorded].cpu(), torch.from_numpy(observations)
+        )
+        assert torch.from_numpy(effective).gather(1, actions.unsqueeze(1)).all()
         expected_log_probs = torch.log_softmax(logits, dim=1).gather(
             1, actions.unsqueeze(1)
         ).squeeze(1)
         torch.testing.assert_close(
-            bank.log_probs[recorded].cpu(), expected_log_probs, rtol=1e-4, atol=1e-4
+            policy.log_probs[recorded].cpu(), expected_log_probs, rtol=1e-4, atol=1e-4
         )
         torch.testing.assert_close(
-            bank.values[recorded].cpu(), values, rtol=1e-4, atol=1e-4
+            policy.values[recorded].cpu(), values, rtol=1e-4, atol=1e-4
         )
         offset += rows
 
 
 @cuda
-def test_snapshot_bank_argmax_matches_each_slots_model():
+def test_one_graph_serves_a_sampling_learner_and_greedy_opponents():
     device = torch.device("cuda")
-    models = [_model(seed) for seed in (5, 6, 7)]
-    bank = GraphedPolicyBank(
-        models[0].to(device), 3, 128, device,
-        temperature=0.0, with_values=False,
+    learner, *opponents = [_model(seed) for seed in (4, 5, 6, 7)]
+    policy = GraphedRolloutPolicy(
+        learner.to(device), 3, 128, device,
+        opponent_temperature=0.0, storage_rows=512,
     )
-    for slot, model in enumerate(models):
-        bank.weights.load(slot, model)
-    counts = (100, 0, 41)
-    bucket = bank.bucket(max(counts))
+    policy.load_learner(learner)
+    for slot, model in enumerate(opponents, start=1):
+        policy.load_opponent(slot, model)
+    counts = [50, 100, 0, 41]
+    bucket = policy.bucket(max(counts))
     inputs = []
     for slot, count in enumerate(counts):
-        observations, masks = _inputs(max(count, 1), 10 + slot)
+        observations, masks = _inputs(max(count, 2), 10 + slot)
         observations, masks = observations[:count], masks[:count]
-        staged_rows(bank.host_observations, slot, bucket, count)[:] = observations
-        staged_rows(bank.host_masks, slot, bucket, count)[:] = masks
+        _stage(policy, observations, masks, slot, bucket)
         inputs.append((observations, masks))
-    bank.submit(bucket)
+    policy.submit(bucket, counts, offset=7)
     torch.cuda.synchronize()
-    for slot, ((observations, masks), model) in enumerate(zip(inputs, models)):
+    for slot, ((observations, masks), model) in enumerate(
+        zip(inputs, [learner, *opponents])
+    ):
         if not len(observations):
             continue
-        logits, _, _ = _eager(model.cpu(), observations, masks)
-        expected = logits.argmax(dim=1)
-        actual = staged_rows(bank.host_actions, slot, bucket, len(observations))
-        assert np.array_equal(actual, expected.numpy())
+        logits, values, effective = _eager(model.cpu(), observations, masks)
+        actual = staged_rows(policy.host_actions, slot, bucket, len(observations))
+        if slot:
+            assert np.array_equal(actual, logits.argmax(dim=1).numpy())
+            continue
+        recorded = slice(7, 7 + len(observations))
+        actions = torch.from_numpy(actual.copy())
+        assert torch.equal(policy.actions[recorded].cpu(), actions)
+        assert torch.from_numpy(effective).gather(1, actions.unsqueeze(1)).all()
+        torch.testing.assert_close(
+            policy.log_probs[recorded].cpu(),
+            torch.log_softmax(logits, dim=1).gather(1, actions.unsqueeze(1)).squeeze(1),
+            rtol=1e-4, atol=1e-4,
+        )
+        torch.testing.assert_close(
+            policy.values[recorded].cpu(), values, rtol=1e-4, atol=1e-4
+        )
 
 
 @cuda
 def test_sampling_follows_the_masked_policy_distribution():
     device = torch.device("cuda")
     model = _model(8)
-    bank = GraphedPolicyBank(
-        model.to(device), 1, 2048, device,
-        temperature=1.0, with_values=False,
-    )
-    bank.weights.load(0, model)
+    policy = GraphedRolloutPolicy(model.to(device), 0, 2048, device)
+    policy.load_learner(model)
     observations, _ = _inputs(2, 9)
-    row_obs = observations[:1]
-    # END_TURN plus three non-PLAY actions, so nothing is suppressed.
     row_mask = np.zeros((1, ACTION_DIM), dtype=bool)
     row_mask[0, [END_TURN_INDEX, 60, 61, 200]] = True
-    staged_rows(bank.host_observations, 0, 2048, 2048)[:] = row_obs
-    staged_rows(bank.host_masks, 0, 2048, 2048)[:] = row_mask
+    _stage(
+        policy,
+        np.repeat(observations[:1], 2048, axis=0),
+        np.repeat(row_mask, 2048, axis=0),
+        0,
+        2048,
+    )
     counts = np.zeros(ACTION_DIM, dtype=np.int64)
     for _ in range(25):
-        bank.submit(2048)
+        policy.submit(2048, [2048])
         torch.cuda.synchronize()
-        counts += np.bincount(bank.host_actions[:2048].numpy(), minlength=ACTION_DIM)
-    logits, _, _ = _eager(model.cpu(), row_obs, row_mask)
+        counts += np.bincount(policy.host_actions[:2048].numpy(), minlength=ACTION_DIM)
+    logits, _, _ = _eager(model.cpu(), observations[:1], row_mask)
     probabilities = torch.softmax(logits[0], dim=0).numpy()
     empirical = counts / counts.sum()
     assert set(np.flatnonzero(counts)) <= set(np.flatnonzero(probabilities))
@@ -170,22 +215,60 @@ def test_sampling_follows_the_masked_policy_distribution():
 def test_storage_growth_keeps_recorded_rows_and_recaptures():
     device = torch.device("cuda")
     model = _model(11)
-    bank = GraphedPolicyBank(
-        model.to(device), 1, 64, device,
-        temperature=1.0, with_values=True, storage_rows=64,
-    )
-    bank.weights.load(0, model)
+    policy = GraphedRolloutPolicy(model.to(device), 0, 64, device, storage_rows=64)
+    policy.load_learner(model)
     observations, masks = _inputs(64, 12)
-    staged_rows(bank.host_observations, 0, 64, 64)[:] = observations
-    staged_rows(bank.host_masks, 0, 64, 64)[:] = masks
-    bank.submit(64, 0)
+    _stage(policy, observations, masks, 0, 64)
+    policy.submit(64, [64], offset=0)
     torch.cuda.synchronize()
-    recorded = bank.states[:64].clone()
-    bank.allocate_storage(256)
-    assert bank.captured_buckets == []
-    assert torch.equal(bank.states[:64], recorded)
-    bank.submit(64, 64)
+    recorded = policy.states[:64].clone()
+    policy.allocate_storage(256)
+    assert policy.captured_graphs == []
+    assert torch.equal(policy.states[:64], recorded)
+    policy.submit(64, [64], offset=64)
     torch.cuda.synchronize()
-    assert torch.equal(bank.states[64:128].cpu(), torch.from_numpy(observations))
+    assert torch.equal(policy.states[64:128].cpu(), torch.from_numpy(observations))
     with pytest.raises(ValueError, match="offset"):
-        bank.submit(64, 256 + 64 + 1)
+        policy.submit(64, [64], offset=256 - 63)
+
+
+@cuda
+def test_vector_evaluation_alternates_seats_and_is_deterministic_at_temperature_zero():
+    from src.config import DataConfig, PPOConfig
+    from src.ppo.ppo_eval import evaluate_with_vector_runner
+    from src.ppo.vector_batch_runner import VectorBatchRunner
+
+    data = DataConfig()
+    cards = data.load_cards()
+    registry = data.build_registry(cards)
+    device = torch.device("cuda")
+    runner = VectorBatchRunner(
+        model=_model(13).to(device),
+        cards=cards,
+        registry=registry,
+        device=device,
+        ppo_config=PPOConfig(),
+        opponent_spec="random,heuristic,simple",
+    )
+    assert runner.can_evaluate()
+    results = [
+        evaluate_with_vector_runner(
+            runner,
+            opponents="heuristic,random,simple",
+            eval_games=61,
+            seed=4,
+            temperature=0.0,
+            log_fn=lambda _: None,
+        )
+        for _ in range(2)
+    ]
+    first, second = results
+    assert [r.games for r in first.per_opponent] == [21, 20, 20]
+    for result in first.per_opponent:
+        assert result.first_player_games == (result.games + 1) // 2
+        assert result.second_player_games == result.games // 2
+        assert result.avg_steps > 0
+    assert [(r.wins, r.avg_steps) for r in first.per_opponent] == [
+        (r.wins, r.avg_steps) for r in second.per_opponent
+    ]
+    assert first.total_games == 61

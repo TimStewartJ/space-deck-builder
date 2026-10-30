@@ -2,24 +2,28 @@
 
 A vector rollout asks the policy for one decision per active game hundreds of
 times per update, each time for a few hundred rows. At that size the GPU time is
-almost entirely per-kernel launch overhead, so this module evaluates the
-policies from static device buffers with CUDA/HIP graphs, one graph per
-batch-size bucket, captured the first time a bucket is needed and reused for
-the life of the process.
+almost entirely launch overhead, so this module evaluates the policies from
+static device buffers with CUDA/HIP graphs, one graph per batch-size bucket,
+captured the first time a bucket is needed and reused for the life of the
+process. Replaying a graph on ROCm still costs host time for every node it
+holds (about 40 microseconds per GEMM on the project's machine), so each
+decision step replays a single graph in which the learner and every opponent
+policy share the same stacked kernels, and the CPU prepares masks while
+staging rows.
 
 The graphs evaluate the sum-pooled MLP architecture through
 ``PPOActorCritic.folded_input_weight`` with weights copied into static stacked
-tensors, so loading a different snapshot never invalidates a graph. Selection
-matches :func:`src.ppo.action_selection.select_actions` on logits masked as in
-:func:`src.ppo.mp_inference_server._forward_and_sample` after
-:func:`src.vector_engine.policy.suppress_redundant_end_turn`: the same
-distribution, drawn from the graph-safe device generator.
+tensors, so loading a different snapshot never invalidates a graph. Masks are
+staged as :func:`src.vector_engine.policy.suppress_redundant_end_turn` makes
+them, and selection matches :func:`src.ppo.action_selection.select_actions`:
+the same distribution, drawn from the graph-safe device generator.
 """
 from __future__ import annotations
 
 import numpy as np
 import torch
 import torch.nn as nn
+from numba import njit
 
 from src.encoding.action_encoder import END_TURN_INDEX, get_action_space_layout
 from src.ppo.action_selection import validate_temperature
@@ -41,6 +45,34 @@ def batch_buckets(capacity: int) -> list[int]:
         base *= 2
     sizes.append(capacity)
     return sorted(set(size for size in sizes if size <= capacity))
+
+
+@njit(cache=True)
+def stage_effective_masks(
+    masks, rows, out, play_start, play_end, attack_player, end_turn
+):
+    """Copy ``masks[rows]`` into ``out`` as the policy sees them.
+
+    END_TURN is removed while a card can be played or the opponent attacked
+    directly (``suppress_redundant_end_turn``). A row with no legal action at
+    all keeps END_TURN, which is what the policy plays there.
+    """
+    actions = masks.shape[1]
+    for index in range(rows.shape[0]):
+        game = rows[index]
+        meaningful = masks[game, attack_player]
+        any_legal = False
+        for action in range(actions):
+            legal = masks[game, action]
+            out[index, action] = legal
+            if legal:
+                any_legal = True
+                if play_start <= action < play_end:
+                    meaningful = True
+        if meaningful:
+            out[index, end_turn] = False
+        elif not any_legal:
+            out[index, end_turn] = True
 
 
 def _linear_layers(sequence: nn.Sequential) -> list[nn.Linear]:
@@ -83,8 +115,21 @@ def architecture_key(model: PPOActorCritic) -> tuple:
     )
 
 
+def _stacked(slots: int, out_features: int, in_features: int, device):
+    return (
+        torch.zeros(slots, out_features, in_features, device=device),
+        torch.zeros(slots, out_features, device=device),
+    )
+
+
 class StackedPolicyWeights:
-    """Static per-slot copies of an MLP actor (and optionally its critic)."""
+    """Static per-slot copies of an MLP actor (and optionally its critic).
+
+    With the critic, actor and critic heads of equal depth are evaluated as
+    one stacked head: the first layer concatenates both heads' outputs over
+    the shared trunk features and later layers are block-diagonal, so the
+    heads stay independent while taking half the kernels.
+    """
 
     def __init__(
         self,
@@ -99,25 +144,31 @@ class StackedPolicyWeights:
         self.slots = slots
         self.with_critic = with_critic
         self.key = architecture_key(template)
-
-        def stacked(layer: nn.Linear, in_features: int | None = None):
-            out_features = layer.weight.shape[0]
-            width = in_features or layer.weight.shape[1]
-            return (
-                torch.zeros(slots, out_features, width, device=device),
-                torch.zeros(slots, out_features, device=device),
-            )
-
         trunk = _linear_layers(template.trunk)
-        self.trunk = [stacked(trunk[0], template.state_dim)] + [
-            stacked(layer) for layer in trunk[1:]
+        actor = _linear_layers(template.actor_head)
+        critic = _linear_layers(template.critic_head)
+        self.action_dim = actor[-1].weight.shape[0]
+        self.trunk = [_stacked(slots, trunk[0].weight.shape[0], template.state_dim, device)] + [
+            _stacked(slots, *layer.weight.shape, device) for layer in trunk[1:]
         ]
-        self.actor = [stacked(layer) for layer in _linear_layers(template.actor_head)]
-        self.critic = (
-            [stacked(layer) for layer in _linear_layers(template.critic_head)]
-            if with_critic
-            else []
-        )
+        self.combined = with_critic and len(actor) == len(critic)
+        self.heads: list[tuple[torch.Tensor, torch.Tensor]] = []
+        self.actor: list[tuple[torch.Tensor, torch.Tensor]] = []
+        self.critic: list[tuple[torch.Tensor, torch.Tensor]] = []
+        if self.combined:
+            for index, (a, c) in enumerate(zip(actor, critic)):
+                width = a.weight.shape[1] + (c.weight.shape[1] if index else 0)
+                self.heads.append(
+                    _stacked(
+                        slots, a.weight.shape[0] + c.weight.shape[0], width, device
+                    )
+                )
+        else:
+            self.actor = [_stacked(slots, *layer.weight.shape, device) for layer in actor]
+            if with_critic:
+                self.critic = [
+                    _stacked(slots, *layer.weight.shape, device) for layer in critic
+                ]
 
     @torch.no_grad()
     def load(self, slot: int, model: PPOActorCritic) -> None:
@@ -131,70 +182,101 @@ class StackedPolicyWeights:
         for (weight, bias), layer in zip(self.trunk[1:], trunk[1:]):
             weight[slot].copy_(layer.weight)
             bias[slot].copy_(layer.bias)
-        for (weight, bias), layer in zip(
-            self.actor, _linear_layers(model.actor_head)
-        ):
+        actor = _linear_layers(model.actor_head)
+        critic = _linear_layers(model.critic_head)
+        if self.combined:
+            # Off-diagonal blocks are never written and stay zero.
+            for index, ((weight, bias), a, c) in enumerate(
+                zip(self.heads, actor, critic)
+            ):
+                rows = a.weight.shape[0]
+                columns = a.weight.shape[1]
+                if index == 0:
+                    weight[slot, :rows].copy_(a.weight)
+                    weight[slot, rows:].copy_(c.weight)
+                else:
+                    weight[slot, :rows, :columns].copy_(a.weight)
+                    weight[slot, rows:, columns:].copy_(c.weight)
+                bias[slot, :rows].copy_(a.bias)
+                bias[slot, rows:].copy_(c.bias)
+            return
+        for (weight, bias), layer in zip(self.actor, actor):
             weight[slot].copy_(layer.weight)
             bias[slot].copy_(layer.bias)
-        for (weight, bias), layer in zip(
-            self.critic, _linear_layers(model.critic_head)
-        ):
+        for (weight, bias), layer in zip(self.critic, critic):
             weight[slot].copy_(layer.weight)
             bias[slot].copy_(layer.bias)
 
     @staticmethod
-    def _apply(layers, x: torch.Tensor, final_relu: bool) -> torch.Tensor:
+    def _apply(layers, x: torch.Tensor, slots: int, final_relu: bool) -> torch.Tensor:
         for index, (weight, bias) in enumerate(layers):
-            x = torch.baddbmm(bias.unsqueeze(1), x, weight.transpose(1, 2))
+            x = torch.baddbmm(
+                bias[:slots].unsqueeze(1), x, weight[:slots].transpose(1, 2)
+            )
             if final_relu or index < len(layers) - 1:
                 x = x.relu_()
         return x
 
     def forward(self, observations: torch.Tensor):
-        """``observations`` ``[slots, rows, state]`` to logits and values."""
-        hidden = self._apply(self.trunk, observations, final_relu=True)
-        logits = self._apply(self.actor, hidden, final_relu=False)
+        """``observations`` ``[slots, rows, state]`` for the first ``slots``
+        slots to logits ``[slots, rows, actions]`` and values (or ``None``)."""
+        slots = observations.shape[0]
+        hidden = self._apply(self.trunk, observations, slots, final_relu=True)
+        if self.combined:
+            out = self._apply(self.heads, hidden, slots, final_relu=False)
+            return out[..., : self.action_dim], out[..., self.action_dim]
+        logits = self._apply(self.actor, hidden, slots, final_relu=False)
         values = (
-            self._apply(self.critic, hidden, final_relu=False).squeeze(-1)
+            self._apply(self.critic, hidden, slots, final_relu=False).squeeze(-1)
             if self.with_critic
             else None
         )
         return logits, values
 
 
-class GraphedPolicyBank:
-    """Graph-replayed decisions for ``slots`` stacked policies.
+class GraphedRolloutPolicy:
+    """Graph-replayed decisions for a learner and stacked opponent policies.
 
-    Callers stage each slot's rows in the pinned ``host_observations`` and
-    ``host_masks`` at slot stride ``bucket`` (slot ``s`` starts at row
-    ``s * bucket``), call :meth:`submit`, synchronize the stream, and read
-    ``host_actions``. A bank built with ``storage_rows`` also appends every
-    decision of its single slot, with its effective mask, log-probability and
-    value, to device rollout storage at a caller-supplied row offset.
+    Slot 0 holds the learner; slots ``1..opponent_slots`` hold opponents
+    (snapshots or frozen checkpoints). Each decision step replays one graph
+    that evaluates every slot with the same stacked kernels, so a step costs
+    one replay however many policies act in it. Steps without opponent rows
+    replay a learner-only graph.
+
+    Callers stage each slot's rows in the pinned ``host_observations`` (for
+    example with ``VectorEngine.materialize_current_player_observations``) and
+    their masks with :meth:`stage_masks`, at slot stride ``bucket`` (slot
+    ``s`` starts at row ``s * bucket``); call :meth:`submit`; synchronize the
+    stream; and read ``host_actions`` at the same layout.
+
+    With ``storage_rows``, every learner decision is recorded with its staged
+    observation and mask, log-probability and value in device rollout storage
+    at a caller-chosen row offset. Each replay writes a whole bucket there, so
+    the rows after a step's decisions hold padding that the next step
+    overwrites.
     """
 
     def __init__(
         self,
         template: PPOActorCritic,
-        slots: int,
+        opponent_slots: int,
         capacity: int,
         device: torch.device,
         *,
-        temperature: float,
-        with_values: bool,
+        learner_temperature: float = 1.0,
+        opponent_temperature: float = 1.0,
         storage_rows: int = 0,
     ):
         if device.type != "cuda":
             raise ValueError("graphed inference requires a CUDA/HIP device")
-        if storage_rows and slots != 1:
-            raise ValueError("rollout storage records a single slot")
         self.device = device
-        self.slots = slots
+        self.slots = 1 + opponent_slots
+        self.opponent_slots = opponent_slots
         self.capacity = capacity
-        self.temperature = validate_temperature(temperature)
-        self.with_values = with_values
+        self.learner_temperature = validate_temperature(learner_temperature)
+        self.opponent_temperature = validate_temperature(opponent_temperature)
         self.weights = StackedPolicyWeights(
-            template, slots, device, with_critic=with_values
+            template, self.slots, device, with_critic=True
         )
         self.state_dim = template.state_dim
         self.action_dim = template.action_dim
@@ -204,57 +286,70 @@ class GraphedPolicyBank:
             for name, offset, count in layout["card_groups"]
             if name == "play_card"
         )
-        self._play = slice(play[0], play[0] + play[1])
-        self._attack_player = layout["global_indices"]["attack_player"]
+        self.play_start, self.play_end = play[0], play[0] + play[1]
+        self.attack_player = layout["global_indices"]["attack_player"]
         self.buckets = batch_buckets(capacity)
 
-        rows = slots * capacity
-        self.host_observations = torch.empty(
+        # Every staged row, including rows padding a bucket, holds finite
+        # observations and at least one legal action, so selection never sees
+        # an all-masked row.
+        rows = self.slots * capacity
+        self.host_observations = torch.zeros(
             (rows, self.state_dim), dtype=torch.float32, pin_memory=True
         )
         self.host_masks = torch.zeros(
             (rows, self.action_dim), dtype=torch.bool, pin_memory=True
         )
+        self.host_masks[:, END_TURN_INDEX] = True
         self.host_actions = torch.zeros(rows, dtype=torch.int64, pin_memory=True)
         self.host_offset = torch.zeros(1, dtype=torch.int64, pin_memory=True)
-        self._observations = torch.zeros(
-            (rows, self.state_dim), device=device
-        )
+        self._observations = torch.zeros((rows, self.state_dim), device=device)
         self._masks = torch.zeros(
             (rows, self.action_dim), dtype=torch.bool, device=device
         )
+        self._masks[:, END_TURN_INDEX] = True
         self._actions = torch.zeros(rows, dtype=torch.int64, device=device)
         self._offset = torch.zeros(1, dtype=torch.int64, device=device)
         self._row_index = torch.arange(capacity, device=device)
-        self._graphs: dict[int, torch.cuda.CUDAGraph] = {}
+        self._graphs: dict[tuple[int, int], torch.cuda.CUDAGraph] = {}
         self._pool = None
         self.storage_rows = 0
         if storage_rows:
             self.allocate_storage(storage_rows)
 
     # ------------------------------------------------------------------
-    # Rollout storage
+    # Weights and rollout storage
     # ------------------------------------------------------------------
+    def load_learner(self, model: PPOActorCritic) -> None:
+        self.weights.load(0, model)
+
+    def load_opponent(self, slot: int, model: PPOActorCritic) -> None:
+        """Load an opponent policy into ``slot`` (``1..opponent_slots``)."""
+        if not 1 <= slot <= self.opponent_slots:
+            raise ValueError(f"opponent slot {slot} is out of range")
+        self.weights.load(slot, model)
+
     def allocate_storage(self, rows: int) -> None:
-        """(Re)allocate rollout storage for ``rows`` decisions.
+        """(Re)allocate rollout storage for ``rows`` decisions, keeping the
+        rows already recorded.
 
         The captured graphs write into the storage tensors, so replacing them
-        discards every graph; they are recaptured on next use. Rows already
-        recorded are kept.
+        discards every graph; they are recaptured on next use.
         """
-        rows = int(rows) + self.capacity
+        rows = int(rows)
+        allocated = rows + self.capacity
         old = (
             (self.states, self.masks, self.actions, self.log_probs, self.values)
             if self.storage_rows
             else None
         )
-        self.states = torch.empty((rows, self.state_dim), device=self.device)
+        self.states = torch.empty((allocated, self.state_dim), device=self.device)
         self.masks = torch.empty(
-            (rows, self.action_dim), dtype=torch.bool, device=self.device
+            (allocated, self.action_dim), dtype=torch.bool, device=self.device
         )
-        self.actions = torch.empty(rows, dtype=torch.int64, device=self.device)
-        self.log_probs = torch.empty(rows, device=self.device)
-        self.values = torch.empty(rows, device=self.device)
+        self.actions = torch.empty(allocated, dtype=torch.int64, device=self.device)
+        self.log_probs = torch.empty(allocated, device=self.device)
+        self.values = torch.empty(allocated, device=self.device)
         if old is not None:
             kept = min(self.storage_rows, rows)
             for new, previous in zip(
@@ -262,12 +357,12 @@ class GraphedPolicyBank:
                 old,
             ):
                 new[:kept].copy_(previous[:kept])
-        self.storage_rows = rows - self.capacity
+        self.storage_rows = rows
         self._graphs.clear()
         self._pool = None
 
     # ------------------------------------------------------------------
-    # Graph capture and replay
+    # Staging, capture and replay
     # ------------------------------------------------------------------
     def bucket(self, rows: int) -> int:
         """Smallest graph batch size holding ``rows`` rows per slot."""
@@ -278,92 +373,135 @@ class GraphedPolicyBank:
                 return size
         return self.capacity
 
-    def _select(self, logits: torch.Tensor):
-        if self.temperature == 0.0:
-            actions = logits.argmax(dim=-1)
-            return actions, torch.zeros_like(logits[..., 0])
-        scaled = logits if self.temperature == 1.0 else logits / self.temperature
-        log_probs = torch.log_softmax(scaled, dim=-1)
-        flat = log_probs.reshape(-1, log_probs.shape[-1])
-        actions = torch.multinomial(flat.exp(), 1, True).reshape(
-            log_probs.shape[:-1]
+    def stage_masks(
+        self, masks: np.ndarray, rows: np.ndarray, slot: int, bucket: int
+    ) -> None:
+        """Stage ``masks[rows]`` for ``slot`` as the policy sees them."""
+        stage_effective_masks(
+            masks,
+            rows,
+            staged_rows(self.host_masks, slot, bucket, len(rows)),
+            self.play_start,
+            self.play_end,
+            self.attack_player,
+            END_TURN_INDEX,
         )
-        chosen = log_probs.gather(-1, actions.unsqueeze(-1)).squeeze(-1)
-        return actions, chosen
 
-    def _decide(self, bucket: int) -> None:
-        rows = self.slots * bucket
+    @staticmethod
+    def _select(logits: torch.Tensor, temperature: float, out: torch.Tensor):
+        """Choose into ``out`` as ``select_actions`` does; returns the
+        log-probabilities of the distribution sampled, or ``None`` at 0.
+
+        A single categorical draw is ``argmax(p / q)`` with ``q`` standard
+        exponential noise, the algorithm ``torch.multinomial`` uses for one
+        sample, without its host-side input checks.
+        """
+        if temperature == 0.0:
+            torch.argmax(logits, dim=-1, out=out)
+            return None
+        if temperature != 1.0:
+            logits = logits / temperature
+        log_probs = torch.log_softmax(logits, dim=-1)
+        probabilities = log_probs.exp()
+        noise = torch.empty_like(probabilities).exponential_()
+        torch.argmax(probabilities.div_(noise), dim=-1, out=out)
+        return log_probs
+
+    def _decide(self, bucket: int, slots: int) -> None:
+        rows = slots * bucket
         observations = self._observations[:rows].view(
-            self.slots, bucket, self.state_dim
+            slots, bucket, self.state_dim
         )
-        masks = self._masks[:rows].view(self.slots, bucket, self.action_dim)
-        meaningful = masks[..., self._play].any(dim=-1) | masks[
-            ..., self._attack_player
-        ]
-        masks[..., END_TURN_INDEX] &= ~meaningful
+        masks = self._masks[:rows].view(slots, bucket, self.action_dim)
         logits, values = self.weights.forward(observations)
-        logits = logits.masked_fill(~masks, float("-inf"))
-        no_valid = ~masks.any(dim=-1)
-        logits[..., END_TURN_INDEX] = torch.where(
-            no_valid,
-            torch.zeros_like(logits[..., END_TURN_INDEX]),
-            logits[..., END_TURN_INDEX],
-        )
-        actions, log_probs = self._select(logits)
-        self._actions[:rows].copy_(actions.reshape(-1))
+        logits = torch.where(masks, logits, float("-inf"))
+        actions = self._actions[:rows].view(slots, bucket)
+        if slots == 1 or self.learner_temperature == self.opponent_temperature:
+            log_probs = self._select(logits, self.learner_temperature, actions)
+        else:
+            log_probs = self._select(
+                logits[:1], self.learner_temperature, actions[:1]
+            )
+            self._select(logits[1:], self.opponent_temperature, actions[1:])
         if self.storage_rows:
             index = self._offset + self._row_index[:bucket]
             self.states.index_copy_(0, index, observations[0])
             self.masks.index_copy_(0, index, masks[0])
             self.actions.index_copy_(0, index, actions[0])
-            self.log_probs.index_copy_(0, index, log_probs[0])
-            if values is not None:
-                self.values.index_copy_(0, index, values[0])
+            chosen = (
+                log_probs[0].gather(-1, actions[0].unsqueeze(-1)).squeeze(-1)
+                if log_probs is not None
+                else torch.zeros_like(values[0])
+            )
+            self.log_probs.index_copy_(0, index, chosen)
+            self.values.index_copy_(0, index, values[0])
 
-    def _graph(self, bucket: int) -> torch.cuda.CUDAGraph:
-        graph = self._graphs.get(bucket)
+    def _graph(self, bucket: int, slots: int) -> torch.cuda.CUDAGraph:
+        key = (bucket, slots)
+        graph = self._graphs.get(key)
         if graph is not None:
             return graph
         if self.storage_rows:
-            # Warm-up writes must stay inside storage: aim them at the rows
-            # past the recorded decisions, which the next replays overwrite.
+            # Warm-up writes land past the recorded rows, which later
+            # replays overwrite.
             self._offset.fill_(self.storage_rows)
         side = torch.cuda.Stream(self.device)
         side.wait_stream(torch.cuda.current_stream(self.device))
         with torch.cuda.stream(side), torch.no_grad():
             for _ in range(2):
-                self._decide(bucket)
+                self._decide(bucket, slots)
         torch.cuda.current_stream(self.device).wait_stream(side)
         graph = torch.cuda.CUDAGraph()
         if self._pool is None:
             self._pool = torch.cuda.graph_pool_handle()
         with torch.cuda.graph(graph, pool=self._pool), torch.no_grad():
-            self._decide(bucket)
-        self._graphs[bucket] = graph
+            self._decide(bucket, slots)
+        self._graphs[key] = graph
         return graph
 
-    def submit(self, bucket: int, offset: int | None = None) -> None:
-        """Copy staged rows in, replay ``bucket``'s graph, copy actions out.
+    def submit(
+        self,
+        bucket: int,
+        counts: list[int],
+        *,
+        offset: int = 0,
+    ) -> None:
+        """Copy staged rows in, replay one graph, copy every slot's actions out.
 
-        Asynchronous: the caller synchronizes the stream before reading
-        ``host_actions`` or restaging rows.
+        ``counts[s]`` is the number of rows staged for slot ``s`` (missing
+        trailing slots have none); with rollout storage the learner's rows
+        are recorded from ``offset``. Asynchronous: the caller synchronizes
+        the stream before reading ``host_actions`` or restaging rows.
         """
-        rows = self.slots * bucket
-        graph = self._graph(bucket)
+        if len(counts) > self.slots:
+            raise ValueError("more row counts than slots")
+        if max(counts, default=0) > bucket:
+            raise ValueError("a slot has more rows than the bucket")
+        if self.storage_rows and not 0 <= offset <= self.storage_rows - (
+            counts[0] if counts else 0
+        ):
+            raise ValueError("rollout storage offset out of range")
+        slots = self.slots if any(counts[1:]) else 1
+        graph = self._graph(bucket, slots)
+        for slot, count in enumerate(counts[:slots]):
+            if not count:
+                continue
+            start = slot * bucket
+            self._observations[start : start + count].copy_(
+                self.host_observations[start : start + count], non_blocking=True
+            )
+            self._masks[start : start + count].copy_(
+                self.host_masks[start : start + count], non_blocking=True
+            )
         if self.storage_rows:
-            if offset is None or offset + bucket > self.storage_rows + self.capacity:
-                raise ValueError("rollout storage offset out of range")
             self.host_offset[0] = offset
             self._offset.copy_(self.host_offset, non_blocking=True)
-        self._observations[:rows].copy_(
-            self.host_observations[:rows], non_blocking=True
-        )
-        self._masks[:rows].copy_(self.host_masks[:rows], non_blocking=True)
         graph.replay()
+        rows = slots * bucket
         self.host_actions[:rows].copy_(self._actions[:rows], non_blocking=True)
 
     @property
-    def captured_buckets(self) -> list[int]:
+    def captured_graphs(self) -> list[tuple[int, int]]:
         return sorted(self._graphs)
 
 
