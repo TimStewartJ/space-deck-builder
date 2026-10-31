@@ -11,11 +11,13 @@ import pytest
 import torch
 
 from src.config import ModelConfig
+from src.encoding.action_encoder import get_action_space_size
+from src.encoding.state_encoder import get_state_size
 from src.ppo.ppo_actor_critic import PPOActorCritic
 
 NUM_CARDS = 49
-STATE_DIM = 4 + 5 + 6 + 10 * NUM_CARDS
-ACTION_DIM = 4 + 10 * NUM_CARDS
+STATE_DIM = get_state_size([""] * NUM_CARDS)
+ACTION_DIM = get_action_space_size([""] * NUM_CARDS)
 
 
 def _model(seed: int = 0) -> PPOActorCritic:

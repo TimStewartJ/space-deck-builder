@@ -3,7 +3,12 @@ import numpy as np
 import pytest
 import torch
 
-from src.encoding.action_encoder import END_TURN_INDEX
+from src.encoding.action_encoder import (
+    END_TURN_INDEX,
+    get_action_space_layout,
+    get_action_space_size,
+)
+from src.encoding.state_encoder import get_state_size
 from src.ppo.ppo_actor_critic import PPOActorCritic
 from src.vector_engine.graphed_policy import (
     GraphedRolloutPolicy,
@@ -15,10 +20,15 @@ from src.vector_engine.graphed_policy import (
 from src.vector_engine.policy import suppress_redundant_end_turn
 
 NUM_CARDS = 49
-STATE_DIM = 4 + 5 + 6 + 10 * NUM_CARDS
-ACTION_DIM = 4 + 10 * NUM_CARDS
-PLAY = (3, 3 + NUM_CARDS)
-ATTACK_PLAYER = 3 + 2 * NUM_CARDS
+STATE_DIM = get_state_size([""] * NUM_CARDS)
+ACTION_DIM = get_action_space_size([""] * NUM_CARDS)
+_LAYOUT = get_action_space_layout(NUM_CARDS)
+PLAY = next(
+    (offset, offset + count)
+    for name, offset, count in _LAYOUT["card_groups"]
+    if name == "play_card"
+)
+ATTACK_PLAYER = _LAYOUT["global_indices"]["attack_player"]
 
 cuda = pytest.mark.skipif(
     not torch.cuda.is_available(), reason="needs a CUDA/HIP device"
