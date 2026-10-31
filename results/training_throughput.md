@@ -3,6 +3,8 @@
 **Status:** Complete (2026-10-30). Design and rejected alternatives:
 [`docs/decisions/0017-graphed-rollout-inference.md`](../docs/decisions/0017-graphed-rollout-inference.md).
 **Branch:** `perf/training-throughput`.
+**Evidence:** [`results/training_throughput/`](training_throughput/), indexed
+in its `README.md`.
 
 ## Result
 
@@ -28,6 +30,11 @@ with its ten-snapshot pool, and trained 12 updates through Task Scheduler,
 pinned to eight logical performance-core CPUs (0-7) with nothing else on
 them. Means cover updates 202-211, excluding the first update of the process.
 Platform: Windows, RX 9070, torch 2.11.0+rocm7.13.0a20260408.
+
+The branch column was measured at `cd9d034`. The final code, which keeps PPO
+minibatches eager and fixes a memory leak, measured 2.13-2.28 s per update in
+the same setup; the spread is the PPO update's variation between processes
+(see "Options measured and not taken").
 
 ## Performance
 
@@ -62,9 +69,9 @@ Measured host costs on this platform, which shaped the design:
 ## Validation: a complete reference run
 
 The reference recipe (`--preset reference-selfplay`, seed 0, 400 updates in
-25-update processes) was retrained from scratch on this branch with
-`train_reference.ps1` and production placement (logical CPUs 0-15). Run root:
-`D:\sdb-bench\validate_seed0`.
+25-update processes) was retrained from scratch on this branch at `c96a9dc`
+with `train_reference.ps1` and production placement (logical CPUs 0-15). Run
+root: `D:\sdb-bench\validate_seed0`.
 
 Per-window means of the training metrics against the published seed 0
 (`optimized_400x2000_20260817_230304\seed_0`, published seed first):

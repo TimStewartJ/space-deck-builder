@@ -1,0 +1,4 @@
+learner  448, opponents 3x  80: merged (4x448) GPU 0.392 ms host 0.391 ms | separate GPU 0.439 ms host 0.439 ms
+learner  448, opponents 3x 220: merged (4x448) GPU 0.370 ms host 0.369 ms | separate GPU 0.574 ms host 0.574 ms
+learner  224, opponents 3x  60: merged (4x224) GPU 0.345 ms host 0.345 ms | separate GPU 0.467 ms host 0.467 ms
+learner   96, opponents 3x  30: merged (4x96) GPU 0.296 ms host 0.295 ms | separate GPU 0.563 ms host 0.563 ms

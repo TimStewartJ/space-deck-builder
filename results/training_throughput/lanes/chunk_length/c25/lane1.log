@@ -1,0 +1,13 @@
+[run_queue lane1 2026-10-30 16:46:15] training 00_seed10.json
+[train_reference] bootstrap 0 -> 25; log=D:\sdb-bench\queue_c25\runs\seed10\bootstrap_0_to_25_20261030_164615.log
+[chunked_resume:reference_reference_selfplay_seed10] start=D:\sdb-bench\queue_c25\runs\seed10\bootstrap_models\ppo_agent_1030_1647_upd25_wins2802.pth current=25 target=100 chunk=25
+[chunked_resume:reference_reference_selfplay_seed10] chunk start: 25 -> 50; log=D:\sdb-bench\queue_c25\runs\seed10\chunks\upd25_to_50_20261030_164732.log
+[chunked_resume:reference_reference_selfplay_seed10] chunk complete: update 50
+[chunked_resume:reference_reference_selfplay_seed10] chunk start: 50 -> 75; log=D:\sdb-bench\queue_c25\runs\seed10\chunks\upd50_to_75_20261030_164856.log
+[chunked_resume:reference_reference_selfplay_seed10] chunk complete: update 75
+[chunked_resume:reference_reference_selfplay_seed10] chunk start: 75 -> 100; log=D:\sdb-bench\queue_c25\runs\seed10\chunks\upd75_to_100_20261030_165014.log
+[chunked_resume:reference_reference_selfplay_seed10] chunk complete: update 100
+[chunked_resume:reference_reference_selfplay_seed10] complete: D:\sdb-bench\queue_c25\runs\seed10\chunks\models\ppo_agent_1030_1651_upd100_wins14001.pth
+[train_reference] complete: D:\sdb-bench\queue_c25\runs\seed10\chunks\final_checkpoint.pth
+[run_queue lane1 2026-10-30 16:51:46] finished 00_seed10.json
+[run_queue lane1 2026-10-30 16:51:46] no pending jobs

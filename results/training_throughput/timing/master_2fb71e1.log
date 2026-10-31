@@ -1,0 +1,101 @@
+Training preset: continue-selfplay-seed0
+[14:11:53] Metrics file: logs\metrics_20261030_141153_12116.jsonl
+[14:11:53] Master seed set to 0 (random/numpy/torch).
+[14:11:53] Resuming from D:\sdb-bench\fixture_upd200\start.pth: prev_update=200, will run updates 201..212
+[14:11:54] Model has 0.28M parameters (actor: mlp, pool: sum). Action dim: 494.
+[14:11:54] Restored 10 self-play snapshot(s) from pool manifest.
+[14:11:54] Opponent pool: heuristic, random, simple + self-play (ratio: 0.5, pfsp: variance)
+[14:11:54] LR horizon overridden by --lr-horizon: T_max pinned to 399 (cosine spans updates 1..400).
+[14:11:54] Restored LR scheduler state (last_epoch=200, T_max=399).
+[14:11:54] LR schedule: cosine 3.0e-04 -> 1.0e-05 over 400 updates
+[14:11:54] Restored Python, NumPy, Torch CPU, and accelerator RNG state.
+[14:11:54] Self-play schedule horizon pinned to update 400.
+[14:11:54] --- Update 201/212 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[14:16:23] [VectorRunner] loop=268.31s mask_obs=7.14s policy=5.50s joint=0.00s store=0.13s opponent=24.26s step=231.00s concat=0.11s gae=0.29s transfer=0.07s iterations=652 calls=645 avg_batch=453 snapshot_calls=633 snapshot_avg_batch=226 snapshot_model_batches=1695 snapshot_stage=0.21s snapshot_gpu=2.06s snapshot_sync=0.06s
+[14:16:23] Rollout: 2000 episodes, 291888 steps in 269.1s (7.4 ep/s) (vec 4 threads)  win_rate=74%  avg_decisions/ep=146
+[14:16:23]   PFSP: PPO_1: wr=53% w=0.08, PPO_117: wr=53% w=0.08, PPO_149: wr=51% w=0.08, PPO_173: wr=52% w=0.08, PPO_185: wr=51% w=0.08, PPO_191: wr=52% w=0.08, PPO_195: wr=49% w=0.08, PPO_197: wr=51% w=0.08, PPO_199: wr=51% w=0.08, PPO_200: wr=50% w=0.31
+[14:16:28] PPO: actor=-0.003  critic=0.046  ent=0.72  kl=0.0024  clip=0.020  gnorm=0.286  ev=0.87  lr=1.54e-04  5.1s  samples=291888
+[14:16:28] Checkpoint saved: D:\sdb-bench\base_models/ppo_agent_1030_1416_upd201_wins-1.pth
+[14:16:28] --- Update 202/212 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[14:16:34] [VectorRunner] loop=5.57s mask_obs=0.25s policy=1.94s joint=0.00s store=0.12s opponent=2.86s step=0.13s concat=0.12s gae=0.00s transfer=0.04s iterations=706 calls=677 avg_batch=431 snapshot_calls=660 snapshot_avg_batch=215 snapshot_model_batches=1723 snapshot_stage=0.21s snapshot_gpu=2.12s snapshot_sync=0.06s
+[14:16:34] Rollout: 2000 episodes, 291457 steps in 5.9s (336.5 ep/s) (vec 4 threads)  win_rate=73%  avg_decisions/ep=146
+[14:16:34]   PFSP: PPO_1: wr=53% w=0.10, PPO_117: wr=53% w=0.10, PPO_149: wr=51% w=0.10, PPO_173: wr=52% w=0.10, PPO_185: wr=51% w=0.10, PPO_191: wr=52% w=0.10, PPO_195: wr=49% w=0.10, PPO_197: wr=50% w=0.10, PPO_199: wr=51% w=0.10, PPO_201: wr=50% w=0.10
+[14:16:37] PPO: actor=-0.002  critic=0.048  ent=0.72  kl=0.0023  clip=0.020  gnorm=0.302  ev=0.87  lr=1.53e-04  3.1s  samples=291457
+[14:16:37] Checkpoint saved: D:\sdb-bench\base_models/ppo_agent_1030_1416_upd202_wins-1.pth
+[14:16:37] --- Update 203/212 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[14:16:43] [VectorRunner] loop=5.23s mask_obs=0.24s policy=1.86s joint=0.00s store=0.12s opponent=2.62s step=0.13s concat=0.12s gae=0.00s transfer=0.07s iterations=646 calls=630 avg_batch=467 snapshot_calls=637 snapshot_avg_batch=228 snapshot_model_batches=1773 snapshot_stage=0.20s snapshot_gpu=1.94s snapshot_sync=0.05s
+[14:16:43] Rollout: 2000 episodes, 293900 steps in 5.6s (355.4 ep/s) (vec 4 threads)  win_rate=75%  avg_decisions/ep=147
+[14:16:43]   PFSP: PPO_1: wr=53% w=0.08, PPO_117: wr=53% w=0.08, PPO_149: wr=51% w=0.08, PPO_173: wr=53% w=0.08, PPO_185: wr=51% w=0.08, PPO_191: wr=53% w=0.08, PPO_197: wr=50% w=0.08, PPO_199: wr=51% w=0.08, PPO_201: wr=50% w=0.08, PPO_202: wr=50% w=0.31
+[14:16:46] PPO: actor=-0.002  critic=0.047  ent=0.72  kl=0.0022  clip=0.019  gnorm=0.285  ev=0.87  lr=1.52e-04  3.2s  samples=293900
+[14:16:46] Checkpoint saved: D:\sdb-bench\base_models/ppo_agent_1030_1416_upd203_wins-1.pth
+[14:16:46] --- Update 204/212 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[14:16:52] [VectorRunner] loop=5.38s mask_obs=0.24s policy=1.83s joint=0.00s store=0.13s opponent=2.79s step=0.13s concat=0.12s gae=0.00s transfer=0.04s iterations=604 calls=596 avg_batch=492 snapshot_calls=596 snapshot_avg_batch=251 snapshot_model_batches=1678 snapshot_stage=0.22s snapshot_gpu=2.02s snapshot_sync=0.06s
+[14:16:52] Rollout: 2000 episodes, 293149 steps in 5.8s (345.9 ep/s) (vec 4 threads)  win_rate=73%  avg_decisions/ep=147
+[14:16:52]   PFSP: PPO_1: wr=53% w=0.10, PPO_117: wr=53% w=0.10, PPO_149: wr=51% w=0.10, PPO_173: wr=53% w=0.10, PPO_185: wr=51% w=0.10, PPO_191: wr=53% w=0.10, PPO_197: wr=50% w=0.10, PPO_199: wr=51% w=0.10, PPO_201: wr=50% w=0.10, PPO_203: wr=50% w=0.10
+[14:16:55] PPO: actor=-0.002  critic=0.048  ent=0.71  kl=0.0022  clip=0.021  gnorm=0.303  ev=0.86  lr=1.51e-04  3.2s  samples=293149
+[14:16:55] Checkpoint saved: D:\sdb-bench\base_models/ppo_agent_1030_1416_upd204_wins-1.pth
+[14:16:56] --- Update 205/212 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[14:17:02] [VectorRunner] loop=6.33s mask_obs=0.30s policy=2.26s joint=0.00s store=0.13s opponent=3.22s step=0.14s concat=0.12s gae=0.00s transfer=0.06s iterations=926 calls=807 avg_batch=366 snapshot_calls=766 snapshot_avg_batch=182 snapshot_model_batches=1923 snapshot_stage=0.22s snapshot_gpu=2.43s snapshot_sync=0.07s
+[14:17:02] Rollout: 2000 episodes, 295273 steps in 6.7s (297.1 ep/s) (vec 4 threads)  win_rate=73%  avg_decisions/ep=148
+[14:17:02]   PFSP: PPO_1: wr=53% w=0.10, PPO_117: wr=53% w=0.10, PPO_149: wr=51% w=0.10, PPO_173: wr=53% w=0.10, PPO_185: wr=51% w=0.10, PPO_191: wr=50% w=0.10, PPO_199: wr=50% w=0.10, PPO_201: wr=50% w=0.10, PPO_203: wr=50% w=0.10, PPO_204: wr=50% w=0.10
+[14:17:06] PPO: actor=-0.002  critic=0.045  ent=0.73  kl=0.0023  clip=0.021  gnorm=0.299  ev=0.87  lr=1.50e-04  3.2s  samples=295273
+[14:17:06] Checkpoint saved: D:\sdb-bench\base_models/ppo_agent_1030_1417_upd205_wins-1.pth
+[14:17:06] --- Update 206/212 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[14:17:11] [VectorRunner] loop=5.18s mask_obs=0.24s policy=1.88s joint=0.00s store=0.12s opponent=2.55s step=0.12s concat=0.12s gae=0.00s transfer=0.04s iterations=682 calls=649 avg_batch=447 snapshot_calls=635 snapshot_avg_batch=216 snapshot_model_batches=1722 snapshot_stage=0.19s snapshot_gpu=1.90s snapshot_sync=0.06s
+[14:17:11] Rollout: 2000 episodes, 290078 steps in 5.6s (359.9 ep/s) (vec 4 threads)  win_rate=73%  avg_decisions/ep=145
+[14:17:11]   PFSP: PPO_1: wr=53% w=0.08, PPO_117: wr=53% w=0.08, PPO_149: wr=50% w=0.08, PPO_173: wr=51% w=0.08, PPO_185: wr=50% w=0.08, PPO_191: wr=50% w=0.08, PPO_199: wr=50% w=0.08, PPO_201: wr=50% w=0.08, PPO_203: wr=50% w=0.08, PPO_205: wr=50% w=0.31
+[14:17:14] PPO: actor=-0.002  critic=0.049  ent=0.71  kl=0.0023  clip=0.019  gnorm=0.275  ev=0.86  lr=1.49e-04  3.1s  samples=290078
+[14:17:14] Checkpoint saved: D:\sdb-bench\base_models/ppo_agent_1030_1417_upd206_wins-1.pth
+[14:17:15] --- Update 207/212 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[14:17:21] [VectorRunner] loop=6.44s mask_obs=0.30s policy=2.14s joint=0.00s store=0.13s opponent=3.44s step=0.14s concat=0.12s gae=0.00s transfer=0.04s iterations=887 calls=733 avg_batch=404 snapshot_calls=817 snapshot_avg_batch=171 snapshot_model_batches=1992 snapshot_stage=0.22s snapshot_gpu=2.61s snapshot_sync=0.07s
+[14:17:21] Rollout: 2000 episodes, 295882 steps in 6.8s (293.3 ep/s) (vec 4 threads)  win_rate=74%  avg_decisions/ep=148
+[14:17:21]   PFSP: PPO_1: wr=53% w=0.08, PPO_117: wr=53% w=0.08, PPO_149: wr=50% w=0.08, PPO_173: wr=51% w=0.08, PPO_185: wr=50% w=0.08, PPO_199: wr=50% w=0.08, PPO_201: wr=50% w=0.08, PPO_203: wr=49% w=0.08, PPO_205: wr=50% w=0.31, PPO_206: wr=51% w=0.08
+[14:17:25] PPO: actor=-0.002  critic=0.044  ent=0.73  kl=0.0025  clip=0.022  gnorm=0.294  ev=0.87  lr=1.48e-04  3.2s  samples=295882
+[14:17:25] Checkpoint saved: D:\sdb-bench\base_models/ppo_agent_1030_1417_upd207_wins-1.pth
+[14:17:25] --- Update 208/212 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[14:17:31] [VectorRunner] loop=5.58s mask_obs=0.26s policy=1.97s joint=0.00s store=0.12s opponent=2.81s step=0.13s concat=0.12s gae=0.00s transfer=0.04s iterations=756 calls=692 avg_batch=427 snapshot_calls=680 snapshot_avg_batch=210 snapshot_model_batches=1793 snapshot_stage=0.20s snapshot_gpu=2.10s snapshot_sync=0.06s
+[14:17:31] Rollout: 2000 episodes, 295220 steps in 6.0s (335.8 ep/s) (vec 4 threads)  win_rate=73%  avg_decisions/ep=148
+[14:17:31]   PFSP: PPO_1: wr=53% w=0.10, PPO_117: wr=53% w=0.10, PPO_149: wr=51% w=0.10, PPO_173: wr=51% w=0.10, PPO_185: wr=50% w=0.10, PPO_199: wr=50% w=0.10, PPO_201: wr=50% w=0.10, PPO_203: wr=49% w=0.10, PPO_205: wr=49% w=0.10, PPO_207: wr=51% w=0.10
+[14:17:34] PPO: actor=-0.003  critic=0.045  ent=0.73  kl=0.0021  clip=0.020  gnorm=0.303  ev=0.87  lr=1.46e-04  3.2s  samples=295220
+[14:17:34] Checkpoint saved: D:\sdb-bench\base_models/ppo_agent_1030_1417_upd208_wins-1.pth
+[14:17:34] --- Update 209/212 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[14:17:40] [VectorRunner] loop=5.47s mask_obs=0.25s policy=1.86s joint=0.00s store=0.12s opponent=2.85s step=0.13s concat=0.12s gae=0.00s transfer=0.07s iterations=664 calls=638 avg_batch=465 snapshot_calls=644 snapshot_avg_batch=228 snapshot_model_batches=1752 snapshot_stage=0.21s snapshot_gpu=2.11s snapshot_sync=0.06s
+[14:17:40] Rollout: 2000 episodes, 296789 steps in 5.9s (338.8 ep/s) (vec 4 threads)  win_rate=73%  avg_decisions/ep=148
+[14:17:40]   PFSP: PPO_1: wr=53% w=0.10, PPO_117: wr=53% w=0.10, PPO_149: wr=52% w=0.10, PPO_173: wr=51% w=0.10, PPO_185: wr=50% w=0.10, PPO_199: wr=50% w=0.10, PPO_203: wr=49% w=0.10, PPO_205: wr=49% w=0.10, PPO_207: wr=51% w=0.10, PPO_208: wr=50% w=0.10
+[14:17:43] PPO: actor=-0.003  critic=0.046  ent=0.72  kl=0.0024  clip=0.020  gnorm=0.297  ev=0.87  lr=1.45e-04  3.2s  samples=296789
+[14:17:43] Checkpoint saved: D:\sdb-bench\base_models/ppo_agent_1030_1417_upd209_wins-1.pth
+[14:17:43] --- Update 210/212 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[14:17:52] [VectorRunner] loop=7.77s mask_obs=0.37s policy=2.72s joint=0.00s store=0.13s opponent=4.08s step=0.16s concat=0.12s gae=0.00s transfer=0.04s iterations=1208 calls=977 avg_batch=302 snapshot_calls=1004 snapshot_avg_batch=144 snapshot_model_batches=2143 snapshot_stage=0.24s snapshot_gpu=3.18s snapshot_sync=0.10s
+[14:17:52] Rollout: 2000 episodes, 294887 steps in 8.2s (245.0 ep/s) (vec 4 threads)  win_rate=74%  avg_decisions/ep=147
+[14:17:52]   PFSP: PPO_1: wr=53% w=0.10, PPO_117: wr=53% w=0.10, PPO_149: wr=52% w=0.10, PPO_173: wr=51% w=0.10, PPO_185: wr=50% w=0.10, PPO_199: wr=51% w=0.10, PPO_203: wr=49% w=0.10, PPO_205: wr=49% w=0.10, PPO_207: wr=52% w=0.10, PPO_209: wr=50% w=0.10
+[14:17:55] PPO: actor=-0.002  critic=0.047  ent=0.72  kl=0.0021  clip=0.019  gnorm=0.287  ev=0.87  lr=1.44e-04  3.1s  samples=294887
+[14:17:55] Checkpoint saved: D:\sdb-bench\base_models/ppo_agent_1030_1417_upd210_wins-1.pth
+[14:17:55] --- Update 211/212 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[14:18:01] [VectorRunner] loop=5.74s mask_obs=0.25s policy=2.00s joint=0.00s store=0.12s opponent=2.96s step=0.13s concat=0.12s gae=0.00s transfer=0.04s iterations=689 calls=688 avg_batch=431 snapshot_calls=681 snapshot_avg_batch=210 snapshot_model_batches=1779 snapshot_stage=0.21s snapshot_gpu=2.21s snapshot_sync=0.06s
+[14:18:01] Rollout: 2000 episodes, 296524 steps in 6.1s (325.9 ep/s) (vec 4 threads)  win_rate=74%  avg_decisions/ep=148
+[14:18:01]   PFSP: PPO_1: wr=53% w=0.10, PPO_117: wr=51% w=0.10, PPO_149: wr=52% w=0.10, PPO_173: wr=51% w=0.10, PPO_185: wr=50% w=0.10, PPO_199: wr=50% w=0.10, PPO_205: wr=49% w=0.10, PPO_207: wr=52% w=0.10, PPO_209: wr=50% w=0.10, PPO_210: wr=51% w=0.10
+[14:18:04] PPO: actor=-0.003  critic=0.046  ent=0.73  kl=0.0025  clip=0.021  gnorm=0.312  ev=0.87  lr=1.43e-04  3.3s  samples=296524
+[14:18:04] Checkpoint saved: D:\sdb-bench\base_models/ppo_agent_1030_1418_upd211_wins-1.pth
+[14:18:04] --- Update 212/212 (opponents: heuristic, random, simple + snapshots, sp_ratio: 0.50) ---
+[14:18:11] [VectorRunner] loop=6.19s mask_obs=0.29s policy=2.25s joint=0.00s store=0.13s opponent=3.12s step=0.14s concat=0.12s gae=0.00s transfer=0.07s iterations=857 calls=817 avg_batch=365 snapshot_calls=803 snapshot_avg_batch=182 snapshot_model_batches=2045 snapshot_stage=0.21s snapshot_gpu=2.37s snapshot_sync=0.07s
+[14:18:11] Rollout: 2000 episodes, 298466 steps in 6.6s (302.9 ep/s) (vec 4 threads)  win_rate=73%  avg_decisions/ep=149
+[14:18:11]   PFSP: PPO_1: wr=53% w=0.08, PPO_117: wr=52% w=0.08, PPO_149: wr=52% w=0.08, PPO_173: wr=51% w=0.08, PPO_185: wr=51% w=0.08, PPO_199: wr=50% w=0.08, PPO_205: wr=49% w=0.08, PPO_207: wr=52% w=0.08, PPO_209: wr=50% w=0.08, PPO_211: wr=50% w=0.31
+[14:18:14] PPO: actor=-0.002  critic=0.048  ent=0.74  kl=0.0022  clip=0.020  gnorm=0.276  ev=0.86  lr=1.42e-04  3.2s  samples=298466
+[14:18:14] Evaluating (update 212) — 600 games × 3 opponent types
+[14:18:18] [InferenceServer] batches=613 avg_bs=49.7 max_bs=150 compute=0.90s wall=3.96s
+[14:18:18] [InferenceServer] phases: idle=1.7s drain=0.0s stage=0.0s h2d=0.5s kernel=0.9s sync=0.0s dispatch=0.0s alloc=0.0s | accounted=82% reqs=1085 stage=77MB@7099MB/s
+[14:18:18]   vs heuristic: 175/200 wins (88%), avg 152 steps/game (first=100, second=100)
+[14:18:22] [InferenceServer] batches=540 avg_bs=55.3 max_bs=150 compute=0.81s wall=3.61s
+[14:18:22] [InferenceServer] phases: idle=1.7s drain=0.0s stage=0.0s h2d=0.5s kernel=0.8s sync=0.0s dispatch=0.0s alloc=0.0s | accounted=84% reqs=1005 stage=75MB@7996MB/s
+[14:18:22]   vs random: 200/200 wins (100%), avg 149 steps/game (first=100, second=100)
+[14:18:26] [InferenceServer] batches=507 avg_bs=58.3 max_bs=150 compute=0.67s wall=3.49s
+[14:18:26] [InferenceServer] phases: idle=1.7s drain=0.0s stage=0.0s h2d=0.5s kernel=0.7s sync=0.0s dispatch=0.0s alloc=0.0s | accounted=83% reqs=907 stage=74MB@8632MB/s
+[14:18:26]   vs simple: 193/200 wins (96%), avg 148 steps/game (first=100, second=100)
+[14:18:26]   Overall: 568/600 wins (95%) in 11.5s
+[14:18:26] Checkpoint saved: D:\sdb-bench\base_models/ppo_agent_1030_1418_upd212_wins568.pth
+[14:18:26] Episodes:    338.4s total, 28.2s avg/update
+[14:18:26] PPO updates: 40.1s total, 3.3s avg/update
+[14:18:26] Evaluation:  11.5s total, 1.0s avg/update
+[14:18:26] Avg PPO decision time: 0.000000s/decision
+[14:18:26] Total wall time: 392.3s
+[14:18:26] Training complete.

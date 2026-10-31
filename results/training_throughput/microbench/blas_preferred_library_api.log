@@ -1,0 +1,19 @@
+[W1030 16:40:27.000000000 Context.cpp:528] Warning: torch.backends.cuda.preferred_blas_library is an experimental feature. It is not supported on Windows. (function operator())
+blas=_BlasBackend.Cublaslt env=None tf32=False
+update seconds: 5.861 0.697 0.695 0.689 0.684 | warm mean 0.689
+learn step per 8192-row minibatch: 1.12 ms
+  trunk.0: 8192x335->256 0.284 ms (4.9 TFLOP/s)
+  trunk.2: 8192x256->256 0.109 ms (9.9 TFLOP/s)
+  actor_head.0: 8192x256->128 0.123 ms (4.4 TFLOP/s)
+  actor_head.2: 8192x128->494 0.150 ms (6.9 TFLOP/s)
+  critic_head.0: 8192x256->128 0.108 ms (5.0 TFLOP/s)
+  critic_head.2: 8192x128->1 0.047 ms (0.0 TFLOP/s)
+blas=_BlasBackend.Cublaslt env=None tf32=False
+update seconds: 5.849 0.744 0.744 0.736 0.736 | warm mean 0.739
+learn step per 8192-row minibatch: 1.21 ms
+  trunk.0: 8192x335->256 0.191 ms (7.4 TFLOP/s)
+  trunk.2: 8192x256->256 0.151 ms (7.1 TFLOP/s)
+  actor_head.0: 8192x256->128 0.123 ms (4.4 TFLOP/s)
+  actor_head.2: 8192x128->494 0.182 ms (5.7 TFLOP/s)
+  critic_head.0: 8192x256->128 0.149 ms (3.6 TFLOP/s)
+  critic_head.2: 8192x128->1 0.092 ms (0.0 TFLOP/s)
