@@ -27,6 +27,14 @@ These three are baked into `--opponents` defaults across the `eval`,
 reference points. They are intentionally weak-to-medium opponents; the
 goal is **comparable progression across variants**, not absolute strength.
 
+`python -m src eval` plays them on the object engine. A vector-engine
+training run that replays its policy from graphs (on a CUDA device, with
+graph inference on and the sum-pooled MLP architecture) plays its
+in-training evaluations, including the final gauntlet, on the vector engine
+against the batch replicas of decision 0006, which use the same scoring and
+preserve Random's action distribution (decision 0017); other training runs
+evaluate on the object engine. Both follow the seat protocol of §3.
+
 ## 2. Sample size
 
 - **5000 games per opponent**, per evaluated checkpoint.
@@ -231,3 +239,12 @@ a version bump.
     metrics.
   - The new metrics are measured for the published checkpoints in
     [`results/strength_yardstick.md`](../results/strength_yardstick.md).
+- `v0.2.1` — clarification only; **no result is invalidated**.
+  - §1 names the engine that plays the gauntlet: `eval` uses the object
+    engine, and vector-engine training runs that replay their policy from
+    graphs evaluate on the vector engine against the fixed opponents' batch
+    replicas (decision 0006). Opponents, sample sizes and the seat protocol
+    are unchanged. The first run
+    evaluated this way agreed with the published self-play run's win rates
+    against Heuristic within 1.5 points in every window of updates 26-400
+    ([`results/training_throughput.md`](../results/training_throughput.md)).

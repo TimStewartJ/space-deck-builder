@@ -93,6 +93,13 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                    help="Evaluate every N updates (always on last)")
     p.add_argument("--eval-games",  type=int,   default=_run.eval_games)
     p.add_argument(
+        "--final-eval-games",
+        type=int,
+        default=_run.final_eval_games,
+        help="Games for the evaluation of this process's last update "
+             "(default: --eval-games)",
+    )
+    p.add_argument(
         "--eval-num-workers",
         type=int,
         default=_run.eval_num_workers,
@@ -132,6 +139,15 @@ def _build_train_parser(sub: argparse._SubParsersAction):
         help=(
             "Maximum snapshot models active in one vector rollout "
             f"(default: {_run.vec_max_active_snapshots}; 0=unlimited)"
+        ),
+    )
+    p.add_argument(
+        "--vec-graph-inference",
+        action=argparse.BooleanOptionalAction,
+        default=_run.vec_graph_inference,
+        help=(
+            "Evaluate vector-rollout policies by CUDA/HIP graph replay "
+            f"(default: {_run.vec_graph_inference})"
         ),
     )
     p.add_argument("--num-concurrent", type=int, default=None,
@@ -733,8 +749,10 @@ def _run_train(args):
         engine=args.engine,
         vec_threads=args.vec_threads,
         vec_max_active_snapshots=args.vec_max_active_snapshots,
+        vec_graph_inference=args.vec_graph_inference,
         episodes=args.episodes, updates=args.updates,
         eval_every=args.eval_every, eval_games=args.eval_games,
+        final_eval_games=args.final_eval_games,
         eval_num_workers=args.eval_num_workers,
         self_play=args.self_play,
         opponents=args.opponents,

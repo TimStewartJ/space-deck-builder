@@ -26,6 +26,10 @@ param(
     [string[]] $ExtraArgs = @(),
     [int] $InterimEvalGames = 6,
     [int] $InterimNumWorkers = 1,
+    # When positive, every chunk evaluates InterimEvalGames games and only the
+    # target update plays FinalEvalGames. Zero leaves the final chunk's
+    # evaluation size to ExtraArgs.
+    [int] $FinalEvalGames = 0,
     [string] $LogsDir = "",
     [string] $WorkingDir = "",
     [string] $Python = "",
@@ -88,7 +92,8 @@ foreach (
         "--updates",
         "--lr-horizon",
         "--self-play-horizon",
-        "--models-dir"
+        "--models-dir",
+        "--final-eval-games"
     )
 ) {
     $hasEqualsForm = @(
@@ -276,6 +281,13 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     } else {
         1
     }
+    $manifestFinalEvalGames = if (
+        $manifest.PSObject.Properties["final_eval_games"]
+    ) {
+        [int]$manifest.final_eval_games
+    } else {
+        0
+    }
     $manifestStart = [System.IO.Path]::GetFullPath(
         [string]$manifest.start_checkpoint
     )
@@ -298,6 +310,9 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
     }
     if ($manifestInterimWorkers -ne $InterimNumWorkers) {
         $mismatches += "interim_num_workers"
+    }
+    if ($manifestFinalEvalGames -ne $FinalEvalGames) {
+        $mismatches += "final_eval_games"
     }
     if ($manifestLrHorizon -ne $LrHorizon) {
         $mismatches += "lr_horizon"
@@ -349,6 +364,7 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
         $manifest `
         "interim_num_workers" `
         $manifestInterimWorkers
+    Set-ManifestProperty $manifest "final_eval_games" $manifestFinalEvalGames
     Set-ManifestProperty `
         $manifest `
         "self_play_horizon" `
@@ -431,6 +447,7 @@ if (Test-Path -LiteralPath $manifestPath -PathType Leaf) {
         chunk_size = $ChunkSize
         interim_eval_games = $InterimEvalGames
         interim_num_workers = $InterimNumWorkers
+        final_eval_games = $FinalEvalGames
         lr_horizon = $LrHorizon
         self_play_horizon = $SelfPlayHorizon
         process_priority = $placement.Priority
@@ -486,6 +503,13 @@ while ($currentUpdate -lt $TargetUpdate) {
         $arguments += @(
             "--eval-games", [string]$InterimEvalGames,
             "--eval-num-workers", [string]$InterimNumWorkers
+        )
+    } elseif ($FinalEvalGames -gt 0) {
+        # A final chunk longer than the evaluation cadence also evaluates
+        # before its last update; those evaluations keep the interim size.
+        $arguments += @(
+            "--eval-games", [string]$InterimEvalGames,
+            "--final-eval-games", [string]$FinalEvalGames
         )
     }
 

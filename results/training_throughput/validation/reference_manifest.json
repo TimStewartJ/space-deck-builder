@@ -1,0 +1,36 @@
+﻿{
+    "schema_version":  1,
+    "state":  "complete",
+    "invocation":  {
+                       "preset":  "reference-selfplay",
+                       "seed":  0,
+                       "target_update":  400,
+                       "chunk_size":  25,
+                       "interim_eval_games":  3200,
+                       "final_eval_games":  15000,
+                       "eval_num_workers":  16,
+                       "common_args":  [
+                                           "--preset",
+                                           "reference-selfplay",
+                                           "--seed",
+                                           "0"
+                                       ]
+                   },
+    "repository":  "D:\\sdb-perf-run",
+    "python":  "E:\\space-deck-builder\\.venv\\Scripts\\python.exe",
+    "started_at":  "2026-10-30T15:05:00.0245277-07:00",
+    "finished_at":  "2026-10-30T15:24:21.2074039-07:00",
+    "failure":  null,
+    "bootstrap":  {
+                      "state":  "complete",
+                      "target_update":  25,
+                      "log":  "D:\\sdb-bench\\validate_seed0\\bootstrap_0_to_25_20261030_150500.log",
+                      "error_log":  "D:\\sdb-bench\\validate_seed0\\bootstrap_0_to_25_20261030_150500.log.err",
+                      "checkpoint":  "D:\\sdb-bench\\validate_seed0\\bootstrap_models\\ppo_agent_1030_1507_upd25_wins2885.pth",
+                      "exit_code":  0,
+                      "started_at":  "2026-10-30T15:05:00.0400368-07:00",
+                      "finished_at":  "2026-10-30T15:07:15.2853282-07:00"
+                  },
+    "chunks_manifest":  "D:\\sdb-bench\\validate_seed0\\chunks\\manifest.json",
+    "final_checkpoint":  "D:\\sdb-bench\\validate_seed0\\chunks\\final_checkpoint.pth"
+}

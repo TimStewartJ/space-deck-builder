@@ -1,0 +1,6 @@
+spin 800000000 cycles = 266.8 ms
+learner  896, opponents 3x 160: merged 4x896 GPU 18.175 ms (host 19.506) | separate GPU 19.817 ms (host 21.150) | learner alone GPU 16.420 ms | queued in time: False
+learner  448, opponents 3x  80: merged 4x448 GPU 1.718 ms (host 3.051) | separate GPU 17.821 ms (host 19.154) | learner alone GPU 15.280 ms | queued in time: False
+learner  448, opponents 3x 220: merged 4x448 GPU 5.432 ms (host 6.764) | separate GPU 3.148 ms (host 4.480) | learner alone GPU 5.154 ms | queued in time: False
+learner  224, opponents 3x  60: merged 4x224 GPU 1.981 ms (host 3.314) | separate GPU 10.841 ms (host 12.174) | learner alone GPU 5.255 ms | queued in time: False
+learner   96, opponents 3x  30: merged 4x96 GPU 1.871 ms (host 3.203) | separate GPU 1.976 ms (host 3.309) | learner alone GPU 0.041 ms | queued in time: False

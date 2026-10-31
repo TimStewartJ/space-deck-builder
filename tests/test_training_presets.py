@@ -108,10 +108,19 @@ def test_reference_preset_matches_published_baseline_manifest():
     assert defaults["pfsp"] == config["pfsp"]
     assert defaults["vec_max_active_snapshots"] == config["active_snapshot_cap"]
     assert defaults["num_workers"] == config["num_workers"]
-    assert preset.chunk_size == config["chunk_size"]
+    assert defaults["eval_every"] == config["interim_eval_cadence"]
     assert preset.interim_eval_games == config["interim_eval_games"]
     assert preset.final_eval_games == config["final_eval_games"]
     assert (REPO / preset.results).is_file()
+
+
+def test_preset_chunks_end_on_their_evaluation_cadence():
+    # Every training process evaluates its last update, so chunk ends that
+    # fall on the evaluation cadence keep the published evaluation schedule.
+    # Process length is otherwise not part of a recipe: every chunk hands
+    # over the optimizer, scheduler, snapshot pool and RNG streams.
+    for preset in TRAINING_PRESETS.values():
+        assert preset.chunk_size % preset.train_defaults["eval_every"] == 0, preset.name
 
 
 def test_every_preset_points_at_an_existing_record():

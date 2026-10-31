@@ -6,6 +6,7 @@ import torch.optim.lr_scheduler as lr_sched
 import time
 import copy
 import gc
+import random
 
 from src.config import (
     DataConfig, PPOConfig, RunConfig, DeviceConfig, ModelConfig,
@@ -59,8 +60,14 @@ def _compute_self_play_progress(
 
 
 def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cfg,
-                 make_opponent, registry, pool=None, *, current_self_play_ratio=None):
-    """Create the appropriate batch runner based on num_workers config."""
+                 make_opponent, registry, pool=None, *, current_self_play_ratio=None,
+                 previous=None):
+    """Create the appropriate batch runner based on num_workers config.
+
+    For the vector engine, ``previous`` (the runner of the last update) is
+    reconfigured with this update's opponents and returned, keeping its
+    compiled rules and captured inference graphs.
+    """
     sim_device = agent.simulation_device
     num_concurrent = run_cfg.num_concurrent or run_cfg.episodes // max(1, run_cfg.num_workers)
     num_concurrent = min(run_cfg.episodes, num_concurrent)
@@ -76,7 +83,19 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
             pfsp_weights = pool._pfsp_weights(
                 [name for name, _, _ in snapshot_state_dicts]
             )
+        self_play_ratio = (
+            current_self_play_ratio
+            if current_self_play_ratio is not None
+            else run_cfg.self_play_ratio
+        )
         from src.ppo.vector_batch_runner import VectorBatchRunner
+        if isinstance(previous, VectorBatchRunner) and previous.model is agent.model:
+            previous.reconfigure(
+                snapshot_state_dicts=snapshot_state_dicts,
+                self_play_ratio=self_play_ratio,
+                pfsp_weights=pfsp_weights,
+            )
+            return previous
         return VectorBatchRunner(
             model=agent.model,
             cards=cards,
@@ -87,14 +106,11 @@ def _make_runner(agent, cards, card_names, action_dim, ppo_cfg, run_cfg, data_cf
             num_threads=run_cfg.vec_threads,
             num_concurrent=run_cfg.num_concurrent,
             snapshot_state_dicts=snapshot_state_dicts,
-            self_play_ratio=(
-                current_self_play_ratio
-                if current_self_play_ratio is not None
-                else run_cfg.self_play_ratio
-            ),
+            self_play_ratio=self_play_ratio,
             pfsp_weights=pfsp_weights,
             max_active_snapshots=run_cfg.vec_max_active_snapshots,
             snapshot_temperature=run_cfg.frozen_opponent_temperature,
+            graph_inference=run_cfg.vec_graph_inference,
         )
 
     if run_cfg.num_workers > 1:
@@ -377,6 +393,7 @@ def train(
             "Self-play schedule horizon pinned to update "
             f"{self_play_horizon}."
         )
+    runner = None
     for upd in range(start_update, end_update + 1):
         # Compute the self-play ratio for this update based on the schedule.
         # Progress is measured against the full horizon (including resumed
@@ -415,6 +432,7 @@ def train(
             agent, cards, card_names, action_dim,
             ppo_cfg, run_cfg, data_cfg, make_opponent, registry, pool=pool,
             current_self_play_ratio=current_sp_ratio,
+            previous=runner,
         )
         states, actions, old_lp, returns, advs, masks = runner.run_episodes(run_cfg.episodes)
         duration_episodes = time.time() - start_time
@@ -510,11 +528,18 @@ def train(
         eval_result = None
         if upd % run_cfg.eval_every == 0 or is_last_update:
             start_time = time.time()
+            eval_games = (
+                run_cfg.final_eval_games
+                if is_last_update and run_cfg.final_eval_games is not None
+                else run_cfg.eval_games
+            )
             with preserve_rng_state():
                 wins, eval_result = _run_per_opponent_eval(
                     agent, pool, card_names, cards, run_cfg, ppo_cfg, upd,
                     registry=registry, data_cfg=data_cfg,
                     log_fn=logger.info,
+                    runner=runner,
+                    eval_games=eval_games,
                 )
             agent.clear_buffers()
             duration_eval = time.time() - start_time
@@ -595,7 +620,10 @@ def train(
         # emptying the CUDA caching allocator between updates reclaims
         # references to the just-torn-down server/workers and reduces the
         # chance of allocator fragmentation accumulating across updates.
-        del runner
+        # The vector runner is kept: it is reconfigured for the next update
+        # so its compiled rules and captured graphs are reused.
+        if run_cfg.engine != "vec":
+            runner = None
         gc.collect()
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -637,16 +665,38 @@ def _run_per_opponent_eval(
     registry=None,
     data_cfg: DataConfig | None = None,
     log_fn=None,
+    runner=None,
+    eval_games: int | None = None,
 ) -> tuple[int, 'EvalResult']:
     """Run evaluation against each opponent type separately, log per-type results.
 
-    Delegates to :func:`src.ppo.ppo_eval.evaluate` for the actual game execution.
+    ``eval_games`` defaults to ``run_cfg.eval_games``. With a vector
+    ``runner`` that can replay its policy from graphs, the games are played
+    on the vector engine
+    (:func:`src.ppo.ppo_eval.evaluate_with_vector_runner`); otherwise
+    :func:`src.ppo.ppo_eval.evaluate` plays them on the object engine. The
+    vector population's seed comes from Python's ``random``, which the
+    caller restores afterwards.
 
     Returns a tuple of (total_wins, EvalResult).
     """
-    from src.ppo.ppo_eval import evaluate
+    from src.ppo.ppo_eval import evaluate, evaluate_with_vector_runner
 
+    if eval_games is None:
+        eval_games = run_cfg.eval_games
     opponents_spec = ",".join(pool.opponent_types)
+    can_evaluate = getattr(runner, "can_evaluate", None)
+    if can_evaluate is not None and can_evaluate():
+        result = evaluate_with_vector_runner(
+            runner,
+            opponents=opponents_spec,
+            eval_games=eval_games,
+            seed=random.randint(0, 2**31 - 1),
+            label=f"update {upd}",
+            min_games_per_opponent=1,
+            log_fn=log_fn,
+        )
+        return result.total_wins, result
     eval_workers = (
         run_cfg.eval_num_workers
         if run_cfg.eval_num_workers is not None
@@ -657,7 +707,7 @@ def _run_per_opponent_eval(
         data_cfg=data_cfg or DataConfig(),
         device=str(agent.simulation_device),
         opponents=opponents_spec,
-        eval_games=run_cfg.eval_games,
+        eval_games=eval_games,
         num_concurrent=run_cfg.num_concurrent,
         num_workers=eval_workers if data_cfg is not None else 1,
         ppo_config=ppo_cfg,

@@ -343,6 +343,69 @@ class PPOActorCritic(nn.Module):
         # Value head (unchanged regardless of actor type)
         self.critic_head = _build_head(trunk_out_dim, cfg.critic_head_sizes, 1)
 
+        # Without static token features, sum pooling and the first trunk
+        # layer are linear in the observation, so they fold into one matrix
+        # over the raw state vector (see ``folded_input_weight``). The buffer
+        # maps each observation column to its column in
+        # ``[per-zone presence (zone-major) | numerics]``, the order of the
+        # first trunk layer's folded inputs; it is derived from
+        # ``unpack_state_tokens`` so it cannot drift from the encoder layout.
+        self._foldable = not self.token_features and self.zone_pool is None
+        if self._foldable:
+            columns = torch.arange(state_dim, dtype=torch.float64).unsqueeze(0)
+            presence, numerics, _ = unpack_state_tokens(
+                columns, num_cards, action_dim
+            )
+            folded_to_obs = torch.cat(
+                [presence.reshape(-1), numerics.reshape(-1)]
+            ).long()
+            if not torch.equal(
+                folded_to_obs.sort().values, torch.arange(state_dim)
+            ):
+                raise ValueError(
+                    "state layout does not use every observation column "
+                    "exactly once"
+                )
+            self.register_buffer(
+                "_obs_to_folded_column",
+                torch.argsort(folded_to_obs),
+                persistent=False,
+            )
+
+    def folded_input_weight(self) -> torch.Tensor:
+        """First trunk layer's weight over the raw observation vector.
+
+        Sum pooling computes ``pooled[z] = sum_c presence[z, c] *
+        (card_emb[c] + zone_emb[z])``, and the first trunk layer is affine in
+        ``[pooled | numerics]``, so ``trunk[0](cat(pooled, numerics))`` equals
+        ``x @ folded_input_weight().T + trunk[0].bias`` for the flat
+        observation ``x``. Gradients flow through this product to the
+        embeddings and the trunk weight, so training and inference both use it
+        instead of materializing the ``[B, zones, cards, emb_dim]`` token cube.
+        """
+        if not self._foldable:
+            raise RuntimeError(
+                "only the sum-pooled model without token features folds"
+            )
+        first = self.trunk[0]
+        hidden = first.weight.shape[0]
+        zones = NUM_ZONES
+        emb_dim = self.card_emb.embedding_dim
+        zone_weight = first.weight[:, : zones * emb_dim].reshape(
+            hidden, zones, emb_dim
+        )
+        tokens = (
+            self.card_emb.weight.unsqueeze(0)
+            + self.zone_emb.weight.unsqueeze(1)
+        )  # [Z, C, E]
+        per_card = torch.einsum(
+            "hze,zce->hzc", zone_weight, tokens
+        ).reshape(hidden, zones * self.num_cards)
+        folded = torch.cat(
+            [per_card, first.weight[:, zones * emb_dim:]], dim=1
+        )
+        return folded.index_select(1, self._obs_to_folded_column)
+
     def _token_features_sum_pool(
         self,
         presence: torch.Tensor,     # [B, Z, C]
@@ -439,6 +502,20 @@ class PPOActorCritic(nn.Module):
         self, x: torch.Tensor
     ) -> tuple[torch.Tensor, bool]:
         """Encode observations through the shared representation trunk."""
+        if self._foldable:
+            single = x.dim() == 1
+            if single:
+                x = x.unsqueeze(0)
+            if x.shape[-1] != self.state_dim:
+                raise ValueError(
+                    f"expected {self.state_dim} observation features, "
+                    f"got {x.shape[-1]}"
+                )
+            h = nn.functional.linear(
+                x, self.folded_input_weight(), self.trunk[0].bias
+            )
+            return self.trunk[1:](h), single
+
         presence, numeric, single = unpack_state_tokens(
             x, self.num_cards, self.action_dim,
         )

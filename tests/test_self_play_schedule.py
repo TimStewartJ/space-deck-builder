@@ -119,6 +119,10 @@ class TestRunConfigValidation:
         with pytest.raises(ValueError, match="eval_num_workers"):
             RunConfig(eval_num_workers=0)
 
+    def test_non_positive_final_eval_games_rejected(self):
+        with pytest.raises(ValueError, match="final_eval_games"):
+            RunConfig(final_eval_games=0)
+
     def test_ratio_start_below_zero_rejected(self):
         with pytest.raises(ValueError, match="self_play_ratio_start"):
             RunConfig(self_play_ratio_start=-0.1)

@@ -1,0 +1,54 @@
+blas=_BlasBackend.Cublaslt env=None tf32=False
+update seconds: 6.068 0.834 0.821 0.815 0.813 | warm mean 0.816
+learn step per 8192-row minibatch: 1.33 ms
+  trunk.0: 8192x335->256 0.150 ms (9.4 TFLOP/s)
+  trunk.2: 8192x256->256 0.141 ms (7.6 TFLOP/s)
+  actor_head.0: 8192x256->128 0.125 ms (4.3 TFLOP/s)
+  actor_head.2: 8192x128->494 0.166 ms (6.3 TFLOP/s)
+  critic_head.0: 8192x256->128 0.113 ms (4.8 TFLOP/s)
+  critic_head.2: 8192x128->1 0.098 ms (0.0 TFLOP/s)
+blas=_BlasBackend.Cublas env=0 tf32=False
+update seconds: 5.970 0.714 0.712 0.707 0.700 | warm mean 0.706
+learn step per 8192-row minibatch: 1.10 ms
+  trunk.0: 8192x335->256 0.188 ms (7.5 TFLOP/s)
+  trunk.2: 8192x256->256 0.136 ms (7.9 TFLOP/s)
+  actor_head.0: 8192x256->128 0.116 ms (4.6 TFLOP/s)
+  actor_head.2: 8192x128->494 0.218 ms (4.8 TFLOP/s)
+  critic_head.0: 8192x256->128 0.139 ms (3.9 TFLOP/s)
+  critic_head.2: 8192x128->1 0.106 ms (0.0 TFLOP/s)
+blas=_BlasBackend.Cublaslt env=None tf32=False
+update seconds: 5.815 0.716 0.715 0.709 0.704 | warm mean 0.709
+learn step per 8192-row minibatch: 1.08 ms
+  trunk.0: 8192x335->256 0.205 ms (6.8 TFLOP/s)
+  trunk.2: 8192x256->256 0.172 ms (6.2 TFLOP/s)
+  actor_head.0: 8192x256->128 0.136 ms (3.9 TFLOP/s)
+  actor_head.2: 8192x128->494 0.197 ms (5.2 TFLOP/s)
+  critic_head.0: 8192x256->128 0.140 ms (3.8 TFLOP/s)
+  critic_head.2: 8192x128->1 0.108 ms (0.0 TFLOP/s)
+blas=_BlasBackend.Cublas env=0 tf32=False
+update seconds: 5.826 0.704 0.704 0.707 0.701 | warm mean 0.704
+learn step per 8192-row minibatch: 1.02 ms
+  trunk.0: 8192x335->256 0.233 ms (6.0 TFLOP/s)
+  trunk.2: 8192x256->256 0.151 ms (7.1 TFLOP/s)
+  actor_head.0: 8192x256->128 0.131 ms (4.1 TFLOP/s)
+  actor_head.2: 8192x128->494 0.190 ms (5.5 TFLOP/s)
+  critic_head.0: 8192x256->128 0.145 ms (3.7 TFLOP/s)
+  critic_head.2: 8192x128->1 0.091 ms (0.0 TFLOP/s)
+blas=_BlasBackend.Cublaslt env=None tf32=False
+update seconds: 5.931 0.818 0.813 0.817 0.815 | warm mean 0.815
+learn step per 8192-row minibatch: 1.27 ms
+  trunk.0: 8192x335->256 0.177 ms (7.9 TFLOP/s)
+  trunk.2: 8192x256->256 0.122 ms (8.8 TFLOP/s)
+  actor_head.0: 8192x256->128 0.158 ms (3.4 TFLOP/s)
+  actor_head.2: 8192x128->494 0.162 ms (6.4 TFLOP/s)
+  critic_head.0: 8192x256->128 0.110 ms (4.9 TFLOP/s)
+  critic_head.2: 8192x128->1 0.054 ms (0.0 TFLOP/s)
+blas=_BlasBackend.Cublas env=0 tf32=False
+update seconds: 6.075 0.803 0.798 0.798 0.800 | warm mean 0.799
+learn step per 8192-row minibatch: 1.18 ms
+  trunk.0: 8192x335->256 0.213 ms (6.6 TFLOP/s)
+  trunk.2: 8192x256->256 0.228 ms (4.7 TFLOP/s)
+  actor_head.0: 8192x256->128 0.136 ms (3.9 TFLOP/s)
+  actor_head.2: 8192x128->494 0.134 ms (7.7 TFLOP/s)
+  critic_head.0: 8192x256->128 0.082 ms (6.5 TFLOP/s)
+  critic_head.2: 8192x128->1 0.086 ms (0.0 TFLOP/s)

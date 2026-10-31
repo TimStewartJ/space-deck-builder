@@ -212,7 +212,6 @@ if ($NumWorkers) {
 $manifestPath = Join-Path $RunRoot "reference_manifest.json"
 $bootstrapTarget = [math]::Min($chunk, $targetUpdate)
 $bootstrapIsFinal = $bootstrapTarget -eq $targetUpdate
-$bootstrapGames = if ($bootstrapIsFinal) { $finalGames } else { $interimGames }
 $invocation = [PSCustomObject]@{
     preset = $Preset
     seed = $Seed
@@ -274,9 +273,12 @@ try {
             "--updates", [string]$bootstrapTarget,
             "--lr-horizon", [string]$targetUpdate,
             "--self-play-horizon", [string]$targetUpdate,
-            "--eval-games", [string]$bootstrapGames,
+            "--eval-games", [string]$interimGames,
             "--eval-num-workers", [string]$evalWorkers
         )
+        if ($bootstrapIsFinal) {
+            $arguments += @("--final-eval-games", [string]$finalGames)
+        }
         $manifest.bootstrap = [PSCustomObject]@{
             state = "running"
             target_update = $bootstrapTarget
@@ -337,10 +339,32 @@ try {
     } else {
         $chunksDir = Join-Path $RunRoot "chunks"
         $chunkArgs = $commonArgs + @(
-            "--eval-games", [string]$finalGames,
             "--eval-num-workers", [string]$evalWorkers
         )
-        $manifest.chunks_manifest = Join-Path $chunksDir "manifest.json"
+        $chunkFinalGames = $finalGames
+        $chunksManifestPath = Join-Path $chunksDir "manifest.json"
+        if (Test-Path -LiteralPath $chunksManifestPath -PathType Leaf) {
+            $existingChunks = Get-Content `
+                -LiteralPath $chunksManifestPath -Raw | ConvertFrom-Json
+            $recordedFinalGames = if (
+                $existingChunks.PSObject.Properties["final_eval_games"]
+            ) {
+                [int]$existingChunks.final_eval_games
+            } else {
+                0
+            }
+            if ($recordedFinalGames -eq 0) {
+                # Arcs started before chunks took a separate final size gave
+                # every chunk the final size and let non-final chunks
+                # override it; resume them with the arguments they recorded.
+                $chunkArgs = $commonArgs + @(
+                    "--eval-games", [string]$finalGames,
+                    "--eval-num-workers", [string]$evalWorkers
+                )
+                $chunkFinalGames = 0
+            }
+        }
+        $manifest.chunks_manifest = $chunksManifestPath
         Save-Manifest $manifest $manifestPath
         & (Join-Path $PSScriptRoot "chunked_resume.ps1") `
             -StartCheckpoint $bootstrapCheckpoint `
@@ -350,6 +374,7 @@ try {
             -ExtraArgs $chunkArgs `
             -InterimEvalGames $interimGames `
             -InterimNumWorkers $evalWorkers `
+            -FinalEvalGames $chunkFinalGames `
             -LogsDir $chunksDir `
             -WorkingDir $Repo `
             -Python $Python `

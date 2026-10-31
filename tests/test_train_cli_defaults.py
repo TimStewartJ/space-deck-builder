@@ -47,6 +47,21 @@ def test_train_cli_accepts_dedicated_eval_workers():
     assert args.eval_num_workers == 1
 
 
+def test_run_train_passes_the_final_evaluation_size(monkeypatch):
+    captured = {}
+
+    def fake_train(data_cfg, ppo_cfg, run_cfg, *args, **kwargs):
+        captured["run_cfg"] = run_cfg
+
+    monkeypatch.setattr("src.ppo.ppo_trainer.train", fake_train)
+    assert _parse_train_args([]).final_eval_games == RunConfig().final_eval_games
+
+    _run_train(_parse_train_args(["--eval-games", "3200", "--final-eval-games", "15000"]))
+
+    assert captured["run_cfg"].eval_games == 3200
+    assert captured["run_cfg"].final_eval_games == 15000
+
+
 def test_run_train_passes_isolated_checkpoint_directory(monkeypatch):
     captured = {}
 

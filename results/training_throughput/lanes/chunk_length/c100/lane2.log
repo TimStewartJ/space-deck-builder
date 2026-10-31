@@ -1,0 +1,5 @@
+[run_queue lane2 2026-10-30 16:52:42] training 01_seed11.json
+[train_reference] bootstrap 0 -> 100; log=D:\sdb-bench\queue_c100\runs\seed11\bootstrap_0_to_100_20261030_165242.log
+[train_reference] complete: D:\sdb-bench\queue_c100\runs\seed11\bootstrap_models\ppo_agent_1030_1658_upd100_wins14056.pth
+[run_queue lane2 2026-10-30 16:58:03] finished 01_seed11.json
+[run_queue lane2 2026-10-30 16:58:03] no pending jobs

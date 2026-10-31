@@ -1,0 +1,144 @@
+{
+  "anchor": "final_checkpoint@T0",
+  "anchor_elo": 1000.0,
+  "games_per_pair": 4000,
+  "participants": [
+    {
+      "index": 0,
+      "label": "final_checkpoint@T0",
+      "kind": "checkpoint",
+      "path": "D:\\sdb-bench\\validate_seed0\\chunks\\final_checkpoint.pth",
+      "temperature": 0.0,
+      "elo": 1000.0,
+      "wins": 9747,
+      "losses": 6253,
+      "games": 16000
+    },
+    {
+      "index": 1,
+      "label": "selfplay_seed0@T0",
+      "kind": "checkpoint",
+      "path": "E:\\space-deck-builder\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed0.pth",
+      "temperature": 0.0,
+      "elo": 1010.7932132866612,
+      "wins": 10011,
+      "losses": 5989,
+      "games": 16000
+    },
+    {
+      "index": 2,
+      "label": "selfplay_seed1@T0",
+      "kind": "checkpoint",
+      "path": "E:\\space-deck-builder\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed1.pth",
+      "temperature": 0.0,
+      "elo": 977.0883781967012,
+      "wins": 9184,
+      "losses": 6816,
+      "games": 16000
+    },
+    {
+      "index": 3,
+      "label": "selfplay_seed2@T0",
+      "kind": "checkpoint",
+      "path": "E:\\space-deck-builder\\results\\optimized_selfplay_baseline\\checkpoints\\selfplay_seed2.pth",
+      "temperature": 0.0,
+      "elo": 1006.7403501356738,
+      "wins": 9912,
+      "losses": 6088,
+      "games": 16000
+    },
+    {
+      "index": 4,
+      "label": "heuristic",
+      "kind": "builtin",
+      "path": "",
+      "temperature": null,
+      "elo": 553.1668310789055,
+      "wins": 1146,
+      "losses": 14854,
+      "games": 16000
+    }
+  ],
+  "pairings": [
+    {
+      "i": 0,
+      "j": 1,
+      "label_i": "final_checkpoint@T0",
+      "label_j": "selfplay_seed0@T0",
+      "wins_i": 1923,
+      "games": 4000
+    },
+    {
+      "i": 0,
+      "j": 2,
+      "label_i": "final_checkpoint@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 2134,
+      "games": 4000
+    },
+    {
+      "i": 0,
+      "j": 3,
+      "label_i": "final_checkpoint@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 1975,
+      "games": 4000
+    },
+    {
+      "i": 0,
+      "j": 4,
+      "label_i": "final_checkpoint@T0",
+      "label_j": "heuristic",
+      "wins_i": 3715,
+      "games": 4000
+    },
+    {
+      "i": 1,
+      "j": 2,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "selfplay_seed1@T0",
+      "wins_i": 2158,
+      "games": 4000
+    },
+    {
+      "i": 1,
+      "j": 3,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 2042,
+      "games": 4000
+    },
+    {
+      "i": 1,
+      "j": 4,
+      "label_i": "selfplay_seed0@T0",
+      "label_j": "heuristic",
+      "wins_i": 3734,
+      "games": 4000
+    },
+    {
+      "i": 2,
+      "j": 3,
+      "label_i": "selfplay_seed1@T0",
+      "label_j": "selfplay_seed2@T0",
+      "wins_i": 1783,
+      "games": 4000
+    },
+    {
+      "i": 2,
+      "j": 4,
+      "label_i": "selfplay_seed1@T0",
+      "label_j": "heuristic",
+      "wins_i": 3693,
+      "games": 4000
+    },
+    {
+      "i": 3,
+      "j": 4,
+      "label_i": "selfplay_seed2@T0",
+      "label_j": "heuristic",
+      "wins_i": 3712,
+      "games": 4000
+    }
+  ]
+}

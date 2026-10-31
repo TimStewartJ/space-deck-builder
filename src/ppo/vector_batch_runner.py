@@ -30,6 +30,12 @@ from src.vector_engine.opponents import (
     select_fixed_actions,
 )
 from src.ppo.opponent_pool import OpponentPool
+from src.vector_engine.graphed_policy import (
+    GraphedRolloutPolicy,
+    architecture_key,
+    graphable,
+    staged_rows,
+)
 from src.vector_engine.policy import (
     CurrentSnapshotEvaluator,
     StackedSnapshotEvaluator,
@@ -45,6 +51,11 @@ from src.vector_engine.state import (
 )
 
 _log = logging.getLogger("training")
+
+# Learner decisions per episode that the graphed runner's device storage is
+# first sized for (reference-recipe games average about 146); storage grows
+# when a rollout needs more.
+_INITIAL_DECISIONS_PER_EPISODE = 160
 
 
 @njit(parallel=True, cache=True)
@@ -77,33 +88,25 @@ def _compute_linked_gae(
             index = previous[index]
 
 
-def _sample_without_replacement(rng, counts, draws):
-    result = np.zeros_like(counts)
-    work = counts.copy()
-    for _ in range(draws):
-        total = int(work.sum())
-        if total <= 0:
-            break
-        ticket = int(rng.integers(total))
-        cumulative = 0
-        for card, count in enumerate(work):
-            cumulative += int(count)
-            if cumulative > ticket:
-                work[card] -= 1
-                result[card] += 1
-                break
-    return result
-
-
 def initialize_training_state(
     episodes: int,
     cards,
     registry,
     *,
     seed: int,
+    rules: CompiledRules | None = None,
 ) -> tuple[VectorState, CompiledRules]:
-    """Create physical-deck-faithful independent vector games."""
-    rules = compile_rules(cards, registry)
+    """Create physical-deck-faithful independent vector games.
+
+    Each game draws the first player and the training player uniformly. Each
+    player's ten starter cards (eight Scouts, two Vipers) are shuffled and the
+    first player holds the top three, the other player the top five; the
+    trade row is the top five cards of the shuffled trade deck. ``rules``
+    reuses an earlier :func:`compile_rules` result for the same cards;
+    compiled rules are read-only.
+    """
+    if rules is None:
+        rules = compile_rules(cards, registry)
     state = VectorState.empty(episodes, rules.num_cards)
     rng = np.random.default_rng(seed)
     scout = registry.card_index_map["Scout"]
@@ -113,31 +116,32 @@ def initialize_training_state(
     for card in cards:
         physical_trade[card.index] += 1
 
-    for game in range(episodes):
-        first = int(rng.integers(2))
-        training = int(rng.integers(2))
-        state.first_player[game] = first
-        state.current_player[game] = first
-        state.training_player[game] = training
-        state.health[game] = 50
-        state.explorer_count[game] = 10
+    first = rng.integers(2, size=episodes)
+    state.first_player[:] = first
+    state.current_player[:] = first
+    state.training_player[:] = rng.integers(2, size=episodes)
+    state.health[:] = 50
+    state.explorer_count[:] = 10
 
-        for player in range(2):
-            starter = np.zeros(rules.num_cards, dtype=np.int16)
-            starter[scout] = 8
-            starter[viper] = 2
-            hand_size = 3 if player == first else 5
-            hand = _sample_without_replacement(rng, starter, hand_size)
-            state.zones[game, player, ZONE_HAND] = hand
-            state.zones[game, player, ZONE_DECK] = starter - hand
+    starter = np.array([scout] * 8 + [viper] * 2)
+    order = rng.permuted(np.tile(starter, (episodes, 2, 1)), axis=2)
+    hand_size = np.where(np.arange(2)[None, :] == first[:, None], 3, 5)
+    in_hand = np.arange(len(starter))[None, None, :] < hand_size[:, :, None]
+    vipers = ((order == viper) & in_hand).sum(axis=2)
+    scouts = hand_size - vipers
+    state.zones[:, :, ZONE_HAND, scout] = scouts
+    state.zones[:, :, ZONE_HAND, viper] = vipers
+    state.zones[:, :, ZONE_DECK, scout] = 8 - scouts
+    state.zones[:, :, ZONE_DECK, viper] = 2 - vipers
 
-        market = _sample_without_replacement(rng, physical_trade, 5)
-        remaining = physical_trade - market
-        state.trade_deck[game] = remaining
-        expanded = np.repeat(np.arange(rules.num_cards), market)
-        rng.shuffle(expanded)
-        state.trade_row[game, : len(expanded)] = expanded
-        state.rng_state[game] = int(rng.integers(1, 0x7FFF_FFFF))
+    deck = np.repeat(np.arange(rules.num_cards), physical_trade)
+    row_size = state.trade_row.shape[1]
+    market = rng.permuted(np.tile(deck, (episodes, 1)), axis=1)[:, :row_size]
+    state.trade_row[:] = market
+    drawn = np.zeros((episodes, rules.num_cards), dtype=np.int16)
+    np.add.at(drawn, (np.arange(episodes)[:, None], market), 1)
+    state.trade_deck[:] = physical_trade[None, :] - drawn
+    state.rng_state[:] = rng.integers(1, 0x7FFF_FFFF, size=episodes)
 
     return state, rules
 
@@ -163,6 +167,7 @@ class VectorBatchRunner:
         pfsp_weights: list[float] | None = None,
         max_active_snapshots: int = 3,
         snapshot_temperature: float = 1.0,
+        graph_inference: bool = True,
     ):
         self.opponent_entries = OpponentPool(
             opponent_spec=opponent_spec
@@ -186,6 +191,10 @@ class VectorBatchRunner:
         # Inference temperature of every snapshot opponent; 0 plays each
         # snapshot's highest-scoring legal action.
         self.snapshot_temperature = snapshot_temperature
+        # Evaluate the learner and snapshots by CUDA/HIP graph replay when
+        # the device and every model's architecture allow it; otherwise use
+        # the eager evaluators below.
+        self.graph_inference = graph_inference
         self.opponent_results: dict[str, list[int]] = {}
         self._batch_index = 0
         self._last_opponent_kinds = np.empty(0, dtype=np.int16)
@@ -195,6 +204,41 @@ class VectorBatchRunner:
         self._joint_snapshot_evaluators: dict[
             int, CurrentSnapshotEvaluator
         ] = {}
+        # Compiled once and reused by every rollout of this runner.
+        self._rules: CompiledRules | None = None
+        self._policy_data = None
+        # Graphed policies persist across rollouts so captured graphs are
+        # reused.
+        self._graphed_policy: GraphedRolloutPolicy | None = None
+        self._evaluation_policies: dict[
+            tuple[int, float], GraphedRolloutPolicy
+        ] = {}
+
+    def reconfigure(
+        self,
+        *,
+        snapshot_state_dicts: (
+            list[tuple[str, dict, ModelConfig | None]] | None
+        ),
+        self_play_ratio: float,
+        pfsp_weights: list[float] | None,
+    ) -> None:
+        """Set the next rollout's opponents as a freshly built runner would.
+
+        The trainer calls this once per update instead of building a new
+        runner, which keeps the compiled rules and captured graphs. Like a
+        new runner without an explicit seed, it draws the next rollout seed
+        from Python's ``random`` module.
+        """
+        self.snapshot_state_dicts = list(snapshot_state_dicts or ())
+        self.self_play_ratio = self_play_ratio
+        self.pfsp_weights = (
+            list(pfsp_weights) if pfsp_weights is not None else None
+        )
+        self.seed = random.randint(0, 2**31 - 1)
+        self._batch_index = 0
+        self._stacked_snapshot_evaluators.clear()
+        self._joint_snapshot_evaluators.clear()
 
     @staticmethod
     def _snapshot_config_key(model_config: ModelConfig | None) -> str:
@@ -291,12 +335,15 @@ class VectorBatchRunner:
             self.cards,
             self.registry,
             seed=batch_seed,
+            rules=self._rules,
         )
+        self._rules = rules
         engine = VectorEngine(state, rules)
-        policy = VectorPolicyEvaluator(self.model, self.device)
-        policy_data = compile_opponent_policy_data(
-            self.cards, self.registry, rules
-        )
+        if self._policy_data is None:
+            self._policy_data = compile_opponent_policy_data(
+                self.cards, self.registry, rules
+            )
+        policy_data = self._policy_data
         opponent_kinds = sample_mixed_opponent_kinds(
             self.opponent_entries,
             len(self.snapshot_state_dicts),
@@ -311,6 +358,18 @@ class VectorBatchRunner:
             opponent_kinds[opponent_kinds >= SNAPSHOT_OFFSET]
             - SNAPSHOT_OFFSET
         )
+        snapshot_models = self._graphable_snapshots(active_snapshot_indices)
+        if snapshot_models is not None:
+            return self._run_graphed(
+                num_episodes,
+                state,
+                engine,
+                policy_data,
+                opponent_kinds,
+                active_snapshot_indices,
+                snapshot_models,
+            )
+        policy = VectorPolicyEvaluator(self.model, self.device)
         joint_snapshot = (
             (
                 int(active_snapshot_indices[0]),
@@ -520,55 +579,10 @@ class VectorBatchRunner:
         masks_np = np.concatenate(mask_chunks)
         previous = np.concatenate(previous_chunks)
         concatenate_elapsed = time.perf_counter() - post_started
-        rewards = np.zeros(len(states), dtype=np.float32)
-        dones = np.zeros(len(states), dtype=np.bool_)
-        for game in range(num_episodes):
-            last = last_transition[game]
-            if last < 0:
-                continue
-            rewards[last] = (
-                1.0 if state.winner[game] == state.training_player[game] else -1.0
-            )
-            dones[last] = True
-
-        returns = np.empty(len(states), dtype=np.float32)
-        advantages = np.empty(len(states), dtype=np.float32)
-        gae_started = time.perf_counter()
-        _compute_linked_gae(
-            last_transition,
-            previous,
-            rewards,
-            dones,
-            values,
-            self.ppo_config.gamma,
-            self.ppo_config.lam,
-            returns,
-            advantages,
+        returns, advantages, gae_elapsed = self._returns_and_advantages(
+            state, last_transition, previous, values
         )
-        advantages = (
-            advantages - advantages.mean()
-        ) / (advantages.std() + 1e-8)
-        gae_elapsed = time.perf_counter() - gae_started
-
-        self.opponent_results = {}
-        training_won = state.winner == state.training_player
-        for name, _ in self.opponent_entries:
-            code = OPPONENT_CODE[name]
-            selected = opponent_kinds == code
-            self.opponent_results[OPPONENT_LABEL[code]] = [
-                int((training_won & selected).sum()),
-                int(selected.sum()),
-            ]
-        for snapshot_index, (
-            name,
-            _,
-            _,
-        ) in enumerate(self.snapshot_state_dicts):
-            selected = opponent_kinds == SNAPSHOT_OFFSET + snapshot_index
-            self.opponent_results[name] = [
-                int((training_won & selected).sum()),
-                int(selected.sum()),
-            ]
+        self._record_opponent_results(state, opponent_kinds)
         transfer_started = time.perf_counter()
         result = (
             torch.from_numpy(states).to(self.device),
@@ -622,3 +636,419 @@ class VectorBatchRunner:
             snapshot_stats["sync_s"],
         )
         return result
+
+    def _returns_and_advantages(
+        self,
+        state: VectorState,
+        last_transition: np.ndarray,
+        previous: np.ndarray,
+        values: np.ndarray,
+    ) -> tuple[np.ndarray, np.ndarray, float]:
+        """Terminal +/-1 rewards, linked GAE returns, normalized advantages."""
+        count = len(values)
+        rewards = np.zeros(count, dtype=np.float32)
+        dones = np.zeros(count, dtype=np.bool_)
+        games = np.flatnonzero(last_transition >= 0)
+        last = last_transition[games]
+        rewards[last] = np.where(
+            state.winner[games] == state.training_player[games], 1.0, -1.0
+        )
+        dones[last] = True
+
+        returns = np.empty(count, dtype=np.float32)
+        advantages = np.empty(count, dtype=np.float32)
+        started = time.perf_counter()
+        _compute_linked_gae(
+            last_transition,
+            previous,
+            rewards,
+            dones,
+            values,
+            self.ppo_config.gamma,
+            self.ppo_config.lam,
+            returns,
+            advantages,
+        )
+        advantages = (
+            advantages - advantages.mean()
+        ) / (advantages.std() + 1e-8)
+        return returns, advantages, time.perf_counter() - started
+
+    def _record_opponent_results(
+        self, state: VectorState, opponent_kinds: np.ndarray
+    ) -> None:
+        self.opponent_results = {}
+        training_won = state.winner == state.training_player
+        for name, _ in self.opponent_entries:
+            code = OPPONENT_CODE[name]
+            selected = opponent_kinds == code
+            self.opponent_results[OPPONENT_LABEL[code]] = [
+                int((training_won & selected).sum()),
+                int(selected.sum()),
+            ]
+        for snapshot_index, (
+            name,
+            _,
+            _,
+        ) in enumerate(self.snapshot_state_dicts):
+            selected = opponent_kinds == SNAPSHOT_OFFSET + snapshot_index
+            self.opponent_results[name] = [
+                int((training_won & selected).sum()),
+                int(selected.sum()),
+            ]
+
+    def _graphable_snapshots(
+        self, active_snapshot_indices: np.ndarray
+    ) -> list[PPOActorCritic] | None:
+        """Active snapshot models for graphed inference, or ``None`` to use
+        the eager evaluators (non-CUDA device, graphs disabled, or an
+        architecture the graphs do not evaluate)."""
+        if (
+            not self.graph_inference
+            or self.device.type != "cuda"
+            or not graphable(self.model)
+        ):
+            return None
+        key = architecture_key(self.model)
+        models = []
+        for raw_index in active_snapshot_indices:
+            model = self._load_snapshot_model(int(raw_index))
+            if not graphable(model) or architecture_key(model) != key:
+                return None
+            models.append(model)
+        return models
+
+    def _rollout_policy(
+        self, num_episodes: int, opponent_slots: int
+    ) -> GraphedRolloutPolicy:
+        policy = self._graphed_policy
+        if (
+            policy is None
+            or policy.capacity != num_episodes
+            or policy.opponent_slots < opponent_slots
+            or policy.weights.key != architecture_key(self.model)
+            or policy.opponent_temperature != float(self.snapshot_temperature)
+        ):
+            policy = GraphedRolloutPolicy(
+                self.model,
+                max(opponent_slots, self.max_active_snapshots),
+                num_episodes,
+                self.device,
+                opponent_temperature=self.snapshot_temperature,
+                storage_rows=num_episodes * _INITIAL_DECISIONS_PER_EPISODE,
+            )
+            self._graphed_policy = policy
+        return policy
+
+    def _run_graphed(
+        self,
+        num_episodes: int,
+        state: VectorState,
+        engine: VectorEngine,
+        policy_data,
+        opponent_kinds: np.ndarray,
+        active_snapshot_indices: np.ndarray,
+        snapshot_models: list[PPOActorCritic],
+    ) -> tuple:
+        """Collect a rollout with graph-replayed learner and snapshot policies.
+
+        Each decision step replays one graph for the learner and every active
+        snapshot. The learner's decisions, with their effective masks,
+        log-probabilities and values, accumulate in the policy's device
+        storage, which is returned as views: they stay valid until this
+        runner's next rollout. Fixed opponents choose on the CPU while the GPU
+        evaluates the policies.
+        """
+        policy = self._rollout_policy(num_episodes, len(snapshot_models))
+        policy.load_learner(self.model)
+        slot_of_snapshot = np.full(
+            max(1, len(self.snapshot_state_dicts)), -1, dtype=np.int64
+        )
+        for slot, (raw_index, model) in enumerate(
+            zip(active_snapshot_indices, snapshot_models), start=1
+        ):
+            policy.load_opponent(slot, model)
+            slot_of_snapshot[int(raw_index)] = slot
+        stream = torch.cuda.current_stream(self.device)
+
+        previous_chunks = []
+        last_transition = np.full(num_episodes, -1, dtype=np.int64)
+        offset = 0
+        safety_limit = int(state.turn_cap.max()) * 200
+        actions = np.empty(num_episodes, dtype=np.int32)
+        action_variants = np.zeros(num_episodes, dtype=np.int16)
+        counts = np.zeros(policy.slots, dtype=np.int64)
+        timing = {
+            "stage": 0.0,
+            "launch": 0.0,
+            "opponent": 0.0,
+            "wait": 0.0,
+            "step": 0.0,
+            "iterations": 0,
+            "policy_calls": 0,
+            "policy_rows": 0,
+            "snapshot_rows": 0,
+        }
+        loop_started = time.perf_counter()
+
+        for _ in range(safety_limit):
+            timing["iterations"] += 1
+            if state.done.all():
+                break
+            phase = time.perf_counter()
+            masks = engine.build_masks()
+            active = ~state.done
+            to_move = state.current_player == state.training_player
+            training_rows = np.flatnonzero(active & to_move)
+            opponent_rows = np.flatnonzero(active & ~to_move)
+            actions.fill(END_TURN_INDEX)
+            action_variants.fill(0)
+            kinds = opponent_kinds[opponent_rows]
+            fixed_rows = opponent_rows[kinds < SNAPSHOT_OFFSET]
+            snapshot_rows = opponent_rows[kinds >= SNAPSHOT_OFFSET]
+
+            count = len(training_rows)
+            counts[:] = 0
+            counts[0] = count
+            slot_rows: list[tuple[int, np.ndarray]] = []
+            if len(snapshot_rows):
+                slots = slot_of_snapshot[
+                    opponent_kinds[snapshot_rows] - SNAPSHOT_OFFSET
+                ]
+                counts[1:] = np.bincount(slots, minlength=policy.slots)[1:]
+                order = np.argsort(slots, kind="stable")
+                start = 0
+                for slot in range(1, policy.slots):
+                    slot_count = int(counts[slot])
+                    if slot_count:
+                        slot_rows.append(
+                            (slot, snapshot_rows[order[start : start + slot_count]])
+                        )
+                        start += slot_count
+            bucket = policy.bucket(int(counts.max())) if counts.any() else 0
+            if count:
+                if offset + count > policy.storage_rows:
+                    policy.allocate_storage(int((offset + count) * 1.5))
+                engine.materialize_current_player_observations(
+                    training_rows,
+                    out=staged_rows(policy.host_observations, 0, bucket, count),
+                )
+                policy.stage_masks(masks, training_rows, 0, bucket)
+            for slot, rows in slot_rows:
+                engine.materialize_current_player_observations(
+                    rows,
+                    out=staged_rows(
+                        policy.host_observations, slot, bucket, len(rows)
+                    ),
+                )
+                policy.stage_masks(masks, rows, slot, bucket)
+            timing["stage"] += time.perf_counter() - phase
+
+            if bucket:
+                phase = time.perf_counter()
+                policy.submit(bucket, counts.tolist(), offset=offset)
+                timing["launch"] += time.perf_counter() - phase
+                timing["policy_calls"] += 1
+                timing["policy_rows"] += count
+                timing["snapshot_rows"] += len(snapshot_rows)
+
+            if len(fixed_rows):
+                phase = time.perf_counter()
+                select_fixed_actions(
+                    engine,
+                    policy_data,
+                    opponent_kinds,
+                    fixed_rows,
+                    actions,
+                    action_variants,
+                )
+                timing["opponent"] += time.perf_counter() - phase
+
+            if bucket:
+                phase = time.perf_counter()
+                stream.synchronize()
+                timing["wait"] += time.perf_counter() - phase
+            if count:
+                actions[training_rows] = staged_rows(
+                    policy.host_actions, 0, bucket, count
+                )
+                previous_chunks.append(last_transition[training_rows])
+                last_transition[training_rows] = offset + np.arange(
+                    count, dtype=np.int64
+                )
+                offset += count
+            for slot, rows in slot_rows:
+                actions[rows] = staged_rows(
+                    policy.host_actions, slot, bucket, len(rows)
+                )
+
+            phase = time.perf_counter()
+            engine.step(actions, action_variants=action_variants)
+            timing["step"] += time.perf_counter() - phase
+        else:
+            raise RuntimeError("vector rollout exceeded safety limit")
+
+        if not state.done.all():
+            raise RuntimeError("vector rollout ended with active games")
+        if not offset:
+            raise RuntimeError("vector rollout collected no policy decisions")
+
+        loop_elapsed = time.perf_counter() - loop_started
+        previous = np.concatenate(previous_chunks)
+        values = policy.values[:offset].cpu().numpy()
+        returns, advantages, gae_elapsed = self._returns_and_advantages(
+            state, last_transition, previous, values
+        )
+        self._record_opponent_results(state, opponent_kinds)
+        result = (
+            policy.states[:offset],
+            policy.actions[:offset],
+            policy.log_probs[:offset],
+            torch.from_numpy(returns).to(self.device),
+            torch.from_numpy(advantages).to(self.device),
+            policy.masks[:offset],
+        )
+        _log.info(
+            "[VectorRunner] graphed loop=%.2fs stage=%.2fs launch=%.2fs "
+            "opponent=%.2fs wait=%.2fs step=%.2fs gae=%.2fs iterations=%d "
+            "calls=%d avg_batch=%.0f snapshot_avg_rows=%.0f graphs=%d",
+            loop_elapsed,
+            timing["stage"],
+            timing["launch"],
+            timing["opponent"],
+            timing["wait"],
+            timing["step"],
+            gae_elapsed,
+            timing["iterations"],
+            timing["policy_calls"],
+            timing["policy_rows"] / max(1, timing["policy_calls"]),
+            timing["snapshot_rows"] / max(1, timing["policy_calls"]),
+            len(policy.captured_graphs),
+        )
+        return result
+
+    def can_evaluate(self) -> bool:
+        """Whether :meth:`evaluate_fixed_opponents` can run on this runner."""
+        return (
+            self.graph_inference
+            and self.device.type == "cuda"
+            and graphable(self.model)
+        )
+
+    def evaluate_fixed_opponents(
+        self,
+        opponent_types: list[str],
+        games_schedule: list[int],
+        *,
+        seed: int,
+        temperature: float = 1.0,
+    ) -> list[tuple[str, int, int, int, int, int]]:
+        """Play the learner against fixed opponents in one vector population.
+
+        Opponent ``i`` plays ``games_schedule[i]`` games; within each
+        opponent's games the learner moves first in the even-numbered ones,
+        so seats alternate by game index as the evaluation protocol requires.
+        The learner selects at ``temperature`` by graph replay; opponents use
+        the scalar-equivalent vector policies. Returns one
+        ``(opponent, wins, games, learner_decisions, first_seat_games,
+        second_seat_games)`` tuple per opponent type.
+        """
+        if not self.can_evaluate():
+            raise RuntimeError("vector evaluation needs graphed inference")
+        total = int(sum(games_schedule))
+        if total <= 0:
+            raise ValueError("evaluation needs at least one game")
+        configure_numba_threads(self.num_threads)
+        state, rules = initialize_training_state(
+            total, self.cards, self.registry, seed=seed, rules=self._rules
+        )
+        self._rules = rules
+        if self._policy_data is None:
+            self._policy_data = compile_opponent_policy_data(
+                self.cards, self.registry, rules
+            )
+        kinds = np.empty(total, dtype=np.int16)
+        position = np.empty(total, dtype=np.int64)
+        start = 0
+        for name, games in zip(opponent_types, games_schedule):
+            kinds[start : start + games] = OPPONENT_CODE[name]
+            position[start : start + games] = np.arange(games)
+            start += games
+        state.training_player[:] = np.where(
+            position % 2 == 0, state.first_player, 1 - state.first_player
+        )
+        engine = VectorEngine(state, rules)
+
+        key = (total, float(temperature))
+        policy = self._evaluation_policies.get(key)
+        if policy is None or policy.weights.key != architecture_key(self.model):
+            policy = GraphedRolloutPolicy(
+                self.model,
+                0,
+                total,
+                self.device,
+                learner_temperature=temperature,
+            )
+            self._evaluation_policies[key] = policy
+        policy.load_learner(self.model)
+        stream = torch.cuda.current_stream(self.device)
+        decisions = np.zeros(total, dtype=np.int64)
+        actions = np.empty(total, dtype=np.int32)
+        action_variants = np.zeros(total, dtype=np.int16)
+        safety_limit = int(state.turn_cap.max()) * 200
+        for _ in range(safety_limit):
+            if state.done.all():
+                break
+            masks = engine.build_masks()
+            active = ~state.done
+            to_move = state.current_player == state.training_player
+            training_rows = np.flatnonzero(active & to_move)
+            opponent_rows = np.flatnonzero(active & ~to_move)
+            actions.fill(END_TURN_INDEX)
+            action_variants.fill(0)
+            count = len(training_rows)
+            if count:
+                bucket = policy.bucket(count)
+                engine.materialize_current_player_observations(
+                    training_rows,
+                    out=staged_rows(policy.host_observations, 0, bucket, count),
+                )
+                policy.stage_masks(masks, training_rows, 0, bucket)
+                policy.submit(bucket, [count])
+            if len(opponent_rows):
+                select_fixed_actions(
+                    engine,
+                    self._policy_data,
+                    kinds,
+                    opponent_rows,
+                    actions,
+                    action_variants,
+                )
+            if count:
+                stream.synchronize()
+                actions[training_rows] = staged_rows(
+                    policy.host_actions, 0, bucket, count
+                )
+                decisions[training_rows] += 1
+            engine.step(actions, action_variants=action_variants)
+        else:
+            raise RuntimeError("vector evaluation exceeded safety limit")
+
+        won = state.winner == state.training_player
+        first = state.training_player == state.first_player
+        results = []
+        start = 0
+        for name, games in zip(opponent_types, games_schedule):
+            block = slice(start, start + games)
+            results.append(
+                (
+                    name,
+                    int(won[block].sum()),
+                    int(games),
+                    int(decisions[block].sum()),
+                    int(first[block].sum()),
+                    int((~first[block]).sum()),
+                )
+            )
+            start += games
+        return results
