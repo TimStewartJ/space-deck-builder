@@ -212,7 +212,6 @@ if ($NumWorkers) {
 $manifestPath = Join-Path $RunRoot "reference_manifest.json"
 $bootstrapTarget = [math]::Min($chunk, $targetUpdate)
 $bootstrapIsFinal = $bootstrapTarget -eq $targetUpdate
-$bootstrapGames = if ($bootstrapIsFinal) { $finalGames } else { $interimGames }
 $invocation = [PSCustomObject]@{
     preset = $Preset
     seed = $Seed
@@ -274,9 +273,12 @@ try {
             "--updates", [string]$bootstrapTarget,
             "--lr-horizon", [string]$targetUpdate,
             "--self-play-horizon", [string]$targetUpdate,
-            "--eval-games", [string]$bootstrapGames,
+            "--eval-games", [string]$interimGames,
             "--eval-num-workers", [string]$evalWorkers
         )
+        if ($bootstrapIsFinal) {
+            $arguments += @("--final-eval-games", [string]$finalGames)
+        }
         $manifest.bootstrap = [PSCustomObject]@{
             state = "running"
             target_update = $bootstrapTarget
@@ -337,7 +339,6 @@ try {
     } else {
         $chunksDir = Join-Path $RunRoot "chunks"
         $chunkArgs = $commonArgs + @(
-            "--eval-games", [string]$finalGames,
             "--eval-num-workers", [string]$evalWorkers
         )
         $manifest.chunks_manifest = Join-Path $chunksDir "manifest.json"
@@ -350,6 +351,7 @@ try {
             -ExtraArgs $chunkArgs `
             -InterimEvalGames $interimGames `
             -InterimNumWorkers $evalWorkers `
+            -FinalEvalGames $finalGames `
             -LogsDir $chunksDir `
             -WorkingDir $Repo `
             -Python $Python `

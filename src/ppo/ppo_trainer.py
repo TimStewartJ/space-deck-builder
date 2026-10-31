@@ -528,12 +528,18 @@ def train(
         eval_result = None
         if upd % run_cfg.eval_every == 0 or is_last_update:
             start_time = time.time()
+            eval_games = (
+                run_cfg.final_eval_games
+                if is_last_update and run_cfg.final_eval_games is not None
+                else run_cfg.eval_games
+            )
             with preserve_rng_state():
                 wins, eval_result = _run_per_opponent_eval(
                     agent, pool, card_names, cards, run_cfg, ppo_cfg, upd,
                     registry=registry, data_cfg=data_cfg,
                     log_fn=logger.info,
                     runner=runner,
+                    eval_games=eval_games,
                 )
             agent.clear_buffers()
             duration_eval = time.time() - start_time
@@ -660,11 +666,13 @@ def _run_per_opponent_eval(
     data_cfg: DataConfig | None = None,
     log_fn=None,
     runner=None,
+    eval_games: int | None = None,
 ) -> tuple[int, 'EvalResult']:
     """Run evaluation against each opponent type separately, log per-type results.
 
-    With a vector ``runner`` that can replay its policy from graphs, the
-    games are played on the vector engine
+    ``eval_games`` defaults to ``run_cfg.eval_games``. With a vector
+    ``runner`` that can replay its policy from graphs, the games are played
+    on the vector engine
     (:func:`src.ppo.ppo_eval.evaluate_with_vector_runner`); otherwise
     :func:`src.ppo.ppo_eval.evaluate` plays them on the object engine. The
     vector population's seed comes from Python's ``random``, which the
@@ -674,13 +682,15 @@ def _run_per_opponent_eval(
     """
     from src.ppo.ppo_eval import evaluate, evaluate_with_vector_runner
 
+    if eval_games is None:
+        eval_games = run_cfg.eval_games
     opponents_spec = ",".join(pool.opponent_types)
     can_evaluate = getattr(runner, "can_evaluate", None)
     if can_evaluate is not None and can_evaluate():
         result = evaluate_with_vector_runner(
             runner,
             opponents=opponents_spec,
-            eval_games=run_cfg.eval_games,
+            eval_games=eval_games,
             seed=random.randint(0, 2**31 - 1),
             label=f"update {upd}",
             min_games_per_opponent=1,
@@ -697,7 +707,7 @@ def _run_per_opponent_eval(
         data_cfg=data_cfg or DataConfig(),
         device=str(agent.simulation_device),
         opponents=opponents_spec,
-        eval_games=run_cfg.eval_games,
+        eval_games=eval_games,
         num_concurrent=run_cfg.num_concurrent,
         num_workers=eval_workers if data_cfg is not None else 1,
         ppo_config=ppo_cfg,

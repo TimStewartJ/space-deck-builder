@@ -129,3 +129,37 @@ def test_training_eval_uses_dedicated_worker_count(monkeypatch):
     assert wins == 1
     assert actual is result
     assert captured["num_workers"] == 1
+
+
+def test_only_a_process_last_update_plays_the_final_evaluation_size(
+    tmp_path, monkeypatch
+):
+    from pathlib import Path
+
+    from src.config import DeviceConfig
+    from src.ppo import ppo_trainer
+
+    sizes = []
+    original = ppo_trainer._run_per_opponent_eval
+
+    def recording(*args, eval_games=None, **kwargs):
+        sizes.append((args[6], eval_games))
+        return original(*args, eval_games=eval_games, **kwargs)
+
+    monkeypatch.setattr(ppo_trainer, "_run_per_opponent_eval", recording)
+    monkeypatch.chdir(tmp_path)
+    repo = Path(__file__).resolve().parents[1]
+    data_cfg = DataConfig(
+        cards_path=str(repo / "data" / "cards.csv"),
+        models_dir=str(tmp_path / "models"),
+    )
+    run_cfg = RunConfig(
+        engine="vec", episodes=8, updates=4, eval_every=2, eval_games=2,
+        final_eval_games=4, num_workers=1, opponents="random",
+    )
+    ppo_trainer.train(
+        data_cfg, PPOConfig(), run_cfg,
+        DeviceConfig(main_device="cpu", simulation_device="cpu"), seed=3,
+    )
+
+    assert sizes == [(2, 2), (4, 4)]

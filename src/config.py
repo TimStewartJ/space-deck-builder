@@ -207,6 +207,10 @@ class RunConfig:
     num_concurrent: int | None = None
     eval_every: int = 5
     eval_games: int = 3200
+    # Games for the evaluation of this process's last update, which chunked
+    # arcs give the locked final gauntlet's size while every other
+    # evaluation keeps eval_games. None uses eval_games.
+    final_eval_games: int | None = None
     # Evaluation can use a different worker topology from rollout collection.
     # None inherits num_workers.
     eval_num_workers: int | None = None
@@ -266,6 +270,11 @@ class RunConfig:
             raise ValueError(
                 "eval_num_workers must be positive when set, got "
                 f"{self.eval_num_workers}"
+            )
+        if self.final_eval_games is not None and self.final_eval_games <= 0:
+            raise ValueError(
+                "final_eval_games must be positive when set, got "
+                f"{self.final_eval_games}"
             )
         if self.self_play_schedule not in self._VALID_SCHEDULES:
             raise ValueError(
@@ -375,9 +384,10 @@ class TrainingPreset:
     ``train_defaults`` maps ``python -m src train`` argument destinations to
     values. ``--preset`` applies them as parser defaults, so any explicit flag
     still wins. The chunk and evaluation fields describe how
-    ``scripts/train_reference.ps1`` runs the arc in fresh processes: interim
-    chunks evaluate ``interim_eval_games`` and the final chunk runs the locked
-    ``final_eval_games`` gauntlet with exact seat alternation.
+    ``scripts/train_reference.ps1`` runs the arc in fresh processes: every
+    evaluation plays ``interim_eval_games`` games except the arc's last
+    update, which runs the locked ``final_eval_games`` gauntlet with exact
+    seat alternation.
     """
     name: str
     description: str
@@ -429,11 +439,11 @@ _REFERENCE_SELFPLAY_DEFAULTS: dict[str, Any] = {
 }
 
 # Updates per fresh Python process when train_reference.ps1 runs a preset.
-# Processes hand over optimizer, scheduler, pool and every RNG stream, so the
-# length changes no training result. With graph-replayed inference a process
-# keeps its speed for at least 400 updates, while each restart costs about
-# 10 s (decision 0017); the eager evaluators still need 25-update processes
-# (decision 0009).
+# Processes hand over optimizer, scheduler, pool and every RNG stream, so a
+# run continues across processes as it would within one. With graph-replayed
+# inference a process keeps its speed for at least 400 updates, while each
+# restart costs about 10 s (decision 0017); the eager evaluators still need
+# 25-update processes (decision 0009).
 _REFERENCE_CHUNK_SIZE = 100
 
 TRAINING_PRESETS: dict[str, TrainingPreset] = {

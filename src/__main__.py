@@ -93,6 +93,13 @@ def _build_train_parser(sub: argparse._SubParsersAction):
                    help="Evaluate every N updates (always on last)")
     p.add_argument("--eval-games",  type=int,   default=_run.eval_games)
     p.add_argument(
+        "--final-eval-games",
+        type=int,
+        default=_run.final_eval_games,
+        help="Games for the evaluation of this process's last update "
+             "(default: --eval-games)",
+    )
+    p.add_argument(
         "--eval-num-workers",
         type=int,
         default=_run.eval_num_workers,
@@ -745,6 +752,7 @@ def _run_train(args):
         vec_graph_inference=args.vec_graph_inference,
         episodes=args.episodes, updates=args.updates,
         eval_every=args.eval_every, eval_games=args.eval_games,
+        final_eval_games=args.final_eval_games,
         eval_num_workers=args.eval_num_workers,
         self_play=args.self_play,
         opponents=args.opponents,
