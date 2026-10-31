@@ -456,10 +456,14 @@ class GraphedRolloutPolicy:
             self._offset.fill_(self.storage_rows)
         side = _warmup_stream(self.device)
         side.wait_stream(torch.cuda.current_stream(self.device))
-        with torch.cuda.stream(side), torch.no_grad():
-            for _ in range(2):
-                self._decide(bucket, slots)
-        torch.cuda.current_stream(self.device).wait_stream(side)
+        # Warm-ups draw sampling noise eagerly. Restoring the generator keeps
+        # the random stream independent of when a process captures its
+        # graphs, so a resumed process continues the stream it saved.
+        with torch.random.fork_rng(devices=[self.device]):
+            with torch.cuda.stream(side), torch.no_grad():
+                for _ in range(2):
+                    self._decide(bucket, slots)
+            torch.cuda.current_stream(self.device).wait_stream(side)
         graph = torch.cuda.CUDAGraph()
         if self._pool is None:
             self._pool = torch.cuda.graph_pool_handle()

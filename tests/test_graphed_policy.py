@@ -243,6 +243,29 @@ def test_storage_growth_keeps_recorded_rows_and_recaptures():
 
 
 @cuda
+def test_capturing_a_graph_leaves_the_random_stream_unchanged():
+    device = torch.device("cuda")
+    model = _model(14).to(device)
+    observations, masks = _inputs(100, 15)
+
+    def sample(capture_before_seeding: bool) -> torch.Tensor:
+        policy = GraphedRolloutPolicy(model, 0, 128, device)
+        policy.load_learner(model)
+        bucket = policy.bucket(100)
+        _stage(policy, observations, masks, 0, bucket)
+        if capture_before_seeding:
+            before = torch.cuda.get_rng_state(device)
+            policy._graph(bucket, 1)
+            assert torch.equal(torch.cuda.get_rng_state(device), before)
+        torch.cuda.manual_seed(16)
+        policy.submit(bucket, [100])
+        torch.cuda.synchronize()
+        return policy.host_actions[:100].clone()
+
+    assert torch.equal(sample(True), sample(False))
+
+
+@cuda
 def test_vector_evaluation_alternates_seats_and_is_deterministic_at_temperature_zero():
     from src.config import DataConfig, PPOConfig
     from src.ppo.ppo_eval import evaluate_with_vector_runner
