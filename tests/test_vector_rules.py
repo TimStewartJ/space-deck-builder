@@ -19,8 +19,10 @@ from src.vector_engine.rules import (
     compile_rules,
 )
 from src.rules.ir import (
+    PENDING_DRAW_ON_COMPLETE,
     PENDING_MANDATORY,
     RULE_IR_VERSION,
+    TARGET_DISCARD,
     TARGET_HAND,
 )
 
@@ -355,6 +357,45 @@ def test_machine_base_draws_and_scraps_in_one_activation(compiled):
             "ops": [
                 (EffectOpcode.DRAW, 1, 0),
                 (EffectOpcode.QUEUE_SCRAP, 1, TARGET_HAND | PENDING_MANDATORY),
+            ],
+        }
+    ]
+
+
+def test_central_office_trade_and_optional_top_deck_are_separate(compiled):
+    """Its trade resolves first; its optional top-deck is a later activation."""
+    _, _, rules = compiled
+    assert _bundles(rules, "Central Office")[:2] == [
+        {
+            "trigger": EffectTrigger.AUTO,
+            "faction": 0,
+            "requirement": 0,
+            "ops": [(EffectOpcode.ADD_TRADE, 2, 0)],
+        },
+        {
+            "trigger": EffectTrigger.ACTIVATE,
+            "faction": 0,
+            "requirement": 0,
+            "ops": [(EffectOpcode.ADD_NEXT_SHIP_TOP, 1, 0)],
+        },
+    ]
+
+
+def test_brain_world_completion_draw_text_belongs_to_its_scrap(compiled):
+    """Its "draw a card for each card scrapped" text is no automatic part."""
+    _, _, rules = compiled
+    assert _bundles(rules, "Brain World") == [
+        {
+            "trigger": EffectTrigger.ACTIVATE,
+            "faction": 0,
+            "requirement": 0,
+            "ops": [
+                (
+                    EffectOpcode.QUEUE_SCRAP_DRAW,
+                    2,
+                    TARGET_HAND | TARGET_DISCARD | PENDING_DRAW_ON_COMPLETE,
+                ),
+                (EffectOpcode.NOP, 0, 0),
             ],
         }
     ]

@@ -9,7 +9,11 @@ Star Realms Box Set rulebook 1.1E, pages 4 and 5, and decision 0016
   choices are pending decisions made before anything else; ally and scrap
   abilities may be used at any time during the main phase;
 - Machine Base ("Draw a card, then scrap a card from your hand") is one
-  activation that draws and then must scrap, also on the turn it is played.
+  activation that draws and then must scrap, also on the turn it is played;
+- Blob World's draw option counts every Blob card played this turn, also one
+  scrapped since;
+- Central Office's top-deck is optional on every turn: its trade comes as it
+  is played or first activated, and the top-deck is a separate activation.
 
 Every step is applied to the scalar engine and to the vector engine; the
 helper checks that both offer the same legal actions before the step and
@@ -485,3 +489,50 @@ def test_machine_base_with_nothing_to_draw_or_scrap_opens_no_decision():
     assert pair.player.get_current_pending_set() is None
     assert pair.player.hand == []
     assert _first(base) not in pair.legal()
+
+
+@pytest.mark.parametrize("top_deck", [False, True])
+@pytest.mark.parametrize("played_this_turn", [True, False])
+def test_central_office_top_deck_is_optional_on_every_turn(played_this_turn, top_deck):
+    """Central Office: "You may put the next ship you acquire this turn on top".
+
+    Playing it, or on a later turn activating it, gives its 2 Trade; the
+    top-deck is a separate optional activation on both turns.
+    """
+    if played_this_turn:
+        pair = Pair(hand=("Central Office",), row=("Cutter",))
+        office = pair.play("Central Office")
+    else:
+        pair = Pair(bases=("Central Office",), row=("Cutter",))
+        office = _index("Central Office")
+        pair.step(_first(office))
+    assert pair.resources()[0] == 2
+    assert pair.player.next_ship_to_top == 0
+    assert _first(office) in pair.legal()
+    if top_deck:
+        pair.step(_first(office))
+        assert pair.resources()[0] == 2
+        assert pair.player.next_ship_to_top == 1
+        assert _first(office) not in pair.legal()
+    cutter = pair.game.trade_row[0]
+    pair.step(OFFSETS.buy_card + cutter.index)
+    assert (pair.player.ordered_top == [cutter]) == top_deck
+    assert (cutter in pair.player.discard_pile) != top_deck
+
+
+@pytest.mark.parametrize("played_this_turn", [True, False])
+def test_brain_world_scrap_is_one_activation_on_every_turn(played_this_turn):
+    if played_this_turn:
+        pair = Pair(hand=("Brain World", "Scout"))
+        world = pair.play("Brain World")
+    else:
+        pair = Pair(hand=("Scout",), bases=("Brain World",))
+        world = _index("Brain World")
+    pair.step(_first(world))
+    assert pair.player.get_current_pending_set() is not None
+    pair.step(OFFSETS.scrap_hand + _index("Scout"))
+    while pair.player.get_current_pending_set() is not None:
+        pair.step(SKIP_INDEX)
+    # One card scrapped, one drawn.
+    assert [card.name for card in pair.player.hand] == ["Viper"]
+    assert _first(world) not in pair.legal()

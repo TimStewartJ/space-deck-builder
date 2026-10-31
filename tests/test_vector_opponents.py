@@ -246,6 +246,65 @@ def test_held_out_bots_count_a_blob_card_scrapped_this_turn(style):
     assert pick is ability.child_effects[1]
 
 
+def _established_central_office():
+    """Central Office in play since an earlier turn, a Cutter for sale."""
+    game, player, _ = _game()
+    office = _card("Central Office")
+    player.bases = [office]
+    game.trade_row = [_card("Cutter")]
+    return game, player, office
+
+
+@pytest.mark.parametrize("kind", [FixedOpponent.HEURISTIC, FixedOpponent.SIMPLE])
+def test_fixed_opponents_use_central_office_in_two_activations(kind):
+    """Its trade and its optional top-deck are two actions in both engines."""
+    game, player, office = _established_central_office()
+    agent = HeuristicAgent() if kind == FixedOpponent.HEURISTIC else SimpleAgent("Simple")
+    engine = VectorEngine(from_games([game], RULES), RULES)
+    effect = get_action_offsets(REGISTRY.num_cards).effect_nonscrap + office.index
+    chosen = []
+    while True:
+        engine.build_masks()
+        actions = np.asarray([END_TURN_INDEX], dtype=np.int32)
+        variants = np.zeros(1, dtype=np.int16)
+        select_fixed_actions(
+            engine, POLICY_DATA, np.asarray([int(kind)], dtype=np.int8),
+            np.asarray([0], dtype=np.int64), actions, variants,
+        )
+        scalar_action = agent.make_decision(game)
+        index = encode_action(scalar_action, REGISTRY.card_names, REGISTRY.card_index_map)
+        assert int(actions[0]) == index
+        if scalar_action.type == ActionType.END_TURN:
+            break
+        chosen.append(index)
+        game.execute_action(scalar_action)
+        engine.step(actions, action_variants=variants)
+        assert_canonical_equal(
+            canonical_scalar_snapshot(game, RULES),
+            canonical_vector_snapshot(engine.state, 0),
+        )
+    assert chosen.count(effect) == 2
+
+
+@pytest.mark.parametrize(
+    "style", ["balanced", "aggro", "economy", "scrapper", "fortress", "blobrush"]
+)
+def test_held_out_bots_take_central_office_top_deck_on_later_turns(style):
+    """As on the turn it is played, the bots take the trade and the top-deck."""
+    from src.ai.held_out_agents import HeldOutAgent
+
+    game, player, office = _established_central_office()
+    agent = HeldOutAgent("P0", style)
+    first = agent.make_decision(game)
+    assert first.card is office
+    game.execute_action(first)
+    assert (player.trade, player.next_ship_to_top) == (2, 0)
+    second = agent.make_decision(game)
+    assert second.card is office
+    game.execute_action(second)
+    assert (player.trade, player.next_ship_to_top) == (2, 1)
+
+
 def _patrol_mech_choice(*, hand=(), row=(), combat=0, opponent_health=50):
     """Patrol Mech just played: its OR ability awaits a choice."""
     game, player, opponent = _game()

@@ -192,7 +192,7 @@ class HeldOutAgent(Agent):
         self.style = style
         self.params = STYLE_PARAMETERS[style]
         self._turn = None
-        self._seen: set[int] = set()
+        self._seen: set[tuple[int, int]] = set()
         self._steps = 0
         self._done_buying = False
 
@@ -375,11 +375,24 @@ class HeldOutAgent(Agent):
             return attack
         return end_turn
 
+    def _seen_key(self, effect):
+        """Identity under which an ability is considered once this turn.
+
+        An activation that leaves part of the ability unused (on a later
+        turn, Central Office's trade leaves its optional top-deck) makes the
+        rest a new decision, as on the turn the base is played.
+        """
+        return id(effect), len(self._unapplied_leaves(effect))
+
     def _free_effect(self, game, player, opponent, effects):
         params = self.params
         for action in effects:
             effect = action.card_effect
-            if effect is None or effect.is_scrap_effect or id(effect) in self._seen:
+            if (
+                effect is None
+                or effect.is_scrap_effect
+                or self._seen_key(effect) in self._seen
+            ):
                 continue
             card = action.card
             parent = None
@@ -390,12 +403,12 @@ class HeldOutAgent(Agent):
             if parent is not None:
                 pick = self._choose_or(game, player, opponent, parent)
                 for child in parent.child_effects:
-                    self._seen.add(id(child))
+                    self._seen.add(self._seen_key(child))
                 for candidate in effects:
                     if candidate.card_effect is pick:
                         return candidate
                 continue
-            self._seen.add(id(effect))
+            self._seen.add(self._seen_key(effect))
             leaves = self._unapplied_leaves(effect)
             if not leaves:
                 continue

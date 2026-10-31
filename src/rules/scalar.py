@@ -28,6 +28,40 @@ def _resolves_on_play(effect: Effect, resolution: PlayResolution) -> bool:
     return trigger in {EffectTrigger.AUTO, EffectTrigger.PASSIVE}
 
 
+def _unresolved_on_play(effect: Effect, resolution: PlayResolution) -> bool:
+    """Whether a part of *effect* that resolves on play is not applied yet."""
+    if effect.applied:
+        return False
+    if effect.effect_type == CardEffectType.PARENT:
+        return any(
+            _resolves_on_play(child, resolution)
+            and _unresolved_on_play(child, resolution)
+            for child in effect.child_effects or ()
+        )
+    return _resolves_on_play(effect, resolution)
+
+
+def _activation_resolution(effect: Effect, card) -> PlayResolution | None:
+    """What a player's activation of *card*'s ability *effect* resolves.
+
+    None means all of it. A base's primary ability whose automatic parts
+    resolve when the base is played resolves only those parts while they are
+    unapplied, which on a later turn is its first activation; its choices
+    are a separate activation, as on the turn the base is played (Central
+    Office: the trade, then the optional top-deck).
+    """
+    if card is None or not card.is_base():
+        return None
+    if not any(effect is ability for ability in card.effects):
+        return None
+    resolution = ability_play_resolution(effect, ship=False)
+    if resolution == PlayResolution.AUTO_PARTS and _unresolved_on_play(
+        effect, resolution
+    ):
+        return resolution
+    return None
+
+
 def resolve_on_play(effect: Effect, game, player, card) -> None:
     """Resolve what of *card*'s top-level ability *effect* happens on play.
 
@@ -241,7 +275,8 @@ def apply_effect(
 ) -> None:
     """Apply one mutable Effect through the shared opcode contract.
 
-    Without *resolution* the effect is applied as a player-activated ability.
+    Without *resolution* the effect is applied as a player-activated ability
+    (see :func:`_activation_resolution` for what an activation resolves).
     With one, only the parts that resolve when the card is played under that
     :class:`PlayResolution` are applied (see :func:`resolve_on_play`).
 
@@ -254,9 +289,12 @@ def apply_effect(
         )
     if effect.applied:
         return
+    activated = resolution is None
+    if activated:
+        resolution = _activation_resolution(effect, card)
     if not _apply(effect, game, player, card, resolution=resolution):
         return
-    if effect.or_parent is not None and resolution is None:
+    if effect.or_parent is not None and activated:
         for option in effect.or_parent.child_effects:
             _mark_used(option)
 

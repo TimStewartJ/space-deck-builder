@@ -2295,6 +2295,23 @@ def step_kernel(
                         if candidate_variant != action_variant:
                             candidate_variant += 1
                             continue
+                        # An established base's automatic parts resolve
+                        # first and alone, as when it is played; its choices
+                        # are a later activation of the same ability (scalar
+                        # _activation_resolution).
+                        automatic = False
+                        for grouped in range(bundle_count[rule_card]):
+                            if (
+                                (instance_state & _bundle_bit(grouped)) != 0
+                                and bundle_trigger[rule_card, grouped]
+                                == TRIGGER_AUTO
+                                and bundle_source_effect[rule_card, grouped]
+                                == bundle_source_effect[rule_card, bundle]
+                                and bundle_option[rule_card, grouped]
+                                == bundle_option[rule_card, bundle]
+                            ):
+                                automatic = True
+                                break
                         next_state = instance_state
                         for grouped in range(bundle_count[rule_card]):
                             if (
@@ -2302,6 +2319,11 @@ def step_kernel(
                                 == 0
                                 or bundle_trigger[rule_card, grouped]
                                 == TRIGGER_SCRAP
+                                or (
+                                    bundle_trigger[rule_card, grouped]
+                                    == TRIGGER_AUTO
+                                )
+                                != automatic
                                 or bundle_source_effect[
                                     rule_card, grouped
                                 ]

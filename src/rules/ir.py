@@ -14,13 +14,14 @@ RULE_IR_VERSION = 2
 #   1: every result before decision 0016. An OR ability gave both options,
 #      choices in a ship's primary ability could be used at any time,
 #      Machine Base drew at once when played (494 actions for the Core Set),
-#      and Blob World counted only the Blob cards still in play.
+#      Blob World counted only the Blob cards still in play, and an
+#      established Central Office's activation forced its top-deck.
 #   2: docs/decisions/0016-rulebook-ability-timing.md. An OR ability gives one
 #      option (543 actions for the Core Set: options have their own action
 #      group), a ship's primary ability resolves completely when the ship is
 #      played, Machine Base draws and then must scrap in one activation, also
-#      on the turn it is played, and Blob World counts every Blob card played
-#      this turn.
+#      on the turn it is played, Blob World counts every Blob card played
+#      this turn, and Central Office's top-deck is optional on every turn.
 RULES_VERSION = 2
 
 
@@ -70,8 +71,11 @@ class PlayResolution(IntEnum):
     # choice that must follow them are one activation).
     NONE = 0
     # The automatic parts (resources, draws, discard debt); any optional
-    # choice in it stays a player-activated action. A base's primary ability
-    # on the turn the base is played.
+    # choice in it stays a separate player-activated action. A base's primary
+    # ability on the turn the base is played. On a later turn the player's
+    # first activation of it resolves the same automatic parts, and the
+    # choices stay a separate activation (Central Office: the trade, then the
+    # optional top-deck).
     AUTO_PARTS = 1
     # All of it: a ship's primary ability. Its choices become pending
     # decisions made before any other action, and an OR ability opens a
@@ -110,6 +114,12 @@ PASSIVE_EFFECT_TYPES = frozenset(
         CardEffectType.WILDCARD_ALLY,
     }
 )
+
+# Card text with no operation of its own, part of the rest of its ability:
+# Brain World's "Draw a card for each card scrapped this way" is its scrap's
+# completion draw, and Stealth Needle's faction comes with its copy. It is
+# never an automatic part on its own.
+MARKER_EFFECT_TYPES = frozenset({CardEffectType.COMPLEX})
 
 
 def _holds_mandatory_choice(effect: Effect) -> bool:
@@ -165,7 +175,10 @@ def compile_effect_trigger(
         return EffectTrigger.ALLY, int(parse_faction(faction_name)), requirement
     if resolution == PlayResolution.WHOLE:
         return EffectTrigger.AUTO, int(Faction.NONE), 0
-    if effect.effect_type in CHOICE_EFFECT_TYPES:
+    if (
+        effect.effect_type in CHOICE_EFFECT_TYPES
+        or effect.effect_type in MARKER_EFFECT_TYPES
+    ):
         return EffectTrigger.ACTIVATE, int(Faction.NONE), 0
     if resolution == PlayResolution.AUTO_PARTS:
         return EffectTrigger.AUTO, int(Faction.NONE), 0
