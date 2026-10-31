@@ -163,7 +163,11 @@ in a single process:
 | 100 updates (one process per lane) | 300 / 321 / 313 s | 5.61 min |
 
 Three extra restarts per lane cost about 32 s, so the other lanes did not
-absorb the restarts. The reference-family presets therefore run in 100-update
+absorb the restarts. The single-process arm also played its three interim
+evaluations at the final gauntlet's size, about 9 s more per lane, so the
+measured saving slightly understates the real one; arcs now keep every
+evaluation but the last at the interim size (`--final-eval-games`). The
+reference-family presets therefore run in 100-update
 processes: a 400-update arc restarts three times instead of fifteen, saving
 about 10% of its time, and an interrupted arc loses at most 100 updates. The
 eager evaluators (`--no-vec-graph-inference`) still drift and should run in

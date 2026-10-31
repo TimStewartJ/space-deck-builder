@@ -82,8 +82,12 @@ process ages (three lanes kept their speed through 400 updates in one
 process), and each fresh process costs about 10 s. The reference-family
 presets now restart every 100 updates instead of every 25; processes still
 hand over optimizer, scheduler, pool and RNG state, and chunk ends still fall
-on the evaluation cadence. Decision 0009's 25-update limit still applies to
-the eager evaluators.
+on the evaluation cadence. Graph warm-ups restore the CUDA generator, so a
+process's random stream does not depend on when it captures its graphs and a
+resumed arc continues the stream it saved. Every evaluation plays the interim
+number of games except the arc's last update (`--final-eval-games`), however
+many evaluations the final process runs. Decision 0009's 25-update limit
+still applies to the eager evaluators.
 
 ## Rejected alternatives
 

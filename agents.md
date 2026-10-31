@@ -211,7 +211,9 @@ graphs captured per batch-size bucket, observations written by the engine
 straight into pinned memory, and the learner's decisions recorded in device
 storage that becomes the PPO batch. The runner and its graphs persist for the
 whole process, and in-training evaluation plays its games on the vector engine.
-`--no-vec-graph-inference` restores the eager evaluators of ADR 0009.
+Models with token features, attention pooling or an attention actor, and runs
+without a GPU, use the eager evaluators of ADR 0009 and evaluate on the object
+engine; `--no-vec-graph-inference` selects them explicitly.
 
 ### Information-set search support
 `src/search/information_set.py` projects a live scalar decision into only the
@@ -359,8 +361,10 @@ python -m src purchase-audit --model <ckpt> --output-json audit.json
   function is losing track of the state distribution.
 - **`--simulation-device cuda`** is faster than `cpu` because the BatchRunner does batched inference on GPU, eliminating CPU↔GPU transfer per batch.
 - **Checkpoints** are saved after every update to `models/ppo_agent_{timestamp}_upd{N}_wins{W}.pth`. Only eval updates record a real win count; others save `wins-1`.
-- **Eval is cheap on the vector engine** — with `--engine vec` on a GPU, in-training
-  evaluation plays its games in one vector population (about 1 s for 3,200
-  games). On the object engine it uses worker processes; raise `--eval-every`
-  there for long runs. Eval always runs on the last update regardless.
+- **Eval is cheap on the vector engine** — with `--engine vec` and graph-replayed
+  inference on a GPU, in-training evaluation plays its games in one vector
+  population (about 1 s for 3,200 games). Otherwise it plays on the object
+  engine with worker processes; raise `--eval-every` there for long runs.
+  Eval always runs on the last update regardless; `--final-eval-games` sizes
+  that last evaluation separately.
 - **Publish checkpoints a result depends on** with `scripts/release_artifacts.py publish` rather than committing them; see `docs/eval_protocol.md` §8.
