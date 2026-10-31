@@ -341,7 +341,30 @@ try {
         $chunkArgs = $commonArgs + @(
             "--eval-num-workers", [string]$evalWorkers
         )
-        $manifest.chunks_manifest = Join-Path $chunksDir "manifest.json"
+        $chunkFinalGames = $finalGames
+        $chunksManifestPath = Join-Path $chunksDir "manifest.json"
+        if (Test-Path -LiteralPath $chunksManifestPath -PathType Leaf) {
+            $existingChunks = Get-Content `
+                -LiteralPath $chunksManifestPath -Raw | ConvertFrom-Json
+            $recordedFinalGames = if (
+                $existingChunks.PSObject.Properties["final_eval_games"]
+            ) {
+                [int]$existingChunks.final_eval_games
+            } else {
+                0
+            }
+            if ($recordedFinalGames -eq 0) {
+                # Arcs started before chunks took a separate final size gave
+                # every chunk the final size and let non-final chunks
+                # override it; resume them with the arguments they recorded.
+                $chunkArgs = $commonArgs + @(
+                    "--eval-games", [string]$finalGames,
+                    "--eval-num-workers", [string]$evalWorkers
+                )
+                $chunkFinalGames = 0
+            }
+        }
+        $manifest.chunks_manifest = $chunksManifestPath
         Save-Manifest $manifest $manifestPath
         & (Join-Path $PSScriptRoot "chunked_resume.ps1") `
             -StartCheckpoint $bootstrapCheckpoint `
@@ -351,7 +374,7 @@ try {
             -ExtraArgs $chunkArgs `
             -InterimEvalGames $interimGames `
             -InterimNumWorkers $evalWorkers `
-            -FinalEvalGames $finalGames `
+            -FinalEvalGames $chunkFinalGames `
             -LogsDir $chunksDir `
             -WorkingDir $Repo `
             -Python $Python `

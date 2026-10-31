@@ -92,7 +92,8 @@ foreach (
         "--updates",
         "--lr-horizon",
         "--self-play-horizon",
-        "--models-dir"
+        "--models-dir",
+        "--final-eval-games"
     )
 ) {
     $hasEqualsForm = @(
