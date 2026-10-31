@@ -154,6 +154,8 @@ def _or_game(card_name, *, row=(), combat=0, opponent_health=50, allies=()):
     for ally in player.played_cards[1:]:
         for effect in ally.effects:
             effect.applied = True
+    for played in player.played_cards:
+        player.record_faction_play(played.effective_faction)
     if card.is_base():
         player.bases = [card]
     player.combat = combat
@@ -187,6 +189,61 @@ def test_heuristic_or_option_rule_matches_scalar(card_name, situation, expected_
     expected = getattr(offsets, expected_group) + card.index
     assert _scalar_choice(game, HeuristicAgent()) == expected
     assert _vector_choice(game, FixedOpponent.HEURISTIC)[0] == expected
+
+
+def _blob_world_after_a_scrap():
+    """Blob World in play; Ram and Trade Pod played this turn, Ram scrapped.
+
+    Every other ability is used, so only Blob World's OR ability is left.
+    """
+    game, player, _ = _game()
+    world = _card("Blob World")
+    player.bases = [world]
+    ram, pod = _card("Ram"), _card("Trade Pod")
+    for card in (ram, pod):
+        player.hand.append(card)
+        game.execute_action(Action(ActionType.PLAY_CARD, card=card, card_id=card.index))
+    scrap = next(
+        action for action in get_available_actions(game, player)
+        if action.type == ActionType.APPLY_EFFECT
+        and action.card is ram
+        and action.card_effect.is_scrap_effect
+    )
+    game.execute_action(scrap)
+    assert ram not in player.played_cards
+    while True:
+        other = next(
+            (
+                action for action in get_available_actions(game, player)
+                if action.type == ActionType.APPLY_EFFECT and action.card is not world
+            ),
+            None,
+        )
+        if other is None:
+            break
+        game.execute_action(other)
+    return game, world
+
+
+def test_heuristic_counts_a_blob_card_scrapped_this_turn():
+    """Two Blob cards were played, so Blob World's draw option is taken."""
+    game, world = _blob_world_after_a_scrap()
+    expected = get_action_offsets(REGISTRY.num_cards).effect_alt + world.index
+    assert _scalar_choice(game, HeuristicAgent()) == expected
+    assert _vector_choice(game, FixedOpponent.HEURISTIC)[0] == expected
+
+
+@pytest.mark.parametrize(
+    "style", ["balanced", "aggro", "economy", "scrapper", "fortress", "blobrush"]
+)
+def test_held_out_bots_count_a_blob_card_scrapped_this_turn(style):
+    from src.ai.held_out_agents import HeldOutAgent
+
+    game, world = _blob_world_after_a_scrap()
+    player, opponent = game.players
+    ability = world.effects[0]
+    pick = HeldOutAgent("P0", style)._choose_or(game, player, opponent, ability)
+    assert pick is ability.child_effects[1]
 
 
 def _patrol_mech_choice(*, hand=(), row=(), combat=0, opponent_health=50):

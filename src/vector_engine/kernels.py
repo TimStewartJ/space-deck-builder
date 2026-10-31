@@ -547,39 +547,21 @@ def _draw_one(
 
 
 @njit(inline="always")
-def _played_faction_count(
-    zones,
-    effect_state,
-    instance_faction,
-    card_faction,
-    game,
-    player,
-    target,
-):
-    """Cards played this turn whose effective faction includes *target*.
+def _faction_slot(faction):
+    """Index of the single faction bit *faction* in a per-faction count."""
+    slot = 0
+    while faction > 1:
+        faction >>= 1
+        slot += 1
+    return slot
 
-    Matches the scalar count over ``player.played_cards`` by effective
-    faction, which Blob World's draw-per-faction option uses.
-    """
-    count = 0
-    for active_card in range(zones.shape[3]):
-        active_instances = 0
-        for active_instance in range(effect_state.shape[3]):
-            state = effect_state[game, player, active_card, active_instance]
-            if (state & ACTIVE_BIT) == 0:
-                break
-            active_instances += 1
-            if (
-                state & CURRENT_TURN_BIT
-                and instance_faction[
-                    game, player, active_card, active_instance
-                ]
-                & target
-            ):
-                count += 1
-        if active_instances == 0 and card_faction[active_card] & target:
-            count += zones[game, player, ZONE_PLAYED, active_card]
-    return count
+
+@njit(inline="always")
+def _record_faction_plays(faction_plays, game, player, factions):
+    """Count one card played this turn for each faction bit in *factions*."""
+    for slot in range(faction_plays.shape[2]):
+        if factions & (1 << slot):
+            faction_plays[game, player, slot] += 1
 
 
 @njit(cache=True)
@@ -608,6 +590,7 @@ def _apply_bundle(
     ordered_top,
     ordered_top_count,
     next_ship_to_top,
+    faction_plays,
     rng_state,
     game,
     player,
@@ -651,15 +634,11 @@ def _apply_bundle(
                     draw_position,
                 )
         elif opcode == OP_DRAW_PER_FACTION:
-            draws = _played_faction_count(
-                zones,
-                effect_state,
-                instance_faction,
-                card_faction,
-                game,
-                player,
-                op_arg[rule_card, operation],
-            )
+            # Every card of the faction played this turn counts, also one
+            # scrapped since it was played.
+            draws = faction_plays[
+                game, player, _faction_slot(op_arg[rule_card, operation])
+            ]
             for _ in range(draws):
                 draw_position = _draw_one(
                     zones,
@@ -1385,6 +1364,7 @@ def step_kernel(
     ordered_top,
     ordered_top_count,
     next_ship_to_top,
+    faction_plays,
     rng_state,
     hand_size,
     turn_cap,
@@ -1660,6 +1640,9 @@ def step_kernel(
                         instance_rule_card[
                             game, player, source_card, source_instance
                         ] = copied_rule
+                        factions_before = instance_faction[
+                            game, player, source_card, source_instance
+                        ]
                         instance_faction[
                             game, player, source_card, source_instance
                         ] = (
@@ -1670,6 +1653,17 @@ def step_kernel(
                                 target_card,
                                 target_instance,
                             ]
+                        )
+                        # Stealth Needle counts as a card played this turn
+                        # of each faction its copy adds.
+                        _record_faction_plays(
+                            faction_plays,
+                            game,
+                            player,
+                            instance_faction[
+                                game, player, source_card, source_instance
+                            ]
+                            & ~factions_before,
                         )
                         source_state = ACTIVE_BIT | CURRENT_TURN_BIT
                         for bundle in range(bundle_count[copied_rule]):
@@ -1712,6 +1706,7 @@ def step_kernel(
                                     ordered_top,
                                     ordered_top_count,
                                     next_ship_to_top,
+                                    faction_plays,
                                     rng_state,
                                     game,
                                     player,
@@ -1822,6 +1817,7 @@ def step_kernel(
                             ordered_top,
                             ordered_top_count,
                             next_ship_to_top,
+                            faction_plays,
                             rng_state,
                             game,
                             player,
@@ -1970,6 +1966,9 @@ def step_kernel(
                 zones[game, player, ZONE_PLAYED, card] += 1
                 if card_type[card] != 0:
                     zones[game, player, ZONE_BASES, card] += 1
+                _record_faction_plays(
+                    faction_plays, game, player, card_faction[card]
+                )
                 if card_type[card] == 0:
                     for passive_card in range(zones.shape[3]):
                         for passive_instance in range(
@@ -2058,6 +2057,7 @@ def step_kernel(
                             ordered_top,
                             ordered_top_count,
                             next_ship_to_top,
+                            faction_plays,
                             rng_state,
                             game,
                             player,
@@ -2349,6 +2349,7 @@ def step_kernel(
                                 ordered_top,
                                 ordered_top_count,
                                 next_ship_to_top,
+                                faction_plays,
                                 rng_state,
                                 game,
                                 player,
@@ -2439,6 +2440,7 @@ def step_kernel(
                             ordered_top,
                             ordered_top_count,
                             next_ship_to_top,
+                            faction_plays,
                             rng_state,
                             game,
                             player,
@@ -2529,6 +2531,8 @@ def step_kernel(
                             else 0
                         )
             next_ship_to_top[game, player] = 0
+            for slot in range(faction_plays.shape[2]):
+                faction_plays[game, player, slot] = 0
             for _ in range(hand_size[game]):
                 draw_position = _draw_one(
                     zones,
@@ -3033,6 +3037,7 @@ class VectorEngine:
             s.ordered_top,
             s.ordered_top_count,
             s.next_ship_to_top,
+            s.faction_plays,
             s.rng_state,
             s.hand_size,
             s.turn_cap,

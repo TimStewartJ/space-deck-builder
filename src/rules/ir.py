@@ -4,7 +4,7 @@ from __future__ import annotations
 from enum import IntEnum
 
 from src.cards.effects import CardEffectType, Effect
-from src.cards.factions import Faction, parse_faction
+from src.cards.factions import SINGLE_FACTIONS, Faction, parse_faction
 
 RULE_IR_VERSION = 2
 
@@ -12,13 +12,15 @@ RULE_IR_VERSION = 2
 # a checkpoint trained under another version does not load, because the action
 # layout and the meaning of actions differ between versions.
 #   1: every result before decision 0016. An OR ability gave both options,
-#      choices in a ship's primary ability could be used at any time, and
-#      Machine Base drew at once when played (494 actions for the Core Set).
+#      choices in a ship's primary ability could be used at any time,
+#      Machine Base drew at once when played (494 actions for the Core Set),
+#      and Blob World counted only the Blob cards still in play.
 #   2: docs/decisions/0016-rulebook-ability-timing.md. An OR ability gives one
 #      option (543 actions for the Core Set: options have their own action
 #      group), a ship's primary ability resolves completely when the ship is
-#      played, and Machine Base draws and then must scrap in one activation,
-#      also on the turn it is played.
+#      played, Machine Base draws and then must scrap in one activation, also
+#      on the turn it is played, and Blob World counts every Blob card played
+#      this turn.
 RULES_VERSION = 2
 
 
@@ -190,11 +192,15 @@ def compile_effect_op(effect: Effect) -> tuple[EffectOpcode, int, int]:
         return EffectOpcode.DRAW, effect.value, 0
     if kind == CardEffectType.DRAW_PER_FACTION:
         faction = (
-            int(parse_faction(effect.faction_target))
+            parse_faction(effect.faction_target)
             if effect.faction_target
-            else int(Faction.NONE)
+            else Faction.NONE
         )
-        return EffectOpcode.DRAW_PER_FACTION, 0, faction
+        if faction not in SINGLE_FACTIONS:
+            raise ValueError(
+                "a draw per faction counts the cards of exactly one faction"
+            )
+        return EffectOpcode.DRAW_PER_FACTION, 0, int(faction)
     if kind == CardEffectType.CONDITIONAL_DRAW:
         if effect.text != "bases_ge_2":
             raise ValueError(

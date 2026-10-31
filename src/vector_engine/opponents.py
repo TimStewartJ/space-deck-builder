@@ -31,7 +31,7 @@ from src.vector_engine.kernels import (
     _advance_rng,
     _bundle_bit,
     _bundle_eligible,
-    _played_faction_count,
+    _faction_slot,
 )
 from src.vector_engine.rules import CompiledRules, MAX_BUNDLES, _templates_by_name
 from src.vector_engine.state import (
@@ -515,6 +515,7 @@ def _select_heuristic_pending(
     health,
     trade_row,
     explorer_count,
+    faction_plays,
     effect_state,
     instance_rule_card,
     instance_faction,
@@ -556,8 +557,7 @@ def _select_heuristic_pending(
             health,
             trade_row,
             explorer_count,
-            effect_state,
-            instance_faction,
+            faction_plays,
             card_faction,
             card_type,
             cost,
@@ -762,8 +762,7 @@ def _heuristic_option(
     health,
     trade_row,
     explorer_count,
-    effect_state,
-    instance_faction,
+    faction_plays,
     card_faction,
     card_type,
     cost,
@@ -832,16 +831,13 @@ def _heuristic_option(
     option = _option_of_kind(kind_first, kind_second, OPTION_DRAW_PER_FACTION)
     if option:
         bundle = first if option == 1 else second
+        # Every card of the faction played this turn counts, scrapped or not.
         if (
-            _played_faction_count(
-                zones,
-                effect_state,
-                instance_faction,
-                card_faction,
+            faction_plays[
                 game,
                 player,
-                bundle_option_faction[rule_card, bundle],
-            )
+                _faction_slot(bundle_option_faction[rule_card, bundle]),
+            ]
             >= 2
         ):
             return option
@@ -860,6 +856,7 @@ def _select_effect(
     health,
     trade_row,
     explorer_count,
+    faction_plays,
     effect_state,
     instance_rule_card,
     instance_faction,
@@ -976,8 +973,7 @@ def _select_effect(
                             health,
                             trade_row,
                             explorer_count,
-                            effect_state,
-                            instance_faction,
+                            faction_plays,
                             card_faction,
                             card_type,
                             cost,
@@ -1015,6 +1011,7 @@ def _select_simple(
     health,
     trade_row,
     explorer_count,
+    faction_plays,
     current_player,
     effect_state,
     instance_rule_card,
@@ -1078,6 +1075,7 @@ def _select_simple(
         health,
         trade_row,
         explorer_count,
+        faction_plays,
         effect_state,
         instance_rule_card,
         instance_faction,
@@ -1115,6 +1113,7 @@ def _select_heuristic(
     health,
     trade_row,
     explorer_count,
+    faction_plays,
     current_player,
     effect_state,
     instance_rule_card,
@@ -1162,6 +1161,7 @@ def _select_heuristic(
             health,
             trade_row,
             explorer_count,
+            faction_plays,
             effect_state,
             instance_rule_card,
             instance_faction,
@@ -1208,6 +1208,7 @@ def _select_heuristic(
         health,
         trade_row,
         explorer_count,
+        faction_plays,
         effect_state,
         instance_rule_card,
         instance_faction,
@@ -1292,6 +1293,7 @@ def select_fixed_actions_kernel(
     health,
     trade_row,
     explorer_count,
+    faction_plays,
     current_player,
     done,
     effect_state,
@@ -1349,6 +1351,7 @@ def select_fixed_actions_kernel(
                 health,
                 trade_row,
                 explorer_count,
+                faction_plays,
                 current_player,
                 effect_state,
                 instance_rule_card,
@@ -1387,6 +1390,7 @@ def select_fixed_actions_kernel(
                 health,
                 trade_row,
                 explorer_count,
+                faction_plays,
                 current_player,
                 effect_state,
                 instance_rule_card,
@@ -1449,6 +1453,7 @@ def select_fixed_actions(
         state.health,
         state.trade_row,
         state.explorer_count,
+        state.faction_plays,
         state.current_player,
         state.done,
         state.effect_state,

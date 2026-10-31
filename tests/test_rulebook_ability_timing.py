@@ -195,6 +195,52 @@ def _index(name):
     return REGISTRY.card_index_map[name]
 
 
+@pytest.mark.parametrize("played_this_turn", [False, True])
+def test_blob_world_draws_for_a_blob_card_scrapped_this_turn(played_this_turn):
+    """Blob World draws "a card for each Blob card that you've played this turn".
+
+    Ram is scrapped for its trade before Blob World's draw option; it was
+    played this turn, so it counts. Blob World counts itself on the turn it is
+    played.
+    """
+    if played_this_turn:
+        pair = Pair(hand=("Blob World", "Ram", "Blob Fighter"))
+        world = pair.play("Blob World")
+    else:
+        pair = Pair(hand=("Ram", "Blob Fighter"), bases=("Blob World",))
+        world = _index("Blob World")
+    ram = pair.play("Ram")
+    pair.play("Blob Fighter")
+    pair.step(OFFSETS.effect_scrap + ram)
+    assert "Ram" not in [card.name for card in pair.player.played_cards]
+    hand = len(pair.player.hand)
+    pair.step(_second(world))
+    assert len(pair.player.hand) == hand + (3 if played_this_turn else 2)
+
+
+def test_blob_world_counts_a_stealth_needle_copy_of_a_blob_ship():
+    """The copy gives the Needle the Blob faction: it is a Blob card played."""
+    pair = Pair(hand=("Ram", "Stealth Needle"), bases=("Blob World",))
+    ram = pair.play("Ram")
+    needle = pair.play("Stealth Needle")
+    pair.step(_first(ram))
+    # The copied scrap ability scraps the Needle; it still counts.
+    pair.step(OFFSETS.effect_scrap + needle)
+    hand = len(pair.player.hand)
+    pair.step(_second(_index("Blob World")))
+    assert len(pair.player.hand) == hand + 2
+
+
+def test_blob_world_count_starts_again_each_turn():
+    pair = Pair(hand=("Ram",), bases=("Blob World",))
+    pair.play("Ram")
+    pair.step(END_TURN_INDEX)
+    pair.step(END_TURN_INDEX)
+    hand = len(pair.player.hand)
+    pair.step(_second(_index("Blob World")))
+    assert len(pair.player.hand) == hand
+
+
 # Ships whose primary ability holds a choice: the resources the rest of the
 # ability adds, and the choice's targets once played with a Scout in hand, a
 # Viper in the discard pile, a Cutter in the trade row and an opposing

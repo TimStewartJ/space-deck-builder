@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from src.cards.effects import CardEffectType, Effect
+from src.cards.factions import Faction
 from src.rules.ir import (
     PASSIVE_EFFECT_TYPES,
     EffectOpcode,
@@ -313,12 +314,9 @@ def _apply(
     elif opcode == EffectOpcode.QUEUE_DESTROY_BASE:
         _queue_destroy(effect, game, player)
     elif opcode == EffectOpcode.DRAW_PER_FACTION:
-        count = sum(
-            1
-            for active in player.played_cards
-            if int(active.effective_faction) & arg
-        )
-        for _ in range(count):
+        # Every card of the faction played this turn counts, also one
+        # scrapped since it was played.
+        for _ in range(player.cards_played_of_faction(Faction(arg))):
             player.draw_card()
     elif opcode == EffectOpcode.DRAW_IF_BASES_GE_2:
         if len(player.bases) >= arg:

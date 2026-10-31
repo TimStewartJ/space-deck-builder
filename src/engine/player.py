@@ -1,7 +1,7 @@
 from collections import Counter
 from typing import List, Optional
 from src.cards.card import Card
-from src.cards.factions import Faction, parse_faction
+from src.cards.factions import Faction, SINGLE_FACTIONS, faction_slot, parse_faction
 from src.ai.agent import Agent
 from src.config import GameConfig
 from src.engine.actions import ActionType, Action, get_available_actions, PendingActionSet
@@ -34,6 +34,12 @@ class Player:
         # player (not the attacker) chooses which cards to discard.
         self.pending_start_of_turn_discards: int = 0
         self.next_ship_to_top: int = 0
+        # Cards played this turn, counted for each faction they belong to
+        # (in SINGLE_FACTIONS order). A card scrapped after it was played
+        # still counts: Blob World draws a card for each Blob card played
+        # this turn. A Stealth Needle counts again for each faction its copy
+        # gives it.
+        self.faction_plays: List[int] = [0] * len(SINGLE_FACTIONS)
         # Cached faction ally counts — updated incrementally on card play,
         # reset on end_turn. Maps Faction bit → count of cards contributing.
         self._faction_counts: dict[Faction, int] = {}
@@ -119,10 +125,21 @@ class Player:
             self.played_cards.append(card)
             if card.is_base():
                 self.bases.append(card)
+            self.record_faction_play(card.effective_faction)
             # Update cached faction counts for the newly played card
             self._update_faction_counts_for_card(card)
             return True
         return False
+
+    def record_faction_play(self, factions: Faction) -> None:
+        """Count one card played this turn for each faction in *factions*."""
+        for slot, faction in enumerate(SINGLE_FACTIONS):
+            if factions & faction:
+                self.faction_plays[slot] += 1
+
+    def cards_played_of_faction(self, faction: Faction) -> int:
+        """Cards of the single faction *faction* played this turn, scrapped or not."""
+        return self.faction_plays[faction_slot(faction)]
 
     def put_on_top(self, card):
         """Place an acquired card above every card currently in the deck."""
@@ -201,6 +218,7 @@ class Player:
         self.played_cards = []
         self.reset_pending_actions()
         self.next_ship_to_top = 0
+        self.faction_plays = [0] * len(SINGLE_FACTIONS)
 
         # Reset base effects so they're available again next turn
         for base in self.bases:

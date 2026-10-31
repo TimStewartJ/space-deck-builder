@@ -28,6 +28,7 @@ from types import MappingProxyType
 
 from src.ai.agent import Agent
 from src.cards.effects import CardEffectType as T
+from src.cards.factions import Faction
 from src.engine.actions import ActionType as A, CardSource, get_available_actions
 
 STARTERS = ("Scout", "Viper")
@@ -431,13 +432,13 @@ class HeldOutAgent(Agent):
 
         Recycling Station: discard and draw while the hand holds junk, else
         trade. Blob World: draw when at least two Blob cards were played this
-        turn, else combat. Trade or combat (Patrol Mech): combat when it
-        reaches the opponent's authority plus outpost defense; otherwise trade
-        in the early phase (also the middle phase except for aggro), combat
-        later. Authority or trade (Trading Post, Barter World): trade in the
-        early and middle phases, then authority. Authority or combat (Defense
-        Center): with no outpost in the way or when it is lethal, combat
-        (fortress: authority); otherwise authority.
+        turn (scrapped or not), else combat. Trade or combat (Patrol Mech):
+        combat when it reaches the opponent's authority plus outpost defense;
+        otherwise trade in the early phase (also the middle phase except for
+        aggro), combat later. Authority or trade (Trading Post, Barter World):
+        trade in the early and middle phases, then authority. Authority or
+        combat (Defense Center): with no outpost in the way or when it is
+        lethal, combat (fortress: authority); otherwise authority.
         """
         phase = self._phase(game)
         style = self.style
@@ -450,7 +451,7 @@ class HeldOutAgent(Agent):
                 return kinds[T.DISCARD_DRAW]
             return kinds[T.TRADE]
         if T.DRAW_PER_FACTION in kinds:
-            blobs = sum(1 for c in player.played_cards if int(c.effective_faction) & 1)
+            blobs = player.cards_played_of_faction(Faction.BLOB)
             return kinds[T.DRAW_PER_FACTION] if blobs >= 2 else kinds[T.COMBAT]
         if T.COMBAT in kinds and T.TRADE in kinds:
             if player.combat + kinds[T.COMBAT].value >= need:

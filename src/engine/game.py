@@ -5,6 +5,7 @@ from src.cards.effects import CardEffectType
 from src.utils import logger as _logger
 from src.utils.logger import log
 from src.cards.card import Card, CardType
+from src.cards.factions import Faction
 from src.config import GameConfig
 from src.engine.player import Player
 from src.engine.actions import ActionType, Action, CardSource
@@ -329,7 +330,13 @@ class Game:
         ):
             source = action.additional_params["copy_source"]
             target = action.additional_params["copy_target"]
+            factions_before = int(source.effective_faction)
             source.copy_ship_rules(target)
+            # Stealth Needle counts as a card played this turn of each
+            # faction its copy adds.
+            self.current_player.record_faction_play(
+                Faction(int(source.effective_faction) & ~factions_before)
+            )
             self.current_player.invalidate_faction_cache()
             self._apply_auto_effects(source)
 

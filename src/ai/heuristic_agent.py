@@ -259,7 +259,8 @@ class HeuristicAgent(Agent):
         authority while no outpost blocks a direct attack; trade that lets
         the agent afford a card it would buy this turn
         (:meth:`_trade_enables_purchase`); a draw-per-faction option that
-        draws at least two cards. Otherwise combat, then authority, then
+        draws at least two cards (it counts every card of the faction played
+        this turn, scrapped or not). Otherwise combat, then authority, then
         trade, then the first option. The agent plays its whole hand before
         it uses a base, so Recycling Station's discard option would discard
         nothing and is never preferred.
@@ -284,10 +285,8 @@ class HeuristicAgent(Agent):
             return trade
         draw = by_kind.get(CardEffectType.DRAW_PER_FACTION)
         if draw is not None:
-            target = int(parse_faction(draw.card_effect.faction_target))
-            draws = sum(
-                1 for card in player.played_cards
-                if int(card.effective_faction) & target
+            draws = player.cards_played_of_faction(
+                parse_faction(draw.card_effect.faction_target)
             )
             if draws >= 2:
                 return draw

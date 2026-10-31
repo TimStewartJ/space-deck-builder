@@ -13,8 +13,9 @@ from src.vector_engine.differential import (
 from src.vector_engine.rules import compile_rules
 
 # Every card whose ability timing decision 0016 changed: the OR abilities,
-# the ships whose primary ability holds a choice, and Machine Base. Stealth
-# Needle copies the ships' choices.
+# the ships whose primary ability holds a choice, Machine Base and Central
+# Office. Stealth Needle copies the ships' choices, and Ram's scrap ability
+# removes a Blob card played this turn before Blob World counts them.
 RULES_CARDS = (
     "Patrol Mech",
     "Trading Post",
@@ -30,6 +31,8 @@ RULES_CARDS = (
     "Missile Mech",
     "Machine Base",
     "Stealth Needle",
+    "Central Office",
+    "Ram",
 )
 OR_CARDS = RULES_CARDS[:6]
 CHOICE_SHIPS = RULES_CARDS[6:12]
@@ -49,9 +52,12 @@ def _rules_card_game(cards, registry, rules, seed):
 
     The trade deck's Stealth Needle leaves the game, so no player owns two:
     the Core Set has one, and a Stealth Needle copying another that copied
-    nothing would open the same copy choice again forever.
+    nothing would open the same copy choice again forever. Random choices
+    can scrap both decks down to nothing with Machine Base, so a lower turn
+    cap ends such a stalemate.
     """
     game = make_supported_game(cards, registry, rules, seed)
+    game.config.turn_cap = 300
     game.trade_deck = [
         card for card in game.trade_deck if card.name != "Stealth Needle"
     ]
@@ -106,7 +112,7 @@ def test_same_seed_has_reproducible_trace_summary(setup):
 
 
 def test_rule_timing_cards_match_after_every_decision(setup):
-    """OR options, ship choices on play and Machine Base, in many games."""
+    """Every card whose rules decision 0016 changed, in many random games."""
     cards, registry, rules = setup
     games = [
         _rules_card_game(cards, registry, rules, seed)
@@ -128,6 +134,8 @@ def test_rule_timing_cards_match_after_every_decision(setup):
         assert used("play_choice", [name]) > 0, name
     assert used("copy_choice", ("Patrol Mech",) + CHOICE_SHIPS) > 0
     assert used("effect", ["Machine Base"]) > 0
+    assert used("effect", ["Central Office"]) > 0
+    assert used("scrap", ["Ram"]) > 0
     assert used("play_choice", ["Stealth Needle"]) > 0
     assert result.action_counts["skip"] > 0
     assert result.action_counts["scrap_discard"] > 0

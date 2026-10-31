@@ -16,6 +16,26 @@ class Faction(IntFlag):
     ALL = BLOB | MACHINE_CULT | STAR_EMPIRE | TRADE_FEDERATION  # wildcard
 
 
+# The single factions in bit order: entry i of a per-faction count belongs to
+# the faction whose bit is 1 << i.
+SINGLE_FACTIONS: tuple[Faction, ...] = (
+    Faction.BLOB,
+    Faction.MACHINE_CULT,
+    Faction.STAR_EMPIRE,
+    Faction.TRADE_FEDERATION,
+)
+
+
+def faction_slot(faction: Faction) -> int:
+    """Index of the single faction *faction* in :data:`SINGLE_FACTIONS`."""
+    try:
+        return SINGLE_FACTIONS.index(Faction(faction))
+    except ValueError:
+        raise ValueError(
+            f"{faction!r} is not exactly one faction"
+        ) from None
+
+
 # Canonical mapping from CSV/display strings to Faction bits
 _NAME_TO_FACTION: dict[str, Faction] = {
     "blob": Faction.BLOB,

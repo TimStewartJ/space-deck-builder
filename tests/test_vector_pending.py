@@ -193,10 +193,9 @@ def test_pending_source_snapshot_and_skip_preserve_resolved_draw():
 def test_or_option_applies_one_option_and_uses_the_ability(group):
     game, card = controlled("Blob World")
     ally = TEMPLATES["Trade Pod"].clone()
-    for effect in ally.effects:
-        effect.applied = True
-    game.current_player.played_cards.append(ally)
+    game.current_player.hand.append(ally)
     engine = make_engine(game)
+    step_pair(game, engine, OFFSETS["play_card"] + ally.index)
     step_pair(game, engine, OFFSETS["play_card"] + card.index)
     player = game.current_player
     first = OFFSETS["effect_nonscrap"] + card.index

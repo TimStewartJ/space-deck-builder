@@ -6,6 +6,7 @@ from typing import Iterable
 
 import numpy as np
 
+from src.cards.factions import SINGLE_FACTIONS
 from src.engine.game import Game
 from src.engine.actions import ActionType, CardSource
 from src.vector_engine.rules import CompiledRules, EffectTrigger
@@ -18,6 +19,7 @@ ZONE_PLAYED = 3
 ZONE_BASES = 4
 NUM_ZONES = 5
 NUM_PLAYERS = 2
+NUM_FACTIONS = len(SINGLE_FACTIONS)
 MAX_CARD_INSTANCES = 16
 MAX_ORDERED_TOP = 128
 INSTANCE_ACTIVE = np.uint16(1 << 15)
@@ -84,6 +86,9 @@ class VectorState:
     ordered_top: np.ndarray
     ordered_top_count: np.ndarray
     next_ship_to_top: np.ndarray
+    # Cards each player played this turn, per faction (SINGLE_FACTIONS
+    # order), including any scrapped since; reset at the end of the turn.
+    faction_plays: np.ndarray
     rng_state: np.ndarray
     hand_size: np.ndarray
     turn_cap: np.ndarray
@@ -196,6 +201,9 @@ class VectorState:
             ),
             next_ship_to_top=np.zeros(
                 (games, NUM_PLAYERS), dtype=np.int8
+            ),
+            faction_plays=np.zeros(
+                (games, NUM_PLAYERS, NUM_FACTIONS), dtype=np.int16
             ),
             rng_state=(
                 (np.arange(games, dtype=np.int64) + 1) * 1_103_515_245
@@ -537,6 +545,7 @@ def write_game_row(
         state.next_ship_to_top[
             game_index, player_index
         ] = player.next_ship_to_top
+        state.faction_plays[game_index, player_index] = player.faction_plays
         if len(player.ordered_top) > MAX_ORDERED_TOP:
             raise ValueError("ordered top-deck segment exceeds capacity")
         state.ordered_top_count[
@@ -645,6 +654,9 @@ def canonical_scalar_snapshot(
                     dtype=np.int16,
                 ),
                 "next_ship_to_top": player.next_ship_to_top,
+                "faction_plays": np.asarray(
+                    player.faction_plays, dtype=np.int16
+                ),
             }
         )
     return {
@@ -746,6 +758,9 @@ def canonical_vector_snapshot(
                 "next_ship_to_top": int(
                     state.next_ship_to_top[game_index, player]
                 ),
+                "faction_plays": state.faction_plays[
+                    game_index, player
+                ].copy(),
             }
         )
     row = state.trade_row[game_index]
@@ -807,6 +822,7 @@ def assert_canonical_equal(
             "discard_debt",
             "ordered_top",
             "next_ship_to_top",
+            "faction_plays",
         ):
             left = scalar["players"][player][key]
             right = vector["players"][player][key]
