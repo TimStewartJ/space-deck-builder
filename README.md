@@ -72,7 +72,7 @@ Train one seed end to end on Windows with:
 ```
 
 The script launches through Task Scheduler (outside the caller's process
-tree), trains in fresh 25-update processes with full resume continuity, and
+tree), trains in fresh 100-update processes with full resume continuity, and
 finishes with the locked exact-seat gauntlet. Re-running the same command
 resumes an interrupted arc. On other platforms, or for a single-process run,
 use `python -m src train --preset reference-selfplay --seed 0`; explicit
@@ -179,10 +179,14 @@ The same versioned Rule IR drives the scalar interpreter, so the object and
 vector engines no longer maintain separate effect-type implementations.
 
 Snapshot self-play reuses the vector population. Games receive stable PFSP
-snapshot assignments, and opponent rows are grouped into one batched inference
-call per active snapshot model. By default, PFSP selects at most three snapshot
-models per rollout so the full historical pool remains available across
-updates without fragmenting every inference iteration across ten tiny batches.
+snapshot assignments, and on a CUDA device the learner and every active
+snapshot are evaluated by replaying one CUDA/HIP graph per decision step, from
+static stacked weights, with the learner's decisions recorded straight into the
+PPO batch on the device (see
+[`docs/decisions/0017-graphed-rollout-inference.md`](docs/decisions/0017-graphed-rollout-inference.md)).
+By default, PFSP selects at most three snapshot models per rollout so the full
+historical pool remains available across updates without fragmenting every
+inference iteration across ten tiny batches.
 
 The scalar engine remains the oracle: tests compare every legal mask and
 505-float observation before each action, then every canonical state field
@@ -273,10 +277,13 @@ For training, use `scripts/launch_training.ps1`. It also applies the measured
 P-core affinity on the project's i7-12700K host, and `-Command` launches any
 other workload (evaluation, tournaments, orchestration scripts) through the
 same boundary. Runs start without a window; `-ShowWindow` opens one, and
-closing it stops the run. Long self-play arcs should use 25-update
-`scripts/chunked_resume.ps1` processes so ROCm latency cannot accumulate inside
-one Python runtime; `scripts/train_reference.ps1` combines both for the
-reference recipe.
+closing it stops the run. Long self-play arcs run in fresh
+`scripts/chunked_resume.ps1` processes, so an interrupted arc resumes from its
+last chunk. With graph-replayed inference a process keeps its speed for at
+least 400 updates, so the presets use 100-update chunks; the eager evaluators
+(`--no-vec-graph-inference`) need chunks of at most 25 updates because their
+ROCm latency accumulates inside one Python runtime.
+`scripts/train_reference.ps1` combines both for the reference recipe.
 
 ### Project Structure
 

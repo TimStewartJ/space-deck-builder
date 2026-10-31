@@ -75,7 +75,7 @@ The strongest published recipe is a named preset in `TRAINING_PRESETS`
 ```
 
 The script registers a Task Scheduler launch, trains the first chunk from
-scratch, continues in fresh 25-update processes with RNG/optimizer/pool
+scratch, continues in fresh 100-update processes with RNG/optimizer/pool
 continuity, and finishes with the locked exact-seat gauntlet. Re-running the
 same command resumes the arc. `python -m src train --preset reference-selfplay`
 applies the same values in a single process; explicit flags still override
@@ -96,6 +96,14 @@ performance cores are idle, so keep the default `-ProcessorAffinityMask Auto`
 (the performance cores); the launcher refuses a mask that includes efficiency
 cores unless `-ShowWindow` is passed. With `-ShowWindow` the run opens in a
 console window (a Windows Terminal tab), and closing that window stops it.
+
+The GPU fits three vector-engine training lanes side by side, about one
+update per second in total on this machine; a fourth adds nothing and a fifth
+oversubscribes the CPUs and slows every lane several times over
+(`results/training_throughput.md`). `scripts\run_queue.ps1` keeps a fixed
+number of lanes busy with queued `train_reference.ps1` arcs. CPU-heavy work
+beside running lanes, such as the test suite, the league or an audit, slows
+them in the same way.
 
 ### Self-Play Training
 ```bash
@@ -193,9 +201,17 @@ before every action, and complete canonical state matches afterward. Gate 2
 measured 5.88M engine+mask+observation decisions/s and 587k/s with the actual
 GPU policy, so rollouts are policy-bound. `train --engine vec` supports the
 fixed Random/Heuristic/Simple opponents, weighted opponent specifications, and
-PFSP snapshot self-play with stacked actor-only snapshot inference; the
-reference preset trains on it. Object remains the `RunConfig` default for
-compatibility.
+PFSP snapshot self-play; the reference preset trains on it. Object remains the
+`RunConfig` default for compatibility.
+
+On a CUDA device the vector runner evaluates the learner and every active
+snapshot by replaying one CUDA/HIP graph per decision step
+(`src/vector_engine/graphed_policy.py`, ADR 0017): static stacked weights,
+graphs captured per batch-size bucket, observations written by the engine
+straight into pinned memory, and the learner's decisions recorded in device
+storage that becomes the PPO batch. The runner and its graphs persist for the
+whole process, and in-training evaluation plays its games on the vector engine.
+`--no-vec-graph-inference` restores the eager evaluators of ADR 0009.
 
 ### Information-set search support
 `src/search/information_set.py` projects a live scalar decision into only the
@@ -215,10 +231,18 @@ Launch large `search-eval` runs and `scripts/bench_turn_search.py` through
 `scripts/launch_training.ps1 -Command`.
 
 ### Diagnosing a slow rollout
-`scripts/bench_rollout.py` reports decisions/sec plus a per-phase breakdown of
-the server (`idle drain stage h2d kernel sync dispatch`) and the workers
-(`advance encode wait apply`, with busy/blocked percentages). Start there
-rather than guessing:
+For `--engine vec`, every rollout logs one `[VectorRunner] graphed` line:
+`stage` is building masks and staging rows on the CPU, `launch` the host time
+spent issuing copies and the graph replay, `opponent` the fixed opponents'
+choices (overlapped with the GPU), `wait` GPU time not hidden behind them, and
+`step` the engine transition. `calls` and `avg_batch` count decision steps and
+learner rows per step. A first update in a fresh process is slower while the
+graphs are captured and the GPU kernels load.
+
+For the object engine, `scripts/bench_rollout.py` reports decisions/sec plus a
+per-phase breakdown of the server (`idle drain stage h2d kernel sync dispatch`)
+and the workers (`advance encode wait apply`, with busy/blocked percentages).
+Start there rather than guessing:
 
 ```bash
 python scripts/bench_rollout.py --updates 3
@@ -243,7 +267,8 @@ Read it this way:
 - `src/vector_engine/differential.py` — Per-step scalar/vector oracle
 - `src/vector_engine/policy.py` — Actual PPO policy integration
 - `src/vector_engine/opponents.py` — Scalar-equivalent vector fixed opponents
-- `src/ppo/vector_batch_runner.py` — Vector rollout runner, including snapshot self-play
+- `src/ppo/vector_batch_runner.py` — Vector rollout runner, including snapshot self-play and in-training evaluation
+- `src/vector_engine/graphed_policy.py` — Graph-replayed learner and snapshot inference for vector rollouts
 - `src/search/information_set.py` — Information-set projection and determinization
 - `src/search/vector_root.py` — Search roots written from public counts
 - `src/search/vector_determinization.py` — Vectorized hidden-hand dealing for search worlds
@@ -334,5 +359,8 @@ python -m src purchase-audit --model <ckpt> --output-json audit.json
   function is losing track of the state distribution.
 - **`--simulation-device cuda`** is faster than `cpu` because the BatchRunner does batched inference on GPU, eliminating CPU↔GPU transfer per batch.
 - **Checkpoints** are saved after every update to `models/ppo_agent_{timestamp}_upd{N}_wins{W}.pth`. Only eval updates record a real win count; others save `wins-1`.
-- **Eval is expensive** — raise `--eval-every` for long training runs. Eval always runs on the last update regardless.
+- **Eval is cheap on the vector engine** — with `--engine vec` on a GPU, in-training
+  evaluation plays its games in one vector population (about 1 s for 3,200
+  games). On the object engine it uses worker processes; raise `--eval-every`
+  there for long runs. Eval always runs on the last update regardless.
 - **Publish checkpoints a result depends on** with `scripts/release_artifacts.py publish` rather than committing them; see `docs/eval_protocol.md` §8.
