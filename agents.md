@@ -345,6 +345,13 @@ python -m src purchase-audit --model <ckpt> --output-json audit.json
 ## Tips
 
 - **First update is slow** due to GPU/ROCm warmup. Subsequent updates are 3-5x faster.
+- **A changed vector engine compiles once, slowly.** Numba caches the engine's
+  kernels per worktree and recompiles them whenever `src/vector_engine/kernels.py`
+  is rewritten, including by a checkout or rebase. The step kernel alone takes
+  several minutes, up to about 10 with other work running, and a process
+  compiling it looks stuck in its first rollout. Build the cache with one
+  short run before starting several lanes, which would otherwise each compile
+  it.
 - **Watch entropy against the observed baseline, not a fixed threshold.** On the
   reference self-play preset a healthy run starts near `ent≈0.97`, falls to
   `ent≈0.78` by update 25, and settles near `ent≈0.72`. (The historical
