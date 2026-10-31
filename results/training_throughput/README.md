@@ -3,8 +3,10 @@
 Logs, metrics and results behind
 [`../training_throughput.md`](../training_throughput.md), copied from the run
 folders on the project machine (Windows, RX 9070, torch
-2.11.0+rocm7.13.0a20260408). Logs were converted to UTF-8. Every training run
-used the reference recipe (`--preset reference-selfplay`, or
+2.11.0+rocm7.13.0a20260408). Logs were converted to UTF-8. The run folders,
+with every checkpoint, are archived there at
+`D:\space-deck-builder-archive\training-throughput-20261030`. Every training
+run used the reference recipe (`--preset reference-selfplay`, or
 `continue-selfplay-seed0` resumed from the timing fixture). Per-update timings
 are the gaps between consecutive `timestamp` fields in a metrics file, plus
 each row's `rollout.duration_s` and `ppo_duration_s`.

@@ -4,7 +4,10 @@
 [`docs/decisions/0017-graphed-rollout-inference.md`](../docs/decisions/0017-graphed-rollout-inference.md).
 **Branch:** `perf/training-throughput`.
 **Evidence:** [`results/training_throughput/`](training_throughput/), indexed
-in its `README.md`.
+in its `README.md`. The run folders themselves, including every checkpoint
+and the timing fixture, are archived on the project machine at
+`D:\space-deck-builder-archive\training-throughput-20261030`; a path below
+under `D:\sdb-bench` is under that folder's `sdb-bench`.
 
 ## Result
 
