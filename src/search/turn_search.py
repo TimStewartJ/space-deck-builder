@@ -37,7 +37,7 @@ import numpy as np
 import torch
 
 from src.encoding.action_context import ActionContext, build_action_context
-from src.encoding.action_encoder import END_TURN_INDEX
+from src.encoding.action_encoder import END_TURN_INDEX, get_action_space_layout
 from src.engine.game import Game
 from src.search.vector_determinization import deal_world_hands, derive_search_seed
 from src.search.vector_root import SearchRoot, SearchRootBuilder
@@ -264,7 +264,7 @@ class TurnSearch:
         self.card_index_map = card_index_map
         self.config = config or TurnSearchConfig()
         self.evaluator = PolicyValueEvaluator(model, device)
-        self.action_dim = 4 + 10 * rules.num_cards
+        self.action_dim = get_action_space_layout(rules.num_cards)["action_dim"]
         self.roots = SearchRootBuilder(rules)
         self.timings = SearchTimings()
 

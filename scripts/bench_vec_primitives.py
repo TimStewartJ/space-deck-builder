@@ -4,7 +4,7 @@ This is deliberately not a game engine. It applies deterministic fake state
 transitions with the same shapes, dtypes, access patterns, and awkward
 primitives that a real vectorized engine would need:
 
-* build a legal-action mask of shape ``[games, 494]``;
+* build a legal-action mask with the real action layout's width;
 * gather card properties by card id;
 * scatter cards between ``[games, 2, 5, 49]`` zone-count arrays;
 * sample draws without replacement from a deck multiset;
@@ -67,12 +67,20 @@ from typing import Any, Callable
 
 import numpy as np
 
+REPO = Path(__file__).resolve().parents[1]
+if str(REPO) not in sys.path:
+    sys.path.insert(0, str(REPO))
+
+from src.encoding.action_encoder import (  # noqa: E402
+    get_action_offsets,
+    get_action_space_layout,
+)
+
 
 # ---------------------------------------------------------------------------
 # Real project dimensions
 # ---------------------------------------------------------------------------
 NUM_CARDS = 49
-ACTION_DIM = 494
 NUM_PLAYERS = 2
 NUM_ZONES = 5
 NUM_SCALARS = 8
@@ -81,9 +89,11 @@ NUM_MODES = 5
 
 ZONE_HAND, ZONE_DECK, ZONE_DISCARD, ZONE_PLAYED, ZONE_BASES = range(NUM_ZONES)
 
-PLAY_OFFSET = 3
-BUY_OFFSET = PLAY_OFFSET + NUM_CARDS
-ATTACK_PLAYER_INDEX = BUY_OFFSET + NUM_CARDS
+# The mask has the real action layout's width and offsets.
+ACTION_DIM = get_action_space_layout(NUM_CARDS)["action_dim"]
+PLAY_OFFSET = get_action_offsets(NUM_CARDS).play_card
+BUY_OFFSET = get_action_offsets(NUM_CARDS).buy_card
+ATTACK_PLAYER_INDEX = get_action_offsets(NUM_CARDS).attack_player
 
 # Same integer RNG in every backend. The product fits comfortably in int64,
 # avoiding backend-specific overflow semantics.

@@ -273,6 +273,7 @@ def _fingerprint_payload(game: Game, viewer_index: int) -> dict:
                     player.pending_start_of_turn_discards
                 ),
                 "next_ship_to_top": int(player.next_ship_to_top),
+                "faction_plays": [int(count) for count in player.faction_plays],
                 "pending": [
                     _pending_signature(pending)
                     for pending in player.pending_action_sets

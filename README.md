@@ -88,6 +88,17 @@ python scripts/release_artifacts.py fetch --tag v0.3-selfplay-baseline \
     --dest results/optimized_selfplay_baseline
 ```
 
+Every published checkpoint and result was trained and measured under game
+rules version 1, before the engines followed the rulebook on OR abilities,
+ship primary-ability choices, Machine Base, Blob World and Central Office
+([`docs/decisions/0016-rulebook-ability-timing.md`](docs/decisions/0016-rulebook-ability-timing.md)).
+Checkpoints record their rules version, and one trained under other rules
+than the engines' does not load. Under the current rules the action space has
+543 actions (an OR ability's second option is the `effect_alt` group at the
+end of the layout), so commands below that load a published checkpoint, and
+the `continue-selfplay-seed0`, `exploit-selfplay-seed0` and
+`exploit-ladder-random` presets, need a checkout from before that decision.
+
 ### Training Examples
 
 ```bash
@@ -201,6 +212,7 @@ and [`docs/decisions/0004-complete-vector-engine-and-training-path.md`](docs/dec
 and [`docs/decisions/0005-authoritative-rule-ir-and-core-fidelity.md`](docs/decisions/0005-authoritative-rule-ir-and-core-fidelity.md)
 and [`docs/decisions/0006-vector-fixed-opponents.md`](docs/decisions/0006-vector-fixed-opponents.md)
 and [`docs/decisions/0008-vector-snapshot-self-play.md`](docs/decisions/0008-vector-snapshot-self-play.md)
+and [`docs/decisions/0016-rulebook-ability-timing.md`](docs/decisions/0016-rulebook-ability-timing.md)
 and [`results/vector_engine_gate.md`](results/vector_engine_gate.md).
 
 ### Information-safe search state

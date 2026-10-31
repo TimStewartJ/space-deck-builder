@@ -34,12 +34,15 @@ from src.vector_engine.state import (
     PENDING_DESTROY_BASE,
     PENDING_DISCARD,
     PENDING_ACQUIRE_SHIP_TOP,
+    PENDING_CHOOSE_OPTION,
     PENDING_COPY_SHIP,
     PENDING_NONE,
     PENDING_SCRAP,
     PENDING_TARGET_BASE,
     PENDING_TARGET_DISCARD,
+    PENDING_TARGET_FIRST_OPTION,
     PENDING_TARGET_HAND,
+    PENDING_TARGET_SECOND_OPTION,
     PENDING_TARGET_TRADE,
     VectorState,
     ZONE_BASES,
@@ -62,6 +65,7 @@ ATTACK_BASE_OFFSET = _GROUPS["attack_base"]
 DESTROY_BASE_OFFSET = _GROUPS["destroy_base"]
 EFFECT_NONSCRAP_OFFSET = _GROUPS["effect_nonscrap"]
 EFFECT_SCRAP_OFFSET = _GROUPS["effect_scrap"]
+EFFECT_ALT_OFFSET = _GROUPS["effect_alt"]
 SCRAP_HAND_OFFSET = _GROUPS["scrap_hand"]
 SCRAP_DISCARD_OFFSET = _GROUPS["scrap_discard"]
 SCRAP_TRADE_OFFSET = _GROUPS["scrap_trade"]
@@ -78,6 +82,7 @@ TRIGGER_AUTO = int(EffectTrigger.AUTO)
 TRIGGER_ALLY = int(EffectTrigger.ALLY)
 TRIGGER_SCRAP = int(EffectTrigger.SCRAP)
 TRIGGER_PASSIVE = int(EffectTrigger.PASSIVE)
+TRIGGER_ON_PLAY_OPTION = int(EffectTrigger.ON_PLAY_OPTION)
 OP_ADD_TRADE = int(EffectOpcode.ADD_TRADE)
 OP_ADD_COMBAT = int(EffectOpcode.ADD_COMBAT)
 OP_ADD_HEALTH = int(EffectOpcode.ADD_HEALTH)
@@ -120,13 +125,34 @@ def _bundle_bit(bundle):
 
 
 @njit(inline="always")
+def _use_or_ability(
+    instance_state,
+    bundle_count,
+    bundle_source_effect,
+    bundle_option,
+    rule_card,
+    chosen,
+):
+    """Clear every option of the OR ability whose option *chosen* was used."""
+    if bundle_option[rule_card, chosen] == 0:
+        return instance_state
+    source = bundle_source_effect[rule_card, chosen]
+    for bundle in range(bundle_count[rule_card]):
+        if (
+            bundle_option[rule_card, bundle] != 0
+            and bundle_source_effect[rule_card, bundle] == source
+        ):
+            instance_state &= 0xFFFF ^ _bundle_bit(bundle)
+    return instance_state
+
+
+@njit(inline="always")
 def _add_effect_instance(
     effect_state,
     instance_rule_card,
     instance_faction,
     bundle_count,
     bundle_trigger,
-    bundle_stage,
     card_faction,
     game,
     player,
@@ -330,6 +356,60 @@ def _pop_pending(
 
 
 @njit(inline="always")
+def _queue_option_choice(
+    pending_mode,
+    pending_remaining,
+    pending_sources,
+    pending_mandatory,
+    pending_draw_on_complete,
+    pending_resolved,
+    pending_targets,
+    pending_source_card,
+    pending_source_instance,
+    pending_count,
+    pending_overflow,
+    zones,
+    trade_row,
+    game,
+    player,
+    card,
+    instance,
+):
+    """Open the mandatory choice between the options of a played ship's OR ability."""
+    slot = pending_count[game, player]
+    _queue_pending(
+        pending_mode,
+        pending_remaining,
+        pending_sources,
+        pending_mandatory,
+        pending_draw_on_complete,
+        pending_resolved,
+        pending_targets,
+        pending_source_card,
+        pending_source_instance,
+        pending_count,
+        pending_overflow,
+        zones,
+        trade_row,
+        game,
+        player,
+        PENDING_CHOOSE_OPTION,
+        1,
+        0,
+        PENDING_MANDATORY,
+        card,
+        instance,
+    )
+    if pending_count[game, player] > slot:
+        pending_targets[
+            game, player, slot, PENDING_TARGET_FIRST_OPTION, card
+        ] = 1
+        pending_targets[
+            game, player, slot, PENDING_TARGET_SECOND_OPTION, card
+        ] = 1
+
+
+@njit(inline="always")
 def _active_count(zones, game, player, card):
     played = zones[game, player, ZONE_PLAYED, card]
     bases = zones[game, player, ZONE_BASES, card]
@@ -466,6 +546,24 @@ def _draw_one(
     return draw_position
 
 
+@njit(inline="always")
+def _faction_slot(faction):
+    """Index of the single faction bit *faction* in a per-faction count."""
+    slot = 0
+    while faction > 1:
+        faction >>= 1
+        slot += 1
+    return slot
+
+
+@njit(inline="always")
+def _record_faction_plays(faction_plays, game, player, factions):
+    """Count one card played this turn for each faction bit in *factions*."""
+    for slot in range(faction_plays.shape[2]):
+        if factions & (1 << slot):
+            faction_plays[game, player, slot] += 1
+
+
 @njit(cache=True)
 def _apply_bundle(
     zones,
@@ -492,6 +590,7 @@ def _apply_bundle(
     ordered_top,
     ordered_top_count,
     next_ship_to_top,
+    faction_plays,
     rng_state,
     game,
     player,
@@ -535,32 +634,11 @@ def _apply_bundle(
                     draw_position,
                 )
         elif opcode == OP_DRAW_PER_FACTION:
-            target = op_arg[rule_card, operation]
-            draws = 0
-            for active_card in range(zones.shape[3]):
-                active_instances = 0
-                for active_instance in range(effect_state.shape[3]):
-                    state = effect_state[
-                        game, player, active_card, active_instance
-                    ]
-                    if (state & ACTIVE_BIT) == 0:
-                        break
-                    active_instances += 1
-                    if (
-                        state & CURRENT_TURN_BIT
-                        and instance_faction[
-                            game, player, active_card, active_instance
-                        ]
-                        & target
-                    ):
-                        draws += 1
-                if (
-                    active_instances == 0
-                    and card_faction[active_card] & target
-                ):
-                    draws += zones[
-                        game, player, ZONE_PLAYED, active_card
-                    ]
+            # Every card of the faction played this turn counts, also one
+            # scrapped since it was played.
+            draws = faction_plays[
+                game, player, _faction_slot(op_arg[rule_card, operation])
+            ]
             for _ in range(draws):
                 draw_position = _draw_one(
                     zones,
@@ -908,6 +986,7 @@ def build_action_masks_kernel(
     bundle_trigger,
     bundle_faction,
     bundle_requirement,
+    bundle_option,
     masks,
 ):
     for game in prange(zones.shape[0]):
@@ -971,6 +1050,16 @@ def build_action_masks_kernel(
                         masks[
                             game, EFFECT_NONSCRAP_OFFSET + card
                         ] = True
+            elif mode == PENDING_CHOOSE_OPTION:
+                for card in range(zones.shape[3]):
+                    if pending_targets[
+                        game, player, 0, PENDING_TARGET_FIRST_OPTION, card
+                    ] > 0:
+                        masks[game, EFFECT_NONSCRAP_OFFSET + card] = True
+                    if pending_targets[
+                        game, player, 0, PENDING_TARGET_SECOND_OPTION, card
+                    ] > 0:
+                        masks[game, EFFECT_ALT_OFFSET + card] = True
             if not pending_mandatory[game, player, 0]:
                 masks[game, SKIP_INDEX] = True
             continue
@@ -1049,6 +1138,8 @@ def build_action_masks_kernel(
                         == TRIGGER_SCRAP
                     ):
                         masks[game, EFFECT_SCRAP_OFFSET + card] = True
+                    elif bundle_option[rule_card, bundle] == 2:
+                        masks[game, EFFECT_ALT_OFFSET + card] = True
                     else:
                         masks[game, EFFECT_NONSCRAP_OFFSET + card] = True
 
@@ -1077,7 +1168,7 @@ def build_action_weights_kernel(
     bundle_faction,
     bundle_requirement,
     bundle_source_effect,
-    bundle_stage,
+    bundle_option,
     masks,
     weights,
 ):
@@ -1130,6 +1221,18 @@ def build_action_weights_kernel(
                         game, EFFECT_NONSCRAP_OFFSET + card
                     ] = pending_targets[
                         game, player, 0, PENDING_TARGET_HAND, card
+                    ]
+            elif mode == PENDING_CHOOSE_OPTION:
+                for card in range(zones.shape[3]):
+                    weights[
+                        game, EFFECT_NONSCRAP_OFFSET + card
+                    ] = pending_targets[
+                        game, player, 0, PENDING_TARGET_FIRST_OPTION, card
+                    ]
+                    weights[
+                        game, EFFECT_ALT_OFFSET + card
+                    ] = pending_targets[
+                        game, player, 0, PENDING_TARGET_SECOND_OPTION, card
                     ]
             if not pending_mandatory[game, player, 0]:
                 weights[game, SKIP_INDEX] = 1
@@ -1196,8 +1299,8 @@ def build_action_weights_kernel(
                             )
                             and bundle_source_effect[rule_card, previous]
                             == bundle_source_effect[rule_card, bundle]
-                            and bundle_stage[rule_card, previous]
-                            == bundle_stage[rule_card, bundle]
+                            and bundle_option[rule_card, previous]
+                            == bundle_option[rule_card, bundle]
                             and _bundle_eligible(
                                 zones,
                                 card_faction,
@@ -1222,6 +1325,8 @@ def build_action_weights_kernel(
                         == TRIGGER_SCRAP
                     ):
                         weights[game, EFFECT_SCRAP_OFFSET + card] += 1
+                    elif bundle_option[rule_card, bundle] == 2:
+                        weights[game, EFFECT_ALT_OFFSET + card] += 1
                     else:
                         weights[game, EFFECT_NONSCRAP_OFFSET + card] += 1
         weights[game, END_TURN_INDEX] = 1
@@ -1259,6 +1364,7 @@ def step_kernel(
     ordered_top,
     ordered_top_count,
     next_ship_to_top,
+    faction_plays,
     rng_state,
     hand_size,
     turn_cap,
@@ -1273,8 +1379,7 @@ def step_kernel(
     bundle_faction,
     bundle_requirement,
     bundle_source_effect,
-    bundle_stage,
-    bundle_next,
+    bundle_option,
     bundle_op_start,
     bundle_op_count,
     op_code,
@@ -1535,6 +1640,9 @@ def step_kernel(
                         instance_rule_card[
                             game, player, source_card, source_instance
                         ] = copied_rule
+                        factions_before = instance_faction[
+                            game, player, source_card, source_instance
+                        ]
                         instance_faction[
                             game, player, source_card, source_instance
                         ] = (
@@ -1545,6 +1653,17 @@ def step_kernel(
                                 target_card,
                                 target_instance,
                             ]
+                        )
+                        # Stealth Needle counts as a card played this turn
+                        # of each faction its copy adds.
+                        _record_faction_plays(
+                            faction_plays,
+                            game,
+                            player,
+                            instance_faction[
+                                game, player, source_card, source_instance
+                            ]
+                            & ~factions_before,
                         )
                         source_state = ACTIVE_BIT | CURRENT_TURN_BIT
                         for bundle in range(bundle_count[copied_rule]):
@@ -1587,6 +1706,7 @@ def step_kernel(
                                     ordered_top,
                                     ordered_top_count,
                                     next_ship_to_top,
+                                    faction_plays,
                                     rng_state,
                                     game,
                                     player,
@@ -1605,9 +1725,131 @@ def step_kernel(
                                     forced_draw_count,
                                     draw_position,
                                 )
+                            elif (
+                                bundle_trigger[copied_rule, bundle]
+                                == TRIGGER_ON_PLAY_OPTION
+                                and bundle_option[copied_rule, bundle] == 1
+                            ):
+                                _queue_option_choice(
+                                    pending_mode,
+                                    pending_remaining,
+                                    pending_sources,
+                                    pending_mandatory,
+                                    pending_draw_on_complete,
+                                    pending_resolved,
+                                    pending_targets,
+                                    pending_source_card,
+                                    pending_source_instance,
+                                    pending_count,
+                                    pending_overflow,
+                                    zones,
+                                    trade_row,
+                                    game,
+                                    player,
+                                    source_card,
+                                    source_instance,
+                                )
                         matched = True
                         matched_group = PENDING_TARGET_HAND
                         matched_card = target_card
+            elif (
+                mode == PENDING_CHOOSE_OPTION
+                and (
+                    EFFECT_NONSCRAP_OFFSET
+                    <= action
+                    < EFFECT_NONSCRAP_OFFSET + zones.shape[3]
+                    or EFFECT_ALT_OFFSET
+                    <= action
+                    < EFFECT_ALT_OFFSET + zones.shape[3]
+                )
+            ):
+                second = action >= EFFECT_ALT_OFFSET
+                if second:
+                    card = action - EFFECT_ALT_OFFSET
+                    group = PENDING_TARGET_SECOND_OPTION
+                else:
+                    card = action - EFFECT_NONSCRAP_OFFSET
+                    group = PENDING_TARGET_FIRST_OPTION
+                source_card = pending_source_card[game, player, 0]
+                source_instance = pending_source_instance[game, player, 0]
+                if (
+                    pending_targets[game, player, 0, group, card] > 0
+                    and card == source_card
+                    and source_instance >= 0
+                ):
+                    instance_state = effect_state[
+                        game, player, source_card, source_instance
+                    ]
+                    rule_card = instance_rule_card[
+                        game, player, source_card, source_instance
+                    ]
+                    if rule_card < 0:
+                        rule_card = source_card
+                    wanted = 2 if second else 1
+                    for bundle in range(bundle_count[rule_card]):
+                        if (
+                            bundle_option[rule_card, bundle] != wanted
+                            or (instance_state & _bundle_bit(bundle)) == 0
+                        ):
+                            continue
+                        draw_position = _apply_bundle(
+                            zones,
+                            trade,
+                            combat,
+                            health,
+                            effect_state,
+                            instance_rule_card,
+                            instance_faction,
+                            pending_mode,
+                            pending_remaining,
+                            pending_sources,
+                            pending_mandatory,
+                            pending_draw_on_complete,
+                            pending_resolved,
+                            pending_targets,
+                            pending_source_card,
+                            pending_source_instance,
+                            pending_count,
+                            pending_overflow,
+                            discard_debt,
+                            trade_row,
+                            explorer_count,
+                            ordered_top,
+                            ordered_top_count,
+                            next_ship_to_top,
+                            faction_plays,
+                            rng_state,
+                            game,
+                            player,
+                            source_card,
+                            source_instance,
+                            rule_card,
+                            bundle,
+                            bundle_op_start,
+                            bundle_op_count,
+                            op_code,
+                            op_value,
+                            op_arg,
+                            card_faction,
+                            card_type,
+                            forced_draws,
+                            forced_draw_count,
+                            draw_position,
+                        )
+                        effect_state[
+                            game, player, source_card, source_instance
+                        ] = _use_or_ability(
+                            instance_state,
+                            bundle_count,
+                            bundle_source_effect,
+                            bundle_option,
+                            rule_card,
+                            bundle,
+                        )
+                        matched = True
+                        matched_group = group
+                        matched_card = card
+                        break
 
             skipped = (
                 action == SKIP_INDEX
@@ -1661,6 +1903,18 @@ def step_kernel(
             completed = skipped or (
                 matched and pending_remaining[game, player, 0] <= 0
             )
+            if matched and not completed:
+                # An optional set whose targets ran out offers only SKIP. It
+                # is kept as an empty scrap set, as the scalar conversion
+                # stores a pending set without actions.
+                exhausted = True
+                for group in range(pending_targets.shape[3]):
+                    if pending_targets[game, player, 0, group].sum() > 0:
+                        exhausted = False
+                        break
+                if exhausted:
+                    pending_mode[game, player, 0] = PENDING_SCRAP
+                    pending_sources[game, player, 0] = 0
             if completed:
                 if scrapped_trade:
                     for slot in range(trade_row.shape[1]):
@@ -1712,6 +1966,9 @@ def step_kernel(
                 zones[game, player, ZONE_PLAYED, card] += 1
                 if card_type[card] != 0:
                     zones[game, player, ZONE_BASES, card] += 1
+                _record_faction_plays(
+                    faction_plays, game, player, card_faction[card]
+                )
                 if card_type[card] == 0:
                     for passive_card in range(zones.shape[3]):
                         for passive_instance in range(
@@ -1767,7 +2024,6 @@ def step_kernel(
                     instance_faction,
                     bundle_count,
                     bundle_trigger,
-                    bundle_stage,
                     card_faction,
                     game,
                     player,
@@ -1801,6 +2057,7 @@ def step_kernel(
                             ordered_top,
                             ordered_top_count,
                             next_ship_to_top,
+                            faction_plays,
                             rng_state,
                             game,
                             player,
@@ -1818,6 +2075,29 @@ def step_kernel(
                             forced_draws,
                             forced_draw_count,
                             draw_position,
+                        )
+                    elif (
+                        trigger == TRIGGER_ON_PLAY_OPTION
+                        and bundle_option[card, bundle] == 1
+                    ):
+                        _queue_option_choice(
+                            pending_mode,
+                            pending_remaining,
+                            pending_sources,
+                            pending_mandatory,
+                            pending_draw_on_complete,
+                            pending_resolved,
+                            pending_targets,
+                            pending_source_card,
+                            pending_source_instance,
+                            pending_count,
+                            pending_overflow,
+                            zones,
+                            trade_row,
+                            game,
+                            player,
+                            card,
+                            new_instance,
                         )
 
         elif BUY_OFFSET <= action < BUY_OFFSET + zones.shape[3]:
@@ -1934,8 +2214,17 @@ def step_kernel(
             EFFECT_NONSCRAP_OFFSET
             <= action
             < EFFECT_NONSCRAP_OFFSET + zones.shape[3]
+        ) or (
+            EFFECT_ALT_OFFSET <= action < EFFECT_ALT_OFFSET + zones.shape[3]
         ):
-            card = action - EFFECT_NONSCRAP_OFFSET
+            # effect_alt applies the second option of the card's OR ability;
+            # effect_nonscrap applies any other non-scrap ability, including
+            # the first option.
+            alternative = action >= EFFECT_ALT_OFFSET
+            if alternative:
+                card = action - EFFECT_ALT_OFFSET
+            else:
+                card = action - EFFECT_NONSCRAP_OFFSET
             applied = False
             candidate_variant = 0
             for instance in range(effect_state.shape[3]):
@@ -1954,6 +2243,8 @@ def step_kernel(
                         (instance_state & _bundle_bit(bundle)) != 0
                         and bundle_trigger[rule_card, bundle]
                         != TRIGGER_SCRAP
+                        and (bundle_option[rule_card, bundle] == 2)
+                        == alternative
                         and _bundle_eligible(
                             zones,
                             card_faction,
@@ -1980,8 +2271,8 @@ def step_kernel(
                                     rule_card, previous
                                 ]
                                 == bundle_source_effect[rule_card, bundle]
-                                and bundle_stage[rule_card, previous]
-                                == bundle_stage[rule_card, bundle]
+                                and bundle_option[rule_card, previous]
+                                == bundle_option[rule_card, bundle]
                                 and _bundle_eligible(
                                     zones,
                                     card_faction,
@@ -2004,6 +2295,23 @@ def step_kernel(
                         if candidate_variant != action_variant:
                             candidate_variant += 1
                             continue
+                        # An established base's automatic parts resolve
+                        # first and alone, as when it is played; its choices
+                        # are a later activation of the same ability (scalar
+                        # _activation_resolution).
+                        automatic = False
+                        for grouped in range(bundle_count[rule_card]):
+                            if (
+                                (instance_state & _bundle_bit(grouped)) != 0
+                                and bundle_trigger[rule_card, grouped]
+                                == TRIGGER_AUTO
+                                and bundle_source_effect[rule_card, grouped]
+                                == bundle_source_effect[rule_card, bundle]
+                                and bundle_option[rule_card, grouped]
+                                == bundle_option[rule_card, bundle]
+                            ):
+                                automatic = True
+                                break
                         next_state = instance_state
                         for grouped in range(bundle_count[rule_card]):
                             if (
@@ -2011,12 +2319,17 @@ def step_kernel(
                                 == 0
                                 or bundle_trigger[rule_card, grouped]
                                 == TRIGGER_SCRAP
+                                or (
+                                    bundle_trigger[rule_card, grouped]
+                                    == TRIGGER_AUTO
+                                )
+                                != automatic
                                 or bundle_source_effect[
                                     rule_card, grouped
                                 ]
                                 != bundle_source_effect[rule_card, bundle]
-                                or bundle_stage[rule_card, grouped]
-                                != bundle_stage[rule_card, bundle]
+                                or bundle_option[rule_card, grouped]
+                                != bundle_option[rule_card, bundle]
                                 or not _bundle_eligible(
                                     zones,
                                     card_faction,
@@ -2058,6 +2371,7 @@ def step_kernel(
                                 ordered_top,
                                 ordered_top_count,
                                 next_ship_to_top,
+                                faction_plays,
                                 rng_state,
                                 game,
                                 player,
@@ -2079,6 +2393,14 @@ def step_kernel(
                             next_state &= (
                                 0xFFFF ^ _bundle_bit(grouped)
                             )
+                        next_state = _use_or_ability(
+                            next_state,
+                            bundle_count,
+                            bundle_source_effect,
+                            bundle_option,
+                            rule_card,
+                            bundle,
+                        )
                         effect_state[
                             game, player, card, instance
                         ] = next_state
@@ -2140,6 +2462,7 @@ def step_kernel(
                             ordered_top,
                             ordered_top_count,
                             next_ship_to_top,
+                            faction_plays,
                             rng_state,
                             game,
                             player,
@@ -2230,6 +2553,8 @@ def step_kernel(
                             else 0
                         )
             next_ship_to_top[game, player] = 0
+            for slot in range(faction_plays.shape[2]):
+                faction_plays[game, player, slot] = 0
             for _ in range(hand_size[game]):
                 draw_position = _draw_one(
                     zones,
@@ -2299,6 +2624,7 @@ def _materialize_observation_row(
     trade_row,
     current_player,
     first_player,
+    pending_count,
     masks,
     observations,
     game,
@@ -2315,11 +2641,14 @@ def _materialize_observation_row(
     observations[output_row, 1] = (
         1.0 if first_player[game] == training else 0.0
     )
+    # As in the scalar action context, a pending decision is never a
+    # purchase, even when it acquires a card through a buy action.
     can_buy = False
-    for card in range(NUM_CARDS):
-        if masks[game, BUY_OFFSET + card]:
-            can_buy = True
-            break
+    if pending_count[game, current_player[game]] == 0:
+        for card in range(NUM_CARDS):
+            if masks[game, BUY_OFFSET + card]:
+                can_buy = True
+                break
     observations[output_row, 2] = 1.0 if can_buy else 0.0
     has_actions = masks[game, ATTACK_PLAYER_INDEX]
     if not has_actions:
@@ -2403,6 +2732,7 @@ def materialize_observations_kernel(
     trade_row,
     current_player,
     first_player,
+    pending_count,
     training_player,
     masks,
     observations,
@@ -2416,6 +2746,7 @@ def materialize_observations_kernel(
             trade_row,
             current_player,
             first_player,
+            pending_count,
             masks,
             observations,
             game,
@@ -2433,6 +2764,7 @@ def materialize_selected_observations_kernel(
     trade_row,
     current_player,
     first_player,
+    pending_count,
     rows,
     masks,
     observations,
@@ -2447,6 +2779,7 @@ def materialize_selected_observations_kernel(
             trade_row,
             current_player,
             first_player,
+            pending_count,
             masks,
             observations,
             game,
@@ -2537,6 +2870,7 @@ class VectorEngine:
             r.bundle_trigger,
             r.bundle_faction,
             r.bundle_requirement,
+            r.bundle_option,
             self.masks,
         )
         return self.masks
@@ -2550,6 +2884,7 @@ class VectorEngine:
             self.state.trade_row,
             self.state.current_player,
             self.state.first_player,
+            self.state.pending_count,
             self.state.training_player,
             self.masks,
             self.observations,
@@ -2578,6 +2913,7 @@ class VectorEngine:
                 self.state.trade_row,
                 self.state.current_player,
                 self.state.first_player,
+                self.state.pending_count,
                 self.state.current_player,
                 self.masks,
                 self.perspective_observations,
@@ -2609,6 +2945,7 @@ class VectorEngine:
             self.state.trade_row,
             self.state.current_player,
             self.state.first_player,
+            self.state.pending_count,
             rows,
             self.masks,
             target,
@@ -2639,7 +2976,7 @@ class VectorEngine:
             r.bundle_faction,
             r.bundle_requirement,
             r.bundle_source_effect,
-            r.bundle_stage,
+            r.bundle_option,
             self.masks,
             self.action_weights,
         )
@@ -2722,6 +3059,7 @@ class VectorEngine:
             s.ordered_top,
             s.ordered_top_count,
             s.next_ship_to_top,
+            s.faction_plays,
             s.rng_state,
             s.hand_size,
             s.turn_cap,
@@ -2736,8 +3074,7 @@ class VectorEngine:
             r.bundle_faction,
             r.bundle_requirement,
             r.bundle_source_effect,
-            r.bundle_stage,
-            r.bundle_next,
+            r.bundle_option,
             r.bundle_op_start,
             r.bundle_op_count,
             r.op_code,

@@ -6,6 +6,7 @@ from typing import Iterable
 
 import numpy as np
 
+from src.cards.factions import SINGLE_FACTIONS
 from src.engine.game import Game
 from src.engine.actions import ActionType, CardSource
 from src.vector_engine.rules import CompiledRules, EffectTrigger
@@ -18,6 +19,7 @@ ZONE_PLAYED = 3
 ZONE_BASES = 4
 NUM_ZONES = 5
 NUM_PLAYERS = 2
+NUM_FACTIONS = len(SINGLE_FACTIONS)
 MAX_CARD_INSTANCES = 16
 MAX_ORDERED_TOP = 128
 INSTANCE_ACTIVE = np.uint16(1 << 15)
@@ -29,6 +31,8 @@ PENDING_DESTROY_BASE = 2
 PENDING_DISCARD = 3
 PENDING_ACQUIRE_SHIP_TOP = 4
 PENDING_COPY_SHIP = 5
+# The choice between the two options of the OR ability of a ship just played.
+PENDING_CHOOSE_OPTION = 6
 SOURCE_HAND = 1
 SOURCE_DISCARD = 2
 SOURCE_TRADE = 4
@@ -37,6 +41,10 @@ PENDING_TARGET_DISCARD = 1
 PENDING_TARGET_TRADE = 2
 PENDING_TARGET_BASE = 3
 PENDING_TARGET_GROUPS = 4
+# A PENDING_CHOOSE_OPTION set marks its card's first option in target group 0
+# (its effect_nonscrap action) and its second option in group 1 (effect_alt).
+PENDING_TARGET_FIRST_OPTION = 0
+PENDING_TARGET_SECOND_OPTION = 1
 
 NO_CARD = -1
 NO_WINNER = -1
@@ -78,6 +86,9 @@ class VectorState:
     ordered_top: np.ndarray
     ordered_top_count: np.ndarray
     next_ship_to_top: np.ndarray
+    # Cards each player played this turn, per faction (SINGLE_FACTIONS
+    # order), including any scrapped since; reset at the end of the turn.
+    faction_plays: np.ndarray
     rng_state: np.ndarray
     hand_size: np.ndarray
     turn_cap: np.ndarray
@@ -191,6 +202,9 @@ class VectorState:
             next_ship_to_top=np.zeros(
                 (games, NUM_PLAYERS), dtype=np.int8
             ),
+            faction_plays=np.zeros(
+                (games, NUM_PLAYERS, NUM_FACTIONS), dtype=np.int16
+            ),
             rng_state=(
                 (np.arange(games, dtype=np.int64) + 1) * 1_103_515_245
             )
@@ -285,6 +299,12 @@ def _effect_instance_state(
             available = any(
                 not leaf.all_child_effects_used() for leaf in relevant
             )
+            if (
+                rules.bundle_option[rule_card, bundle]
+                and effect.any_child_effects_used()
+            ):
+                # Using either option of an OR ability uses the ability.
+                available = False
             if (
                 available
                 and rules.bundle_trigger[rule_card, bundle]
@@ -397,6 +417,22 @@ def _pending_state(player, rules: CompiledRules):
                 targets[
                     index, PENDING_TARGET_HAND, action.card_id
                 ] += 1
+        elif (
+            action_type == ActionType.APPLY_EFFECT
+            and pending.actions[0].card_effect is not None
+            and pending.actions[0].card_effect.option_index is not None
+        ):
+            modes[index] = PENDING_CHOOSE_OPTION
+            source_card[index], source_instance[index] = locations[
+                id(pending.actions[0].card)
+            ]
+            for action in pending.actions:
+                group = (
+                    PENDING_TARGET_FIRST_OPTION
+                    if action.card_effect.option_index == 0
+                    else PENDING_TARGET_SECOND_OPTION
+                )
+                targets[index, group, action.card_id] += 1
         else:
             raise ValueError(f"unsupported pending action {action_type}")
     return (
@@ -509,6 +545,7 @@ def write_game_row(
         state.next_ship_to_top[
             game_index, player_index
         ] = player.next_ship_to_top
+        state.faction_plays[game_index, player_index] = player.faction_plays
         if len(player.ordered_top) > MAX_ORDERED_TOP:
             raise ValueError("ordered top-deck segment exceeds capacity")
         state.ordered_top_count[
@@ -617,6 +654,9 @@ def canonical_scalar_snapshot(
                     dtype=np.int16,
                 ),
                 "next_ship_to_top": player.next_ship_to_top,
+                "faction_plays": np.asarray(
+                    player.faction_plays, dtype=np.int16
+                ),
             }
         )
     return {
@@ -718,6 +758,9 @@ def canonical_vector_snapshot(
                 "next_ship_to_top": int(
                     state.next_ship_to_top[game_index, player]
                 ),
+                "faction_plays": state.faction_plays[
+                    game_index, player
+                ].copy(),
             }
         )
     row = state.trade_row[game_index]
@@ -779,6 +822,7 @@ def assert_canonical_equal(
             "discard_debt",
             "ordered_top",
             "next_ship_to_top",
+            "faction_plays",
         ):
             left = scalar["players"][player][key]
             right = vector["players"][player][key]

@@ -154,9 +154,11 @@ def get_available_actions(game_state: 'Game', player: 'Player') -> List[Action]:
                     faction_count = player.get_faction_ally_count(effect.faction_requirement)
                     if faction_count > effect.faction_requirement_count:
                         actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.index, card=card, card_effect=effect))
-                elif effect.is_or_effect and effect.child_effects and not effect.any_child_effects_used():
-                    for child_effect in effect.child_effects:
-                        actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.index, card=card, card_effect=child_effect))
+                elif effect.is_or_effect and effect.child_effects:
+                    # Each option is its own action until one of them is used.
+                    if not effect.any_child_effects_used():
+                        for option in effect.child_effects:
+                            actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.index, card=card, card_effect=option))
                 else:
                     actions.append(Action(type=ActionType.APPLY_EFFECT, card_id=card.index, card=card, card_effect=effect))
 

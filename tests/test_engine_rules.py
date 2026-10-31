@@ -414,7 +414,7 @@ class TestB1ScrapEffectsNoAutoFire:
         assert p1.combat == 3
 
     def test_or_effect_not_auto_applied(self):
-        """OR effects must not auto-fire — both branches would resolve."""
+        """A ship's OR ability opens a mandatory choice instead of resolving."""
         game, p1, _ = _make_game_with_players()
         ship = Card("Patrol Mech", 0, 4, [
             Effect(CardEffectType.PARENT, 0, is_or_effect=True, child_effects=[
@@ -427,9 +427,22 @@ class TestB1ScrapEffectsNoAutoFire:
         play_action = Action(type=ActionType.PLAY_CARD, card=ship, card_id=ship.name)
         game.execute_action(play_action)
 
-        # Neither branch should have auto-fired
+        # Neither branch should have auto-fired: one must be chosen first
         assert p1.trade == 0
         assert p1.combat == 0
+        pending = p1.get_current_pending_set()
+        assert pending is not None and pending.mandatory
+        assert [a.card_effect for a in pending.actions] == ship.effects[0].child_effects
+        actions = get_available_actions(game, p1)
+        assert all(a.type == ActionType.APPLY_EFFECT for a in actions)
+
+        game.execute_action(pending.actions[1])
+        assert (p1.trade, p1.combat) == (0, 5)
+        assert p1.get_current_pending_set() is None
+        assert not [
+            a for a in get_available_actions(game, p1)
+            if a.type == ActionType.APPLY_EFFECT
+        ]
 
     def test_first_slot_ally_effect_not_auto_applied(self):
         """An ally effect in slot 0 should not auto-fire even when ally is present."""
@@ -712,13 +725,19 @@ class TestD1EmbassyYacht:
 
 
 class TestD2BlobWorldFactionSafety:
-    """D2: Blob World's faction counting must handle list factions."""
+    """D2: Blob World counts the cards of its faction played this turn."""
+
+    @staticmethod
+    def _play(player, *cards):
+        for card in cards:
+            player.hand.append(card)
+            player.play_card(card)
 
     def test_list_faction_no_crash(self):
-        """Multi-faction cards in played_cards shouldn't crash Blob World."""
+        """A multi-faction card played this turn counts for Blob World."""
         game, p1, _ = _make_game_with_players()
         multi = Card("DualShip", 0, 1, [], "ship", faction=["Blob", "Star Empire"])
-        p1.played_cards.append(multi)
+        self._play(p1, multi)
         p1.deck.append(Card("D1", 1, 0, [], "ship"))
 
         blob_world_effect = Effect(CardEffectType.DRAW_PER_FACTION, 0, faction_target="Blob")
@@ -732,7 +751,7 @@ class TestD2BlobWorldFactionSafety:
         game, p1, _ = _make_game_with_players()
         blob1 = Card("BlobShip", 0, 1, [], "ship", faction="Blob")
         blob2 = Card("BlobShip2", 1, 1, [], "ship", faction="Blob")
-        p1.played_cards.extend([blob1, blob2])
+        self._play(p1, blob1, blob2)
         p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
 
         blob_world_effect = Effect(CardEffectType.DRAW_PER_FACTION, 0, faction_target="Blob")
@@ -744,7 +763,7 @@ class TestD2BlobWorldFactionSafety:
         """Non-Blob factions should not trigger draws."""
         game, p1, _ = _make_game_with_players()
         se = Card("SEShip", 0, 1, [], "ship", faction="Star Empire")
-        p1.played_cards.append(se)
+        self._play(p1, se)
         p1.deck.append(Card("D1", 1, 0, [], "ship"))
         initial_hand = len(p1.hand)
 
@@ -752,6 +771,25 @@ class TestD2BlobWorldFactionSafety:
         blob_world_effect.apply(game, p1, None)
 
         assert len(p1.hand) == initial_hand
+
+    def test_scrapped_card_still_counts(self):
+        """A Blob card scrapped after it was played still counts."""
+        game, p1, _ = _make_game_with_players()
+        blob1 = Card("BlobShip", 0, 1, [], "ship", faction="Blob")
+        blob2 = Card("BlobShip2", 1, 1, [], "ship", faction="Blob")
+        self._play(p1, blob1, blob2)
+        p1.played_cards.remove(blob1)
+        p1.deck.extend([Card("D1", 2, 0, [], "ship"), Card("D2", 3, 0, [], "ship")])
+
+        Effect(CardEffectType.DRAW_PER_FACTION, 0, faction_target="Blob").apply(game, p1, None)
+
+        assert len(p1.hand) == 2
+
+    def test_count_starts_again_each_turn(self):
+        game, p1, _ = _make_game_with_players()
+        self._play(p1, Card("BlobShip", 0, 1, [], "ship", faction="Blob"))
+        p1.end_turn()
+        assert p1.cards_played_of_faction(Faction.BLOB) == 0
 
 
 class TestD3RecyclingStation:

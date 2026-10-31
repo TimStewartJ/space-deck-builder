@@ -83,9 +83,23 @@ class Effect:
         self.is_mandatory = is_mandatory
         # Target faction for DRAW_PER_FACTION (distinct from faction_requirement which gates ally abilities)
         self.faction_target = faction_target
+        # The options of an OR ability know their ability and their position:
+        # option 0 is offered as the card's ``effect_nonscrap`` action and
+        # option 1 as its ``effect_alt`` action. Choosing either uses the
+        # whole ability for the turn.
+        self.or_parent: Optional['Effect'] = None
+        self.option_index: Optional[int] = None
+        if is_or_effect and child_effects:
+            for index, child in enumerate(child_effects):
+                child.or_parent = self
+                child.option_index = index
 
     def any_child_effects_used(self):
-        """Check if any child effects have been used"""
+        """Check if any child effects have been used.
+
+        For an OR ability this means the ability has been used: choosing
+        one option marks every option used.
+        """
         if self.child_effects:
             for effect in self.child_effects:
                 if effect.applied:
@@ -101,10 +115,10 @@ class Effect:
             return True
         return self.applied
     
-    def apply(self, game: 'Game', player: 'Player', card=None, *, auto_only=False):
+    def apply(self, game: 'Game', player: 'Player', card=None, *, resolution=None):
         from src.rules.scalar import apply_effect
 
-        apply_effect(self, game, player, card, auto_only=auto_only)
+        apply_effect(self, game, player, card, resolution=resolution)
 
     def clone(self) -> 'Effect':
         """Create a lightweight copy with fresh mutable state.

@@ -150,6 +150,22 @@ earlier checkpoints of its training run
 (`docs/decisions/0014-ladder-exploiter.md`); those five are published as
 release assets and go in `results/strength_yardstick/ladder/`.
 
+### Rules version and old checkpoints
+
+The engines implement game rules version 2
+(`docs/decisions/0016-rulebook-ability-timing.md`): an OR ability gives one
+option, the choices in a ship's primary ability are pending decisions as soon
+as it is played, Machine Base draws and then must scrap in one activation,
+Blob World's draw option counts every Blob card played this turn, and
+Central Office's top-deck is optional on every turn. The second option of an
+OR ability is the `effect_alt` action group at the end of the layout, so the
+Core Set has 543 actions
+(`get_action_space_layout` in `src/encoding/action_encoder.py` is the single
+source of truth). Checkpoints record `rules_version`; every published
+checkpoint, including the champion and the ladder above, was trained under
+rules version 1 and does not load, so the frozen-checkpoint presets above
+need a checkout from before decision 0016.
+
 ### Reproducibility
 
 ```bash

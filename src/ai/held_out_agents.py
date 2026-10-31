@@ -13,8 +13,13 @@ card's own effect tree with phase-dependent weights:
 
 They are held out: no agent trains against them and they are not tuned
 against any checkpoint (docs/decisions/0013-strength-yardstick.md). Keep them
-out of every training opponent registry. Their behaviour must not change;
-the league's port check reproduces published counts with them.
+out of every training opponent registry, and do not change their decision
+rules: the league's port check reproduced published counts with them under
+rules version 1. Those counts belong to the old rules. Under the current rules
+(docs/decisions/0016-rulebook-ability-timing.md) an OR ability gives one
+option, which ``_choose_or`` picks, and the choices in a ship's primary
+ability are made as soon as the ship is played, by the same pending-decision
+rules (``_pending``) as every other choice.
 """
 from __future__ import annotations
 
@@ -23,6 +28,7 @@ from types import MappingProxyType
 
 from src.ai.agent import Agent
 from src.cards.effects import CardEffectType as T
+from src.cards.factions import Faction
 from src.engine.actions import ActionType as A, CardSource, get_available_actions
 
 STARTERS = ("Scout", "Viper")
@@ -186,7 +192,7 @@ class HeldOutAgent(Agent):
         self.style = style
         self.params = STYLE_PARAMETERS[style]
         self._turn = None
-        self._seen: set[int] = set()
+        self._seen: set[tuple[int, int]] = set()
         self._steps = 0
         self._done_buying = False
 
@@ -369,11 +375,24 @@ class HeldOutAgent(Agent):
             return attack
         return end_turn
 
+    def _seen_key(self, effect):
+        """Identity under which an ability is considered once this turn.
+
+        An activation that leaves part of the ability unused (on a later
+        turn, Central Office's trade leaves its optional top-deck) makes the
+        rest a new decision, as on the turn the base is played.
+        """
+        return id(effect), len(self._unapplied_leaves(effect))
+
     def _free_effect(self, game, player, opponent, effects):
         params = self.params
         for action in effects:
             effect = action.card_effect
-            if effect is None or effect.is_scrap_effect or id(effect) in self._seen:
+            if (
+                effect is None
+                or effect.is_scrap_effect
+                or self._seen_key(effect) in self._seen
+            ):
                 continue
             card = action.card
             parent = None
@@ -384,12 +403,12 @@ class HeldOutAgent(Agent):
             if parent is not None:
                 pick = self._choose_or(game, player, opponent, parent)
                 for child in parent.child_effects:
-                    self._seen.add(id(child))
+                    self._seen.add(self._seen_key(child))
                 for candidate in effects:
                     if candidate.card_effect is pick:
                         return candidate
                 continue
-            self._seen.add(id(effect))
+            self._seen.add(self._seen_key(effect))
             leaves = self._unapplied_leaves(effect)
             if not leaves:
                 continue
@@ -422,6 +441,18 @@ class HeldOutAgent(Agent):
         return None
 
     def _choose_or(self, game, player, opponent, parent):
+        """The one option of an OR ability this player takes.
+
+        Recycling Station: discard and draw while the hand holds junk, else
+        trade. Blob World: draw when at least two Blob cards were played this
+        turn (scrapped or not), else combat. Trade or combat (Patrol Mech):
+        combat when it reaches the opponent's authority plus outpost defense;
+        otherwise trade in the early phase (also the middle phase except for
+        aggro), combat later. Authority or trade (Trading Post, Barter World):
+        trade in the early and middle phases, then authority. Authority or
+        combat (Defense Center): with no outpost in the way or when it is
+        lethal, combat (fortress: authority); otherwise authority.
+        """
         phase = self._phase(game)
         style = self.style
         children = parent.child_effects
@@ -433,7 +464,7 @@ class HeldOutAgent(Agent):
                 return kinds[T.DISCARD_DRAW]
             return kinds[T.TRADE]
         if T.DRAW_PER_FACTION in kinds:
-            blobs = sum(1 for c in player.played_cards if int(c.effective_faction) & 1)
+            blobs = player.cards_played_of_faction(Faction.BLOB)
             return kinds[T.DRAW_PER_FACTION] if blobs >= 2 else kinds[T.COMBAT]
         if T.COMBAT in kinds and T.TRADE in kinds:
             if player.combat + kinds[T.COMBAT].value >= need:
@@ -521,6 +552,11 @@ class HeldOutAgent(Agent):
             return max(options, key=lambda a: (a.card.cost, self._buy_score(a.card, game, player)))
         if A.APPLY_EFFECT in kinds:
             options = [a for a in actions if a.type == A.APPLY_EFFECT]
+            ability = options[0].card_effect.or_parent if options[0].card_effect else None
+            if ability is not None:
+                # The OR ability of a ship just played.
+                pick = self._choose_or(game, player, opponent, ability)
+                return next(a for a in options if a.card_effect is pick)
             return max(options, key=lambda a: a.card.cost if a.card else 0)
         return skip if skip is not None else actions[0]
 

@@ -404,7 +404,9 @@ class TrainingPreset:
 
 # The published self-play champion that the strength yardstick
 # (docs/decisions/0013-strength-yardstick.md) trains and measures against,
-# relative to the repository root.
+# relative to the repository root. Like every published checkpoint it was
+# trained under rules version 1 and does not load under the current rules
+# (docs/decisions/0016-rulebook-ability-timing.md).
 CHAMPION_CHECKPOINT = "results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth"
 
 # Earlier checkpoints of the champion's own training run (updates 25, 50, 100,
@@ -466,7 +468,9 @@ TRAINING_PRESETS: dict[str, TrainingPreset] = {
         description=(
             "Control arm of the exploiter experiment: the reference self-play "
             "recipe for another 400 updates, starting from the published "
-            "selfplay_seed0 weights with a fresh optimizer"
+            "selfplay_seed0 weights with a fresh optimizer. Rules version 1: "
+            "its starting checkpoint and published results predate decision "
+            "0016, and the checkpoint does not load under the current rules"
         ),
         train_defaults={
             **_REFERENCE_SELFPLAY_DEFAULTS,
@@ -484,7 +488,9 @@ TRAINING_PRESETS: dict[str, TrainingPreset] = {
             "Exploiter arm of the strength yardstick: 400 updates x 2,000 "
             "episodes from the published selfplay_seed0 weights with a fresh "
             "optimizer, every training game against selfplay_seed0 frozen and "
-            "playing its highest-scoring legal action"
+            "playing its highest-scoring legal action. Rules version 1: its "
+            "checkpoints and published results predate decision 0016, and the "
+            "checkpoints do not load under the current rules"
         ),
         train_defaults={
             **_REFERENCE_RUN_DEFAULTS,
@@ -506,7 +512,9 @@ TRAINING_PRESETS: dict[str, TrainingPreset] = {
             "2,000 episodes from random weights, every training game against "
             "a uniformly sampled frozen opponent from the champion's own run "
             "(updates 25, 50, 100, 200, 300 and the champion), each playing "
-            "its highest-scoring legal action"
+            "its highest-scoring legal action. Rules version 1: its frozen "
+            "opponents and published results predate decision 0016, and the "
+            "checkpoints do not load under the current rules"
         ),
         train_defaults={
             **_REFERENCE_RUN_DEFAULTS,
@@ -535,19 +543,25 @@ def get_training_preset(name: str) -> TrainingPreset:
         ) from None
 
 
-# Current checkpoint schema version. V4 adds optional per-card static
-# feature tokens (cost, defense, faction, ally faction, type) gated by
-# ``ModelConfig.token_features``. V2/V3 checkpoints remain weight-loadable
-# as long as their saved ``model_config.token_features`` is False (or
-# absent — defaults to False); cross-mode loads (saved-True vs runtime-False
-# or vice versa) raise a clear error at load time.
-CHECKPOINT_VERSION = 4
+# Current checkpoint schema version. V5 records the game rules version the
+# weights were trained under (``rules_version``, ``src.rules.ir.RULES_VERSION``);
+# V4 added optional per-card static feature tokens (cost, defense, faction,
+# ally faction, type) gated by ``ModelConfig.token_features``. Checkpoints that
+# record no rules version (every V2-V4 checkpoint written by the trainer) were
+# trained under rules version 1, so ``load_checkpoint`` rejects them with a
+# rules-version error. Cross-mode token-feature loads (saved-True vs
+# runtime-False or vice versa) raise a clear error at load time.
+CHECKPOINT_VERSION = 5
 
 # Schema versions whose model weights are compatible with the current
 # architecture. Loading a checkpoint outside this set raises ValueError.
 # Pre-V2 (V0/V1) used a flat embedding + separate actor/critic MLPs and
 # is not loadable.
-COMPAT_CHECKPOINT_VERSIONS = {2, 3, 4}
+COMPAT_CHECKPOINT_VERSIONS = {2, 3, 4, 5}
+
+# Rules version of checkpoints that do not record one: everything saved before
+# decision 0016 (docs/decisions/0016-rulebook-ability-timing.md).
+LEGACY_RULES_VERSION = 1
 
 
 def capture_rng_state() -> dict[str, Any]:
@@ -655,8 +669,11 @@ def save_checkpoint(
     import torch
     from datetime import datetime, timezone
 
+    from src.rules.ir import RULES_VERSION
+
     checkpoint = {
         "schema_version": CHECKPOINT_VERSION,
+        "rules_version": RULES_VERSION,
         "model_state_dict": model_state_dict,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "config": {},
@@ -696,10 +713,13 @@ def load_checkpoint(path: str, map_location=None) -> dict[str, Any]:
     also include ``config``, ``schema_version``, ``timestamp``, etc.
 
     Raises ``ValueError`` if the checkpoint's schema version is newer than
-    the current code supports, or if it predates the current architecture
-    (v1 weights are incompatible with v2 model shapes).
+    the current code supports, if it predates the current architecture
+    (v1 weights are incompatible with v2 model shapes), or if it was trained
+    under another game rules version than the one the engines implement.
     """
     import torch
+
+    from src.rules.ir import RULES_VERSION
 
     data = torch.load(path, map_location=map_location)
 
@@ -721,6 +741,19 @@ def load_checkpoint(path: str, map_location=None) -> dict[str, Any]:
             f"versions: {sorted(COMPAT_CHECKPOINT_VERSIONS)}). V1 checkpoints "
             f"used a flat embedding + separate actor/critic MLPs; V2+ uses "
             f"per-zone embeddings + shared trunk. Please retrain from scratch."
+        )
+    rules_version = data.get("rules_version", LEGACY_RULES_VERSION)
+    if rules_version != RULES_VERSION:
+        raise ValueError(
+            f"Checkpoint {path} was trained under game rules version "
+            f"{rules_version}, but the engines implement rules version "
+            f"{RULES_VERSION} (docs/decisions/0016-rulebook-ability-timing.md). "
+            f"The rules versions differ in how OR abilities, ship choices, "
+            f"Machine Base, Blob World and Central Office resolve, and in the "
+            f"action layout the policy head "
+            f"scores, so its weights do not apply. Train a new checkpoint under "
+            f"the current rules, or check out a commit that implements rules "
+            f"version {rules_version} to use this one."
         )
 
     return data

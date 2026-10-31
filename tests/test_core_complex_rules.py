@@ -128,8 +128,9 @@ def test_mech_world_is_wildcard_ally_not_every_faction(card_data):
     game, player = _game(registry)
     mech = templates["Mech World"].clone()
     blob = templates["Ram"].clone()
-    player.played_cards = [mech, blob]
     player.deck = [game.create_starting_deck()[0].clone() for _ in range(3)]
+    _play(game, player, mech)
+    _play(game, player, blob)
 
     assert mech.ally_factions == Faction.ALL
     assert player.get_faction_ally_count(Faction.BLOB) == 2

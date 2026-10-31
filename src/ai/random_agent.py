@@ -4,6 +4,14 @@ from src.engine.actions import ActionType, get_available_actions
 from src.ai.agent import Agent
 
 class RandomAgent(Agent):
+    """Plays a random card when it can, else attacks the opponent when it can,
+    else picks uniformly among the available actions.
+
+    Each option of an OR ability is its own action, and a pending decision
+    offers its choices plus SKIP when the choice is optional, so both are
+    picked uniformly like every other action.
+    """
+
     def __init__(self, name: str, cli_interface=None, allow_end_turn: bool = True):
         self.allow_end_turn = allow_end_turn
         super().__init__(name, cli_interface)

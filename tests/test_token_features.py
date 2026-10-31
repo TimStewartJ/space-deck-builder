@@ -375,7 +375,7 @@ def test_v3_checkpoint_loads_when_token_features_false(tmp_path):
     fresh.load_state_dict(ckpt["model_state_dict"])
 
 
-def test_checkpoint_version_is_four():
+def test_checkpoint_version_is_five():
     from src.config import CHECKPOINT_VERSION, COMPAT_CHECKPOINT_VERSIONS
-    assert CHECKPOINT_VERSION == 4
-    assert {2, 3, 4}.issubset(COMPAT_CHECKPOINT_VERSIONS)
+    assert CHECKPOINT_VERSION == 5
+    assert {2, 3, 4, 5}.issubset(COMPAT_CHECKPOINT_VERSIONS)

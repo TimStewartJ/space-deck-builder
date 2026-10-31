@@ -20,6 +20,7 @@ from src.config import (
     save_checkpoint,
 )
 from src.ppo.opponent_pool import OpponentPool
+from src.rules.ir import RULES_VERSION
 
 
 def _dummy_model() -> torch.nn.Module:
@@ -228,8 +229,8 @@ def test_optimizer_load_overwrites_lr_param_group():
     assert opt_b.param_groups[0]["lr"] == 1e-3
 
 
-def test_load_v2_checkpoint_without_resume_metadata(tmp_path: Path):
-    """V2 checkpoints (no optimizer/scheduler/pool fields) still load cleanly."""
+def test_load_v2_checkpoint_is_rejected_as_old_rules(tmp_path: Path):
+    """Checkpoints that record no rules version were trained under rules 1."""
     model = _dummy_model()
     ckpt_path = tmp_path / "ckpt_v2.pth"
     # Manually write a v2-shaped checkpoint
@@ -242,10 +243,31 @@ def test_load_v2_checkpoint_without_resume_metadata(tmp_path: Path):
         },
         str(ckpt_path),
     )
+    with pytest.raises(ValueError, match="rules version 1"):
+        load_checkpoint(str(ckpt_path), map_location="cpu")
+
+
+def test_checkpoint_without_resume_metadata_loads(tmp_path: Path):
+    """Checkpoints without optimizer/scheduler/pool fields still load."""
+    model = _dummy_model()
+    ckpt_path = tmp_path / "ckpt.pth"
+    save_checkpoint(str(ckpt_path), model.state_dict(), update=10)
     data = load_checkpoint(str(ckpt_path), map_location="cpu")
-    assert data["schema_version"] == 2
+    assert data["schema_version"] == CHECKPOINT_VERSION
+    assert data["rules_version"] == RULES_VERSION
     assert "optimizer_state_dict" not in data
     assert data["update"] == 10
+
+
+def test_published_checkpoint_fails_with_a_rules_version_error():
+    """Old-rules weights fail before any tensor-shape error."""
+    from src.config import CHAMPION_CHECKPOINT
+
+    path = Path(__file__).resolve().parents[1] / CHAMPION_CHECKPOINT
+    with pytest.raises(ValueError, match="rules version 1") as error:
+        load_checkpoint(str(path), map_location="cpu")
+    assert f"rules version {RULES_VERSION}" in str(error.value)
+    assert "0016-rulebook-ability-timing" in str(error.value)
 
 
 def test_load_v1_checkpoint_rejected(tmp_path: Path):

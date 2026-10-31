@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from src.ai.random_agent import RandomAgent
 from src.cards.card import Card, CardType
@@ -110,8 +111,8 @@ def test_trade_row_scrap_pending_refills_on_completion():
     game.trade_row.append(target)
     game.trade_deck.append(refill)
     engine = make_engine(game)
+    # Battle Pod's primary ability opens its trade-row scrap as it is played.
     step_pair(game, engine, OFFSETS["play_card"] + card.index)
-    step_pair(game, engine, EFFECT_NONSCRAP_OFFSET + card.index)
     assert game.current_player.pending_action_sets
     step_pair(game, engine, OFFSETS["scrap_trade"] + target.index)
     assert not game.current_player.pending_action_sets
@@ -188,62 +189,68 @@ def test_pending_source_snapshot_and_skip_preserve_resolved_draw():
     assert len(game.current_player.hand) == 1
 
 
-def test_or_effect_matches_scalar_two_stage_resolution():
+@pytest.mark.parametrize("group", ["effect_nonscrap", "effect_alt"])
+def test_or_option_applies_one_option_and_uses_the_ability(group):
     game, card = controlled("Blob World")
-    dummy = Card("Dummy Blob", card.index, 0, [], CardType.SHIP, faction=Faction.BLOB)
-    game.current_player.played_cards.append(dummy)
+    ally = TEMPLATES["Trade Pod"].clone()
+    game.current_player.hand.append(ally)
     engine = make_engine(game)
+    step_pair(game, engine, OFFSETS["play_card"] + ally.index)
     step_pair(game, engine, OFFSETS["play_card"] + card.index)
-    index = EFFECT_NONSCRAP_OFFSET + card.index
-    step_pair(game, engine, index)
-    assert game.current_player.combat == 5
-    step_pair(game, engine, index)
-    assert not build_action_context(
-        game,
-        game.current_player,
-        REGISTRY.card_index_map,
+    player = game.current_player
+    first = OFFSETS["effect_nonscrap"] + card.index
+    second = OFFSETS["effect_alt"] + card.index
+    context = build_action_context(
+        game, player, REGISTRY.card_index_map,
         get_action_space_size(REGISTRY.card_names),
-    ).mask[index]
-
-
-def test_random_opponent_can_select_second_or_child_variant():
-    game, card = controlled("Blob World")
-    dummy = Card(
-        "Dummy Blob",
-        card.index,
-        0,
-        [],
-        CardType.SHIP,
-        faction=Faction.BLOB,
     )
-    game.current_player.played_cards.append(dummy)
+    assert context.mask[first] and context.mask[second]
+    hand = len(player.hand)
+
+    step_pair(game, engine, OFFSETS[group] + card.index)
+    if group == "effect_nonscrap":
+        assert (player.combat, len(player.hand)) == (5, hand)
+    else:
+        # One card for each Blob card played this turn: Trade Pod and Blob World.
+        assert (player.combat, len(player.hand)) == (0, hand + 2)
+    context = build_action_context(
+        game, player, REGISTRY.card_index_map,
+        get_action_space_size(REGISTRY.card_names),
+    )
+    assert not context.mask[first] and not context.mask[second]
+    masks = engine.build_masks()[0]
+    assert not masks[first] and not masks[second]
+
+
+def test_random_opponent_weights_each_or_option_of_each_copy():
+    game, card = controlled("Trading Post")
+    established = TEMPLATES["Trading Post"].clone()
+    game.current_player.bases.append(established)
     engine = make_engine(game)
     step_pair(game, engine, OFFSETS["play_card"] + card.index)
     engine.build_masks()
-    assert (
-        engine.build_action_weights()[
-            0, EFFECT_NONSCRAP_OFFSET + card.index
-        ]
-        == 2
-    )
+    weights = engine.build_action_weights()[0]
+    assert weights[OFFSETS["effect_nonscrap"] + card.index] == 2
+    assert weights[OFFSETS["effect_alt"] + card.index] == 2
 
     available = [
         action
         for action in get_available_actions(game, game.current_player)
         if action.type == ActionType.APPLY_EFFECT
-        and action.card_id == card.index
+        and action.card_effect.option_index == 1
     ]
-    assert len(available) == 2
-    drawn, refills = _capture_scalar_step(game, available[1])
-    draw_tape = np.full((1, MAX_FORCED_DRAWS), NO_CARD, np.int16)
-    draw_tape[0, : len(drawn)] = drawn
+    assert [action.card for action in available] == [card, established]
+    # Variant 1 of effect_alt is the established copy's second option.
+    drawn, _ = _capture_scalar_step(game, available[1])
+    assert drawn == []
     engine.step(
-        np.asarray([EFFECT_NONSCRAP_OFFSET + card.index], np.int32),
+        np.asarray([OFFSETS["effect_alt"] + card.index], np.int32),
         action_variants=np.asarray([1], np.int16),
-        forced_draws=draw_tape,
-        forced_draw_count=np.asarray([len(drawn)], np.int8),
     )
     assert_canonical_equal(
         canonical_scalar_snapshot(game, RULES),
         canonical_vector_snapshot(engine.state, 0),
     )
+    assert game.current_player.trade == 1
+    assert established.effects[0].any_child_effects_used()
+    assert not card.effects[0].any_child_effects_used()

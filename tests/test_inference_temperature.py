@@ -216,11 +216,15 @@ def test_write_eval_json_records_provenance(tmp_path):
     assert payload["per_opponent"][0]["first_player_games"] == 5
 
 
-def test_build_participants_expands_checkpoint_temperatures():
+def test_build_participants_expands_checkpoint_temperatures(tmp_path, policy_checkpoint):
+    import shutil
+
     from src.ppo.elo_tournament import _participant_temperatures, build_participants
 
+    checkpoint = tmp_path / "selfplay_seed0.pth"
+    shutil.copyfile(policy_checkpoint, checkpoint)
     participants = build_participants(
-        [str(CHECKPOINT)], ["heuristic"], checkpoint_temperatures=[1.0, 0.0]
+        [str(checkpoint)], ["heuristic"], checkpoint_temperatures=[1.0, 0.0]
     )
 
     assert [p.label for p in participants] == ["selfplay_seed0", "selfplay_seed0@T0", "heuristic"]
@@ -229,7 +233,7 @@ def test_build_participants_expands_checkpoint_temperatures():
         "selfplay_seed0@T0": 0.0,
     }
     with pytest.raises(ValueError, match="share labels"):
-        build_participants([str(CHECKPOINT), str(CHECKPOINT)])
+        build_participants([str(checkpoint), str(checkpoint)])
 
 
 def test_tournament_json_lists_participants_and_pairings(tmp_path):
@@ -251,7 +255,7 @@ def test_tournament_json_lists_participants_and_pairings(tmp_path):
     ]
 
 
-def test_greedy_batch_runner_eval_is_deterministic_and_seat_balanced():
+def test_greedy_batch_runner_eval_is_deterministic_and_seat_balanced(policy_checkpoint):
     from src.ai.random_agent import RandomAgent
     from src.config import DataConfig, ModelConfig, load_checkpoint
     from src.encoding.action_encoder import get_action_space_size
@@ -263,7 +267,7 @@ def test_greedy_batch_runner_eval_is_deterministic_and_seat_balanced():
     cards = data_cfg.load_cards()
     registry = data_cfg.build_registry(cards)
     names = registry.card_names
-    checkpoint = load_checkpoint(str(CHECKPOINT), map_location="cpu")
+    checkpoint = load_checkpoint(policy_checkpoint, map_location="cpu")
     model = PPOActorCritic(
         get_state_size(names), get_action_space_size(names), len(names),
         model_config=ModelConfig.from_dict(checkpoint["config"]["model"]),

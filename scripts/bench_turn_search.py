@@ -6,7 +6,7 @@ games through the batched uplift arena. Launch outside the agent process tree,
 for example::
 
     .\\scripts\\launch_training.ps1 -Name sdb_bench_search -Command \\
-        "{python} -u scripts/bench_turn_search.py --mode decisions --output logs/bench_search.json"
+        "{python} -u scripts/bench_turn_search.py --mode decisions --model <checkpoint.pth> --output logs/bench_search.json"
 """
 from __future__ import annotations
 
@@ -34,8 +34,6 @@ from src.search.uplift import UpliftConfig, _load_model  # noqa: E402
 from src.utils.logger import set_disabled  # noqa: E402
 from src.vector_engine.kernels import configure_numba_threads  # noqa: E402
 from src.vector_engine.rules import compile_rules  # noqa: E402
-
-DEFAULT_CHECKPOINT = "results/optimized_selfplay_baseline/checkpoints/selfplay_seed0.pth"
 
 
 def _positions(cards, registry, model, count: int, seed: int) -> list[Game]:
@@ -173,7 +171,14 @@ def bench_games(args, device) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--mode", choices=["decisions", "games"], default="decisions")
-    parser.add_argument("--model", default=DEFAULT_CHECKPOINT)
+    parser.add_argument(
+        "--model",
+        required=True,
+        help=(
+            "checkpoint to search with; it must be trained under the engines' "
+            "rules version (every published checkpoint predates decision 0016)"
+        ),
+    )
     parser.add_argument("--budget", type=int, default=64)
     parser.add_argument("--max-candidates", type=int, default=8)
     parser.add_argument("--batch-sizes", type=int, nargs="+", default=[1, 16, 64, 256, 1024])

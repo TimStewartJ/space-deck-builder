@@ -12,7 +12,12 @@ from src.encoding.action_encoder import get_action_space_size
 from src.encoding.state_encoder import encode_state, get_state_size
 from src.engine.game import Game
 from src.ppo.ppo_actor_critic import PPOActorCritic
-from src.vector_engine.kernels import PLAY_OFFSET, VectorEngine
+from src.vector_engine.kernels import (
+    ACTION_DIM,
+    ATTACK_PLAYER_INDEX,
+    PLAY_OFFSET,
+    VectorEngine,
+)
 from src.vector_engine.policy import (
     CurrentSnapshotEvaluator,
     StackedSnapshotEvaluator,
@@ -60,16 +65,20 @@ def test_actual_policy_only_samples_legal_vector_actions(device_name):
 
 
 def test_production_mask_suppression_matches_worker_policy():
-    masks = np.zeros((3, 494), dtype=np.bool_)
+    masks = np.zeros((3, ACTION_DIM), dtype=np.bool_)
     masks[:, 1] = True
     masks[0, PLAY_OFFSET + 2] = True
-    attack_player = 3 + 2 * 49
-    masks[1, attack_player] = True
+    masks[1, ATTACK_PLAYER_INDEX] = True
     effective = suppress_redundant_end_turn(masks)
     assert not effective[0, 1]
     assert not effective[1, 1]
     assert effective[2, 1]
     assert masks[:, 1].all()
+
+
+def test_mask_suppression_rejects_a_non_canonical_action_dimension():
+    with pytest.raises(ValueError, match="not canonical"):
+        suppress_redundant_end_turn(np.zeros((1, ACTION_DIM + 1), dtype=np.bool_))
 
 
 def test_policy_buffers_reuse_capacity_across_variable_batch_sizes():
