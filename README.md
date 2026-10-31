@@ -90,7 +90,7 @@ python scripts/release_artifacts.py fetch --tag v0.3-selfplay-baseline \
 
 Every published checkpoint and result was trained and measured under game
 rules version 1, before the engines followed the rulebook on OR abilities,
-ship primary-ability choices and Machine Base
+ship primary-ability choices, Machine Base, Blob World and Central Office
 ([`docs/decisions/0016-rulebook-ability-timing.md`](docs/decisions/0016-rulebook-ability-timing.md)).
 Checkpoints record their rules version, and one trained under other rules
 than the engines' does not load. Under the current rules the action space has

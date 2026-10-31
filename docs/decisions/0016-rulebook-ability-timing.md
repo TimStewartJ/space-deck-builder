@@ -37,6 +37,20 @@ them, because ADR 0004 made the vector engine copy the scalar engine:
    optional action, skipped on 9 of 100 plays. On later turns it was already
    one activation that draws and then must scrap.
 
+Two more deviations turned up while fixing these, Central Office's while
+checking every card for the Machine Base pattern and Blob World's in code
+review:
+
+4. **Blob World counted only the Blob cards still in play.** Its option
+   "Draw a card for each Blob card that you've played this turn" counted the
+   cards in play, so a Blob card scrapped after it was played (Ram for its
+   trade, or a Stealth Needle that copied a Blob ship) no longer counted.
+5. **An established Central Office forced its top-deck.** On the turn it is
+   played its 2 Trade resolve at once and "You may put the next ship you
+   acquire this turn on top of your deck" stays a separate optional action,
+   but on later turns one activation gave the trade and the top-deck
+   together.
+
 The action layout had ten card-indexed groups (494 actions for the 49 Core Set
 cards), so no action could name the second option of an OR ability.
 
@@ -78,6 +92,25 @@ in the same ability. Then the whole ability stays one player-activated
 action, as on later turns. Of the Core Set's cards only Machine Base has this
 pattern.
 
+**An established base resolves like a base just played.** On a later turn,
+the first activation of a base's primary ability resolves the same automatic
+parts as playing the base does, and its choices stay a separate activation,
+as on the turn it is played (`_activation_resolution` in
+`src/rules/scalar.py`; in the vector engine an activation group with ready
+automatic bundles applies only those). Only Central Office has both: its 2
+Trade, then its optional top-deck, on every turn. Card text with no operation
+of its own is never an automatic part on its own, so Brain World, whose "Draw
+a card for each card scrapped this way" is its scrap's completion draw, stays
+one activation that opens its scrap.
+
+**Blob World counts every Blob card played this turn.** Each player keeps a
+per-turn count of the cards played by faction (`Player.faction_plays`,
+`VectorState.faction_plays`): playing a card counts it for each of its
+factions, a Stealth Needle's copy counts it again for each faction the copy
+adds, scrapping never decrements it, and the end of the turn resets it. The
+draw-per-faction opcode, which counts exactly one faction, reads it. Blob
+World counts itself on the turn it is played.
+
 **Rules version.** `src.rules.ir.RULES_VERSION` is 2. Checkpoint schema
 version 5 records `rules_version`; a checkpoint without one was trained under
 rules version 1. `load_checkpoint` rejects a checkpoint whose rules version
@@ -101,14 +134,16 @@ tensor shape is compared. `RULE_IR_VERSION` is 2, with a new golden snapshot.
 | Battle Pod (2) | {Gain 4 Combat}; you may scrap a card in the trade row | As Trade Bot | Trade-row scrap pending as it is played, SKIP legal |
 | Missile Mech (1) | {Gain 6 Combat}; you may destroy target base | Combat on play; the destroy-base was an action usable at any time | Destroy-base pending as it is played, SKIP legal |
 | Machine Base (1) | Draw a card, then scrap a card from your hand | Turn played: drew at once, and the scrap was an optional action; later turns: one activation | Every turn one activation: draw, then a mandatory scrap from the hand (no SKIP); nothing when played |
+| Blob World (1), draw option | Draw a card for each Blob card that you've played this turn | Counted the Blob cards in play | Counts every Blob card played this turn, also one scrapped since and a Stealth Needle that copied a Blob ship |
+| Central Office (1) | {Gain 2 Trade}; you may put the next ship you acquire this turn on top of your deck | Turn played: trade at once, top-deck an optional action; later turns: one activation gave both | Every turn: the trade (as played, or by the first activation), then the top-deck as an optional activation |
 | Stealth Needle (1) | Copy another ship you've played this turn | A copied choice was an action usable at any time | A copied choice is pending at once; a copied Patrol Mech opens its option choice |
 
 Cards checked for the Machine Base pattern: Central Office (an automatic part
-followed by an optional choice), Brain World, Junkyard and Recycling Station
-(choices without an automatic part before them), and the scrap abilities of
-Battlecruiser and Port of Call (draw, then an optional destroy-base, used
-whenever the player chooses). None has an automatic part followed by a
-mandatory choice.
+followed by an optional choice, which the established-base rule above
+covers), Brain World, Junkyard and Recycling Station (choices without an
+automatic part before them), and the scrap abilities of Battlecruiser and
+Port of Call (draw, then an optional destroy-base, used whenever the player
+chooses). None has an automatic part followed by a mandatory choice.
 
 ## Scripted agents
 
@@ -123,27 +158,33 @@ order in the vector replica.
   SKIP when the choice is optional.
 - **Simple**: the first legal action: option 1 of every OR ability and the
   first choice of every pending decision, never SKIP while a target exists.
+  It uses abilities after purchases, so on both turns it buys what it can
+  before it uses Central Office's top-deck.
 - **Heuristic**: an OR option by `_choose_or_option`, in order: combat that
   reaches the opponent's authority while no outpost blocks a direct attack;
   trade that lets it afford a card it would buy this turn (its trade after
   playing its whole hand is short of the card's cost, and the option covers
   it); the draw-per-Blob option when at least two Blob cards were played this
-  turn; otherwise combat, then authority, then trade. It plays its whole hand
-  before it uses a base, so Recycling Station's discard option would discard
-  nothing and it takes the trade. A ship's choice made as the ship is played
-  follows its existing pending rules: destroy the first base offered; scrap
-  Vipers first in the early game and Scouts first later, then Explorers, a
-  copy in the discard pile before one in the hand, otherwise the most
-  expensive trade-row card costing at least 5, otherwise SKIP.
+  turn (scrapped or not); otherwise combat, then authority, then trade. It
+  plays its whole hand before it uses a base, so Recycling Station's discard
+  option would discard nothing and it takes the trade. It uses every other
+  ability it can, so it takes Central Office's trade and then its top-deck on
+  every turn. A ship's choice made as the ship is played follows its
+  existing pending rules: destroy the first base offered; scrap Vipers first
+  in the early game and Scouts first later, then Explorers, a copy in the
+  discard pile before one in the hand, otherwise the most expensive
+  trade-row card costing at least 5, otherwise SKIP.
 - **Held-out bots** (`src/ai/held_out_agents.py`): an OR option by
   `_choose_or` per style: Recycling Station discards and draws while the hand
   holds junk, else trade; Blob World draws with at least two Blob cards
-  played, else combat; Patrol Mech takes combat when it reaches the
-  opponent's authority plus outpost defense, otherwise trade in the early
-  phase (also the middle phase except for aggro) and combat later; Trading
-  Post and Barter World take trade in the early and middle phases, then
-  authority; Defense Center takes combat when no outpost is in the way or it
-  is lethal (fortress: authority), otherwise authority. A ship's choice made
+  played this turn (scrapped or not), else combat; Patrol Mech takes combat
+  when it reaches the opponent's authority plus outpost defense, otherwise
+  trade in the early phase (also the middle phase except for aggro) and
+  combat later; Trading Post and Barter World take trade in the early and
+  middle phases, then authority; Defense Center takes combat when no outpost
+  is in the way or it is lethal (fortress: authority), otherwise authority.
+  They consider an ability again when an activation left part of it unused,
+  so they take Central Office's top-deck on every turn. A ship's choice made
   as the ship is played uses their existing pending rules (`_pending`),
   unchanged: destroy an outpost first, then the most expensive base; scrap
   their own junk, from the discard pile before the hand, otherwise SKIP (or
@@ -156,17 +197,26 @@ order in the vector replica.
   and vector engines together for every card above: the legal actions before
   and after each choice, that exactly one OR option applies, that ship
   choices are pending immediately and block every other action, SKIP
-  availability, vacuous choices, and once-per-turn use.
+  availability, vacuous choices, and once-per-turn use; Blob World's count
+  with a Blob card scrapped first (Blob World established or played this
+  turn), with a Stealth Needle copy, and on the next turn; Central Office on
+  the turn played and a later turn, with and without the top-deck; Brain
+  World as one activation on both turns.
 - The differential oracle compares masks and observations before every
-  action and canonical state after it. A new trace runs 16 games whose decks
-  hold every card above; it uses both options of every OR ability, opens
-  every ship's choice on play and through Stealth Needle copies, and uses
-  Machine Base, SKIP and discard-pile targets. The new coverage found two
-  older divergences between the engines, now fixed: a vector discard
-  decision whose targets ran out kept a state the scalar engine does not
-  have, and the vector observation reported a legal purchase during Blob
-  Carrier's free acquisition, which the scalar action context does not.
-- The vector fixed opponents still match their scalar originals.
+  action and canonical state, including the per-faction play counts, after
+  it. A new trace runs 16 games whose decks hold every card above plus Ram,
+  capped at 300 turns because random play can scrap both decks to nothing
+  with Machine Base; it uses both options of every OR ability, opens every
+  ship's choice on play and through Stealth Needle copies, and uses Machine
+  Base, Central Office, Ram's scrap, SKIP and discard-pile targets. The new
+  coverage found two older divergences between the engines, now fixed: a
+  vector discard decision whose targets ran out kept a state the scalar
+  engine does not have, and the vector observation reported a legal
+  purchase during Blob Carrier's free acquisition, which the scalar action
+  context does not.
+- The vector fixed opponents still match their scalar originals, including
+  Heuristic's Blob World rule with a scrapped Blob card and Heuristic and
+  Simple over an established Central Office's two activations.
 
 ## Rejected alternatives
 
@@ -193,16 +243,14 @@ The old weights were trained under other rules; not implemented.
 - `docs/eval_protocol.md` `v0.3`: measurements under rules version 2 are not
   comparable to earlier ones.
 - The observation layout is unchanged (505 floats); the policy head grows
-  from 494 to 543 actions.
+  from 494 to 543 actions. The vector state gains `faction_plays`, which the
+  canonical snapshot and the information-set fingerprint include. The
+  observation does not show cards scrapped this turn, so after a Blob card
+  was scrapped a policy does not see the whole count Blob World's draw
+  option uses; no rule requires that, so the layout stays as it is.
 
 ## Open questions
 
-- **Central Office** ("{Gain 2 Trade}. You may put the next ship you acquire
-  this turn on top of your deck") gains its trade at once on the turn it is
-  played, and the top-deck stays an optional action. On later turns its one
-  activation gives the trade and forces the next ship acquired that turn on
-  top of the deck, although the card says "you may". This is not the
-  Machine Base pattern and is left as it is.
 - **Stealth Needle copying a Stealth Needle** that copied nothing gains the
   copy ability again and must copy again, possibly the same Needle, without
   end. The Core Set has one Stealth Needle, so a real game cannot reach it.

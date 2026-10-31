@@ -251,8 +251,11 @@ a version bump.
 - `v0.3` — changes the game: game rules version 2, defined by decision record
   [0016](decisions/0016-rulebook-ability-timing.md). An OR ability gives one
   of its options, the choices in a ship's primary ability are made as the
-  ship is played, and Machine Base draws and then scraps in one activation,
-  as the rulebook says. The action space grows from 494 to 543 actions.
+  ship is played, Machine Base draws and then scraps in one activation,
+  Blob World's draw option counts every Blob card played this turn (also one
+  scrapped since), and Central Office's top-deck is optional on every turn,
+  as the rulebook and the cards say. The action space grows from 494 to 543
+  actions.
   - Opponents, sample sizes, seat protocol, seed count and metrics are
     unchanged, but every measure is taken on the game the engines implement.
     **Results under `v0.3` are not comparable with any earlier result**:
